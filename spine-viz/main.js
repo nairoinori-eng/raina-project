@@ -20,20 +20,22 @@ import { io } from 'socket.io-client';
 // 1. 脊柱坐标（13控制点 S 型脊柱）
 // ============================================================
 
+const SPINE_SCALE = 1.18;   // 整体缩放（上下留约15%余量）
+
 const SPINE_CURVED = [
-  new THREE.Vector3( 0.00,  2.00, 0),  // C7
-  new THREE.Vector3( 0.08,  1.60, 0),  // T1
-  new THREE.Vector3( 0.22,  1.20, 0),  // T3
-  new THREE.Vector3( 0.36,  0.80, 0),  // T5
-  new THREE.Vector3( 0.42,  0.35, 0),  // T7
-  new THREE.Vector3( 0.34, -0.05, 0),  // T9
-  new THREE.Vector3( 0.14, -0.35, 0),  // T11
-  new THREE.Vector3(-0.06, -0.60, 0),  // L1
-  new THREE.Vector3(-0.22, -0.90, 0),  // L2
-  new THREE.Vector3(-0.34, -1.20, 0),  // L3
-  new THREE.Vector3(-0.24, -1.50, 0),  // L4
-  new THREE.Vector3(-0.08, -1.80, 0),  // L5
-  new THREE.Vector3( 0.00, -2.00, 0),  // S1
+  new THREE.Vector3( 0.00 * SPINE_SCALE,  2.00 * SPINE_SCALE, 0),  // C7
+  new THREE.Vector3( 0.08 * SPINE_SCALE,  1.60 * SPINE_SCALE, 0),  // T1
+  new THREE.Vector3( 0.22 * SPINE_SCALE,  1.20 * SPINE_SCALE, 0),  // T3
+  new THREE.Vector3( 0.36 * SPINE_SCALE,  0.80 * SPINE_SCALE, 0),  // T5
+  new THREE.Vector3( 0.42 * SPINE_SCALE,  0.35 * SPINE_SCALE, 0),  // T7
+  new THREE.Vector3( 0.34 * SPINE_SCALE, -0.05 * SPINE_SCALE, 0),  // T9
+  new THREE.Vector3( 0.14 * SPINE_SCALE, -0.35 * SPINE_SCALE, 0),  // T11
+  new THREE.Vector3(-0.06 * SPINE_SCALE, -0.60 * SPINE_SCALE, 0),  // L1
+  new THREE.Vector3(-0.22 * SPINE_SCALE, -0.90 * SPINE_SCALE, 0),  // L2
+  new THREE.Vector3(-0.34 * SPINE_SCALE, -1.20 * SPINE_SCALE, 0),  // L3
+  new THREE.Vector3(-0.24 * SPINE_SCALE, -1.50 * SPINE_SCALE, 0),  // L4
+  new THREE.Vector3(-0.08 * SPINE_SCALE, -1.80 * SPINE_SCALE, 0),  // L5
+  new THREE.Vector3( 0.00 * SPINE_SCALE, -2.00 * SPINE_SCALE, 0),  // S1
 ];
 const SPINE_STRAIGHT = SPINE_CURVED.map(p => new THREE.Vector3(0, p.y, 0));
 
@@ -145,8 +147,9 @@ const fragmentShader = /* glsl */`
     if (d > 0.5) discard;
     vec3 c = uColor + vec3(vColorVar * 0.12, vColorVar * 0.03, -vColorVar * 0.10);
     c = clamp(c, 0.0, 1.0);
-    float core  = exp(-d * d * 12.0);
-    float halo  = exp(-d * d *  3.0) * 0.4;
+    // 收紧核心，削弱光晕 — 保持粒子颗粒感
+    float core  = exp(-d * d * 24.0);          // 更锐利的核心
+    float halo  = exp(-d * d * 10.0) * 0.15;   // 更弱更紧凑的光晕
     float alpha = (core + halo) * vAlpha;
     gl_FragColor = vec4(c, alpha);
   }
@@ -163,9 +166,13 @@ const spAlphas    = new Float32Array(N_SPINE);
 const spColorVars = new Float32Array(N_SPINE);
 
 
-// ── Layer A：骨骼柱体（5000粒子，静止）─────────────────────
+// ── Layer A：骨骼柱体（5000粒子，静止，空心管状）─────────────
 
-const SIGMA_BONE = 0.025;
+// 空心管参数：大跨度 + 明确的中空（跟随 SPINE_SCALE 缩放）
+const TUBE_OUTER   = 0.10 * SPINE_SCALE;        // 外壁半径
+const TUBE_INNER   = 0.055 * SPINE_SCALE;       // 内壁半径
+const TUBE_THICK   = 0.018 * SPINE_SCALE;       // 壁厚度
+const TUBE_Y_SCALE = 0.28;                       // Y方向压扁
 
 const bCpX   = new Float32Array(N_BONE);
 const bCpY   = new Float32Array(N_BONE);
@@ -186,16 +193,19 @@ for (let i = 0; i < N_BONE; i++) {
   bCpX[i] = cp.x;  bCpY[i] = cp.y;
   bSpX[i] = sp.x;  bSpY[i] = sp.y;
 
-  bOffX[i] = gaussRand() * SIGMA_BONE;
-  bOffY[i] = gaussRand() * SIGMA_BONE * 0.28;
-  bZ[i]    = gaussRand() * 0.30;
+  // 薄壁空心管：粒子严格分布在 [TUBE_INNER, TUBE_OUTER] 薄环上
+  const angle = Math.random() * Math.PI * 2;
+  // 半径：在薄壁环内均匀分布（不是从中心开始的高斯）
+  const r = TUBE_INNER + Math.pow(Math.random(), 0.5) * (TUBE_OUTER - TUBE_INNER);
 
-  const dist = Math.min(1,
-    Math.sqrt(bOffX[i]*bOffX[i] + bOffY[i]*bOffY[i]) / (2.5 * SIGMA_BONE)
-  );
-  // 明显的大小差异（0.04-0.14）
-  bBaseS[i] = (0.10 - dist * 0.06) * (0.5 + Math.random() * 0.9);
-  bBaseA[i] = (0.15 - dist * 0.10) + Math.random() * 0.04;
+  bOffX[i] = Math.cos(angle) * r;
+  bOffY[i] = Math.sin(angle) * r * TUBE_Y_SCALE;
+  bZ[i]    = gaussRand() * 0.35;
+
+  // 外壁粒子更大更亮，强化轮廓感
+  const wallRatio = (r - TUBE_INNER) / (TUBE_OUTER - TUBE_INNER);  // 0=内壁, 1=外壁
+  bBaseS[i] = (0.09 + wallRatio * 0.07) * (0.6 + Math.random() * 0.8);
+  bBaseA[i] = (0.08 + wallRatio * 0.10) + Math.random() * 0.04;
   bPhase[i] = Math.random() * Math.PI * 2;
 
   spColorVars[i] = (Math.random() - 0.5) * 0.25;
@@ -206,10 +216,10 @@ for (let i = 0; i < N_BONE; i++) {
 }
 
 
-// ── Layer B：椎节椭圆（3900粒子，宽扁）─────────────────────
+// ── Layer B：椎节椭圆（3900粒子，宽扁，加粗强调）─────────────
 
-const SIGMA_VX = 0.08;   // X 宽（横向）
-const SIGMA_VY = 0.018;  // Y 窄（纵向）
+const SIGMA_VX = 0.14 * SPINE_SCALE;   // X 宽（横向）
+const SIGMA_VY = 0.028 * SPINE_SCALE;  // Y 窄（纵向）
 
 const vCurvedX  = new Float32Array(N_VERT);
 const vDeltaX   = new Float32Array(N_VERT);  // straightX - curvedX = -cx
@@ -239,9 +249,9 @@ for (let vi = 0; vi < 13; vi++) {
     const distY = Math.abs(gy) / SIGMA_VY;
     const dist  = Math.min(1, Math.sqrt(distX*distX + distY*distY) * 0.6);
 
-    // 大粒子，明显大于骨骼
-    vBaseSize[idx] = (0.16 - dist * 0.07) * (0.65 + Math.random() * 0.70);
-    vBaseAlph[idx] = (0.38 - dist * 0.20) + Math.random() * 0.10;
+    // 大粒子，明显大于骨骼 — 椎节要"鼓出来"
+    vBaseSize[idx] = (0.22 - dist * 0.08) * (0.70 + Math.random() * 0.70);
+    vBaseAlph[idx] = (0.50 - dist * 0.22) + Math.random() * 0.12;
 
     const gi = N_BONE + idx;
     spPositions[gi*3]   = cx + gx;
@@ -426,9 +436,9 @@ composer.addPass(new RenderPass(scene, camera));
 
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.55,  // strength
-  0.50,  // radius
-  0.20   // threshold（更高，只让真正亮的部分发光）
+  0.30,  // strength（降低，避免过度模糊）
+  0.35,  // radius（收紧模糊半径）
+  0.35   // threshold（更高，只让最亮的部分发光）
 );
 composer.addPass(bloomPass);
 
@@ -551,8 +561,8 @@ function animate() {
   }
   ambGeo.attributes.position.needsUpdate = true;
 
-  // Bloom 随呼吸调整
-  bloomPass.strength = 0.40 + breathe * 0.28 + smoothBlend * 0.18;
+  // Bloom 随呼吸调整（幅度收小，保持颗粒感）
+  bloomPass.strength = 0.20 + breathe * 0.12 + smoothBlend * 0.10;
 
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
 
