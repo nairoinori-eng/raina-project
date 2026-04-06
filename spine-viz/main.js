@@ -62,9 +62,9 @@ const N_AMB   = 300;                   // Layer E
 // 3. 颜色（低饱和度，优雅克制）
 // ============================================================
 
-const COLOR_DARK = new THREE.Color(0x18102e);
-const COLOR_MID  = new THREE.Color(0x4a2e6e);
-const COLOR_GOLD = new THREE.Color(0x9a7230);
+const COLOR_DARK = new THREE.Color(0x2a2545);  // 降饱和但保持可见度
+const COLOR_MID  = new THREE.Color(0x4d4568);  // 低饱和度灰紫，偏亮
+const COLOR_GOLD = new THREE.Color(0xc4a882);  // 低饱和度高级灰金色
 
 
 // ============================================================
@@ -204,8 +204,8 @@ for (let i = 0; i < N_BONE; i++) {
 
   // 外壁粒子更大更亮，强化轮廓感
   const wallRatio = (r - TUBE_INNER) / (TUBE_OUTER - TUBE_INNER);  // 0=内壁, 1=外壁
-  bBaseS[i] = (0.09 + wallRatio * 0.07) * (0.6 + Math.random() * 0.8);
-  bBaseA[i] = (0.08 + wallRatio * 0.10) + Math.random() * 0.04;
+  bBaseS[i] = (0.11 + wallRatio * 0.07) * (0.6 + Math.random() * 0.8);
+  bBaseA[i] = (0.16 + wallRatio * 0.12) + Math.random() * 0.05;  // 提高基础亮度
   bPhase[i] = Math.random() * Math.PI * 2;
 
   spColorVars[i] = (Math.random() - 0.5) * 0.25;
@@ -251,7 +251,7 @@ for (let vi = 0; vi < 13; vi++) {
 
     // 大粒子，明显大于骨骼 — 椎节要"鼓出来"
     vBaseSize[idx] = (0.22 - dist * 0.08) * (0.70 + Math.random() * 0.70);
-    vBaseAlph[idx] = (0.50 - dist * 0.22) + Math.random() * 0.12;
+    vBaseAlph[idx] = (0.60 - dist * 0.20) + Math.random() * 0.12;  // 提高基础亮度
 
     const gi = N_BONE + idx;
     spPositions[gi*3]   = cx + gx;
@@ -436,9 +436,9 @@ composer.addPass(new RenderPass(scene, camera));
 
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.30,  // strength（降低，避免过度模糊）
-  0.35,  // radius（收紧模糊半径）
-  0.35   // threshold（更高，只让最亮的部分发光）
+  0.38,  // strength（适度）
+  0.35,  // radius
+  0.30   // threshold
 );
 composer.addPass(bloomPass);
 
@@ -562,7 +562,7 @@ function animate() {
   ambGeo.attributes.position.needsUpdate = true;
 
   // Bloom 随呼吸调整（幅度收小，保持颗粒感）
-  bloomPass.strength = 0.20 + breathe * 0.12 + smoothBlend * 0.10;
+  bloomPass.strength = 0.28 + breathe * 0.15 + smoothBlend * 0.12;
 
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
 
