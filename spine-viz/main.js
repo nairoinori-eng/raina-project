@@ -83,12 +83,13 @@ function smoothstep(e0, e1, x) {
   return t * t * (3 - 2 * t);
 }
 
-/** 非对称呼吸曲线：4s亮起 → 2s保持 → 4s暗下（10s周期） */
+/** 统一呼吸曲线：2s亮起 → 2s保持 → 2s暗下 → 2s保持（8s周期） */
 function breatheCurve(t) {
-  const phase = (t % 10.0) / 10.0;
-  if (phase < 0.40) return Math.sin(phase / 0.40 * Math.PI * 0.5);
-  if (phase < 0.60) return 1.0;
-  return Math.cos((phase - 0.60) / 0.40 * Math.PI * 0.5);
+  const phase = (t % 8.0) / 8.0;
+  if (phase < 0.25) return smoothstep(0, 1, phase / 0.25);       // 0→1: 2s 慢慢变亮
+  if (phase < 0.50) return 1.0;                                    // 保持亮: 2s
+  if (phase < 0.75) return smoothstep(1, 0, (phase - 0.50) / 0.25); // 1→0: 2s 慢慢变暗
+  return 0.0;                                                      // 保持暗: 2s
 }
 
 function getBlendColor(blend) {
@@ -487,9 +488,9 @@ function animate() {
     spPositions[i*3+1] = by + bOffY[i] * spreadScale;
     spPositions[i*3+2] = bZ[i];
 
-    // 轻微脉动（±6%）+ 呼吸调制 + 两端渐隐
+    // 整体呼吸：统一缓亮缓暗 + 两端渐隐
     spSizes[i]  = bBaseS[i] * (1.0 + Math.sin(time * 1.57 + bPhase[i]) * 0.06);
-    spAlphas[i] = bBaseA[i] * breathe * endFade;
+    spAlphas[i] = bBaseA[i] * (0.35 + breathe * 0.65) * endFade;  // 呼吸幅度大但不完全熄灭
   }
 
   // ── Layer B：椎节椭圆（仅 X 随 blend 变化）────────────────
@@ -499,8 +500,8 @@ function animate() {
       (smoothBlend - (1 - vST[j]) * WAVE) / (1 - WAVE)
     ));
     spPositions[gi*3] = vCurvedX[j] + vDeltaX[j] * lb;
-    // 椎节也随呼吸轻微调整透明度（幅度更小，保持"实"的感觉）
-    spAlphas[gi] = vBaseAlph[j] * (0.75 + breathe * 0.25);
+    // 椎节与骨骼统一呼吸节奏
+    spAlphas[gi] = vBaseAlph[j] * (0.40 + breathe * 0.60);
   }
 
   spineGeo.attributes.position.needsUpdate = true;
