@@ -1,13 +1,8 @@
 /**
- * raina-project — Three.js 粒子脊柱主程序 v2
- * ============================================
- * 核心目标：TouchDesigner 级别颗粒感
- *   - 每个粒子清晰可见（2-5px），不是模糊光团
- *   - Simplex Noise 驱动有机漂移
- *   - 高斯分布：核心亮密、边缘暗稀
- *   - blend 变化时从下往上级联流动
- *   - 整体5秒呼吸脉动
- *   - Vignette 暗角 + 克制 Bloom
+ * raina-project — Three.js 粒子脊柱主程序 v3
+ * =============================================
+ * 改动：σ→0.06 脊柱变细 / 30k 粒子 / 随机游走 /
+ *       生命周期状态机 / 逐粒子颜色偏移 / 体积光柱
  */
 
 import * as THREE from 'three';
@@ -18,7 +13,7 @@ import { io } from 'socket.io-client';
 
 
 // ============================================================
-// 1. 脊柱坐标数据（设计者本人 S 型脊柱，13个控制点）
+// 1. 脊柱坐标（13控制点 S 型脊柱）
 // ============================================================
 
 const SPINE_CURVED = [
@@ -41,21 +36,34 @@ const SPINE_STRAIGHT = SPINE_CURVED.map(p => new THREE.Vector3(0, p.y, 0));
 const curveCurved   = new THREE.CatmullRomCurve3(SPINE_CURVED);
 const curveStraight = new THREE.CatmullRomCurve3(SPINE_STRAIGHT);
 
-// 粒子数量
-const N_SPINE   = 2500;  // 脊柱主体（更多小粒子 = 颗粒感）
-const N_AMBIENT = 200;   // 背景环境粒子
 
-// 颜色
+// ============================================================
+// 2. 粒子数量 / 分布常量
+// ============================================================
+
+const N_MAIN        = 30000;   // 脊柱主体粒子
+const N_VERT        = 1300;    // 椎节高亮粒子（13 × 100）
+const N_SPINE_TOTAL = N_MAIN + N_VERT;
+const N_AMBIENT     = 500;     // 环境星尘
+
+const SIGMA      = 0.06;       // 主体粒子高斯扩散（X 方向）
+const SIGMA_VERT = 0.025;      // 椎节粒子扩散
+const WAVE       = 0.28;       // 级联波延迟参数
+
+
+// ============================================================
+// 3. 颜色
+// ============================================================
+
 const COLOR_DARK_PURPLE = new THREE.Color(0x2d1b69);
 const COLOR_MID_PURPLE  = new THREE.Color(0x7b4fb5);
 const COLOR_WARM_GOLD   = new THREE.Color(0xd4a24c);
 
 
 // ============================================================
-// 2. 工具函数
+// 4. 工具函数
 // ============================================================
 
-/** Box-Muller 变换：生成标准正态分布随机数 */
 function gaussRand() {
   let u = 0, v = 0;
   while (u === 0) u = Math.random();
@@ -63,7 +71,6 @@ function gaussRand() {
   return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
 }
 
-/** 根据 blend 值计算颜色（深蓝紫→浅紫→暖金） */
 function getBlendColor(blend) {
   const c = new THREE.Color();
   if (blend < 0.5) {
@@ -76,158 +83,242 @@ function getBlendColor(blend) {
 
 
 // ============================================================
-// 3. 场景 / 摄像机 / 渲染器
+// 5. 场景 / 摄像机 / 渲染器
 // ============================================================
 
 const canvas = document.getElementById('spine-canvas');
-
-// alpha: false（EffectComposer + alpha:true 会导致白屏），改用 scene.background
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-const scene  = new THREE.Scene();
-scene.background = new THREE.Color(0x06060f);  // 极深蓝黑，CSS Vignette 覆盖在上方
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06060f);
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 0, 5);
 camera.lookAt(0, 0, 0);
 
-// 摄像机到 z=0 的距离 = 5，gl_PointSize 缩放系数 = 300/5 = 60
-// 所以 aSize = 0.05 → 屏幕 3px；aSize = 0.10 → 屏幕 6px
-
 
 // ============================================================
-// 4. Shader（顶点 + 片元）
+// 6. Shader（逐粒子颜色偏移 aColorVar）
 // ============================================================
 
 const vertexShader = /* glsl */`
-  attribute float aSize;   // 粒子世界尺寸
-  attribute float aAlpha;  // 粒子基础透明度
+  attribute float aSize;
+  attribute float aAlpha;
+  attribute float aColorVar;
 
   varying float vAlpha;
+  varying float vColorVar;
 
   void main() {
-    vAlpha = aAlpha;
-    vec4 mv = modelViewMatrix * vec4(position, 1.0);
-    // 300.0 / -mv.z：让粒子随距离缩放（近大远小）
+    vAlpha    = aAlpha;
+    vColorVar = aColorVar;
+    vec4 mv   = modelViewMatrix * vec4(position, 1.0);
     gl_PointSize = aSize * (300.0 / -mv.z);
     gl_Position  = projectionMatrix * mv;
   }
 `;
 
 const fragmentShader = /* glsl */`
-  uniform vec3 uColor;
-  varying float vAlpha;
+  uniform  vec3  uColor;
+  varying  float vAlpha;
+  varying  float vColorVar;
 
   void main() {
-    // gl_PointCoord: 粒子内部坐标，中心 = (0.5, 0.5)
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
 
-    // 双层叠加：亮核心 + 柔晕
-    // 衰减指数：core=12（锐核），halo=3（宽晕）
+    // 逐粒子色偏移：正值偏暖（+R -B），负值偏冷（-R +B）
+    vec3 c = uColor + vec3(vColorVar * 0.15, vColorVar * 0.04, -vColorVar * 0.12);
+    c = clamp(c, 0.0, 1.0);
+
     float core  = exp(-d * d * 12.0);
-    float halo  = exp(-d * d * 3.0) * 0.4;
+    float halo  = exp(-d * d *  3.0) * 0.4;
     float alpha = (core + halo) * vAlpha;
 
-    gl_FragColor = vec4(uColor, alpha);
+    gl_FragColor = vec4(c, alpha);
   }
 `;
 
 
 // ============================================================
-// 5. 脊柱粒子系统（核心）
+// 7. 共享几何体缓冲区（主体 + 椎节）
 // ============================================================
 
-/**
- * 内置平滑噪声（不依赖外部库）
- * 用多层 sin/cos 叠加模拟 Perlin Noise 效果
- * 输入：x, y 坐标 + 时间；输出：-1 到 1 的平滑随机值
- */
-function smoothNoise(x, y, t) {
-  return (
-    Math.sin(x * 1.7 + t * 0.8) * Math.cos(y * 2.3 + t * 0.6) * 0.5 +
-    Math.sin(x * 3.1 + t * 0.4) * Math.cos(y * 1.9 + t * 0.9) * 0.3 +
-    Math.sin(x * 5.3 + t * 0.2) * Math.cos(y * 4.1 + t * 0.5) * 0.2
+const allPositions = new Float32Array(N_SPINE_TOTAL * 3);
+const allSizes     = new Float32Array(N_SPINE_TOTAL);
+const allAlphas    = new Float32Array(N_SPINE_TOTAL);
+const allColorVars = new Float32Array(N_SPINE_TOTAL);
+
+
+// ============================================================
+// 8. 主体粒子数据（N_MAIN 个）
+// ============================================================
+
+const cpX    = new Float32Array(N_MAIN);  // curved point X
+const cpY    = new Float32Array(N_MAIN);  // curved point Y
+const spX    = new Float32Array(N_MAIN);  // straight point X
+const spY    = new Float32Array(N_MAIN);  // straight point Y
+
+const sT      = new Float32Array(N_MAIN);  // spine t ∈ [0,1]
+const gOffX   = new Float32Array(N_MAIN);  // gaussian offset X
+const gOffY   = new Float32Array(N_MAIN);  // gaussian offset Y
+const zDepth  = new Float32Array(N_MAIN);  // z-depth
+const bSizes  = new Float32Array(N_MAIN);  // base size
+const bAlphas = new Float32Array(N_MAIN);  // base alpha
+const pPhase  = new Float32Array(N_MAIN);  // pulse phase
+
+const velX   = new Float32Array(N_MAIN);
+const velY   = new Float32Array(N_MAIN);
+const driftX = new Float32Array(N_MAIN);
+const driftY = new Float32Array(N_MAIN);
+
+const pAge    = new Float32Array(N_MAIN);
+const pMaxAge = new Float32Array(N_MAIN);
+
+const gatherX = new Float32Array(N_MAIN);
+const gatherY = new Float32Array(N_MAIN);
+
+
+function resetParticle(i) {
+  sT[i] = Math.random();
+
+  const cp = curveCurved.getPoint(sT[i]);
+  const sp = curveStraight.getPoint(sT[i]);
+  cpX[i] = cp.x;  cpY[i] = cp.y;
+  spX[i] = sp.x;  spY[i] = sp.y;
+
+  gOffX[i] = gaussRand() * SIGMA;
+  gOffY[i] = gaussRand() * SIGMA * 0.28;
+  zDepth[i] = gaussRand() * 0.35;
+
+  const dist = Math.min(1,
+    Math.sqrt(gOffX[i] * gOffX[i] + gOffY[i] * gOffY[i]) / (2.5 * SIGMA)
   );
+  bSizes[i]  = (0.055 - dist * 0.025) + Math.random() * 0.015;
+  bAlphas[i] = (0.10  - dist * 0.07)  + Math.random() * 0.025;
+  pPhase[i]  = Math.random() * Math.PI * 2;
+
+  velX[i] = 0;  velY[i] = 0;
+  driftX[i] = 0;  driftY[i] = 0;
+
+  pMaxAge[i] = 100 + Math.random() * 300;
+  pAge[i]    = 0;
+
+  const angle = Math.random() * Math.PI * 2;
+  const d2    = 0.3 + Math.random() * 0.5;
+  gatherX[i]  = cp.x + gOffX[i] + Math.cos(angle) * d2;
+  gatherY[i]  = cp.y + gOffY[i] + Math.sin(angle) * d2;
+
+  allColorVars[i] = (Math.random() - 0.5) * 0.25;
 }
 
-// 每个粒子的静态数据（初始化时确定，运行时不变）
-const spineT      = new Float32Array(N_SPINE);
-const gaussOffX   = new Float32Array(N_SPINE);
-const gaussOffY   = new Float32Array(N_SPINE);
-const zPos        = new Float32Array(N_SPINE);  // z轴深度（产生立体感）
-const noiseOffX   = new Float32Array(N_SPINE);
-const noiseOffY   = new Float32Array(N_SPINE);
-const baseSizes   = new Float32Array(N_SPINE);
-const baseAlphas  = new Float32Array(N_SPINE);
-const pulsePhase  = new Float32Array(N_SPINE);
-
-const curvedPts   = [];
-const straightPts = [];
-
-// 高斯分布参数：0.042 太窄（6px），改为 0.18（约90px 宽，有体积感）
-const sigma = 0.18;
-
-for (let i = 0; i < N_SPINE; i++) {
-  spineT[i] = Math.random();
-  curvedPts.push(curveCurved.getPoint(spineT[i]));
-  straightPts.push(curveStraight.getPoint(spineT[i]));
-
-  // 高斯偏移：x 方向 σ=0.18，y 方向较窄 σ=0.05
-  gaussOffX[i] = gaussRand() * sigma;
-  gaussOffY[i] = gaussRand() * sigma * 0.28;
-
-  // z 轴深度：±0.35 随机，产生前后层次感
-  zPos[i] = gaussRand() * 0.35;
-
-  // 离中心的归一化距离（0=核心，1=边缘）
-  const dist = Math.min(1, Math.sqrt(gaussOffX[i]**2 + gaussOffY[i]**2) / (2.5 * sigma));
-
-  // 核心大且亮，边缘小且暗（aSize * 60 = 屏幕像素）
-  baseSizes[i]  = (0.12 - dist * 0.06) + Math.random() * 0.03;   // 核心~7px，边缘~4px
-  baseAlphas[i] = (0.30 - dist * 0.23) + Math.random() * 0.08;   // 核心~0.38，边缘~0.03
-
-  noiseOffX[i] = Math.random() * 100;
-  noiseOffY[i] = Math.random() * 100;
-  pulsePhase[i] = Math.random() * Math.PI * 2;
+// 初始化主体粒子，错开出生相位
+for (let i = 0; i < N_MAIN; i++) {
+  resetParticle(i);
+  pAge[i] = Math.random() * pMaxAge[i];
 }
 
-// BufferGeometry
-const spinePositions = new Float32Array(N_SPINE * 3);
-const spineSizes     = new Float32Array(N_SPINE);
-const spineAlphas    = new Float32Array(N_SPINE);
 
-// 初始位置 = 弯曲状态
-for (let i = 0; i < N_SPINE; i++) {
-  const p = curvedPts[i];
-  spinePositions[i*3]   = p.x + gaussOffX[i];
-  spinePositions[i*3+1] = p.y + gaussOffY[i];
-  spinePositions[i*3+2] = 0;
-  spineSizes[i]  = baseSizes[i];
-  spineAlphas[i] = baseAlphas[i];
+// ============================================================
+// 9. 椎节高亮粒子（N_VERT = 13 × 100）
+// ============================================================
+
+const vtCurvedX = new Float32Array(N_VERT);
+const vtDeltaX  = new Float32Array(N_VERT);  // straightX - curvedX = -cx
+const vtBaseY   = new Float32Array(N_VERT);
+const vtBaseZ   = new Float32Array(N_VERT);
+const vtST      = new Float32Array(N_VERT);
+
+for (let vi = 0; vi < 13; vi++) {
+  const cx = SPINE_CURVED[vi].x;
+  const cy = SPINE_CURVED[vi].y;
+  const sx = SPINE_STRAIGHT[vi].x;  // = 0
+  const t  = vi / 12;
+
+  for (let j = 0; j < 100; j++) {
+    const idx = vi * 100 + j;
+    const gx  = gaussRand() * SIGMA_VERT;
+    const gy  = gaussRand() * SIGMA_VERT * 0.4;
+
+    vtCurvedX[idx] = cx + gx;
+    vtDeltaX[idx]  = sx - cx;
+    vtBaseY[idx]   = cy + gy;
+    vtBaseZ[idx]   = gaussRand() * 0.2;
+    vtST[idx]      = t;
+
+    const gi = N_MAIN + idx;
+    allPositions[gi*3]   = cx + gx;
+    allPositions[gi*3+1] = cy + gy;
+    allPositions[gi*3+2] = vtBaseZ[idx];
+    allSizes[gi]         = 0.07 + Math.random() * 0.04;
+    allAlphas[gi]        = 0.35 + Math.random() * 0.15;
+    allColorVars[gi]     = (Math.random() - 0.5) * 0.40;
+  }
 }
+
+
+// ============================================================
+// 10. 脊柱 Points（主体 + 椎节共用一个几何体）
+// ============================================================
 
 const spineGeo = new THREE.BufferGeometry();
-spineGeo.setAttribute('position', new THREE.BufferAttribute(spinePositions, 3));
-spineGeo.setAttribute('aSize',    new THREE.BufferAttribute(spineSizes, 1));
-spineGeo.setAttribute('aAlpha',   new THREE.BufferAttribute(spineAlphas, 1));
+spineGeo.setAttribute('position',  new THREE.BufferAttribute(allPositions, 3));
+spineGeo.setAttribute('aSize',     new THREE.BufferAttribute(allSizes, 1));
+spineGeo.setAttribute('aAlpha',    new THREE.BufferAttribute(allAlphas, 1));
+spineGeo.setAttribute('aColorVar', new THREE.BufferAttribute(allColorVars, 1));
 
 const spineMat = new THREE.ShaderMaterial({
   vertexShader,
   fragmentShader,
-  uniforms: { uColor: { value: COLOR_DARK_PURPLE.clone() } },
+  uniforms:    { uColor: { value: COLOR_DARK_PURPLE.clone() } },
   transparent: true,
   blending:    THREE.AdditiveBlending,
   depthWrite:  false,
 });
-
 scene.add(new THREE.Points(spineGeo, spineMat));
 
 
 // ============================================================
-// 6. 环境微粒（背景星尘）
+// 11. 体积光柱（脊柱背后，z=-0.5）
+// ============================================================
+
+const volumeGeo = new THREE.PlaneGeometry(0.9, 4.2);
+const volumeMat = new THREE.ShaderMaterial({
+  uniforms: {
+    uColor: { value: new THREE.Color() },
+    uAlpha: { value: 0.08 },
+  },
+  vertexShader: /* glsl */`
+    varying vec2 vUv;
+    void main() {
+      vUv = uv;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform vec3  uColor;
+    uniform float uAlpha;
+    varying vec2  vUv;
+    void main() {
+      float edge = 1.0 - abs(vUv.x - 0.5) * 2.0;
+      float ends = smoothstep(0.0, 0.1, vUv.y) * smoothstep(1.0, 0.9, vUv.y);
+      gl_FragColor = vec4(uColor, uAlpha * edge * edge * ends);
+    }
+  `,
+  transparent: true,
+  depthWrite:  false,
+  blending:    THREE.AdditiveBlending,
+  side:        THREE.DoubleSide,
+});
+const volumeMesh = new THREE.Mesh(volumeGeo, volumeMat);
+volumeMesh.position.set(0, 0, -0.5);
+scene.add(volumeMesh);
+
+
+// ============================================================
+// 12. 环境微粒（N_AMBIENT 个背景星尘）
 // ============================================================
 
 const ambBase      = new Float32Array(N_AMBIENT * 3);
@@ -237,9 +328,9 @@ const ambOrbitPh   = new Float32Array(N_AMBIENT);
 const ambPositions = new Float32Array(N_AMBIENT * 3);
 const ambSizes     = new Float32Array(N_AMBIENT);
 const ambAlphas    = new Float32Array(N_AMBIENT);
+const ambColorVars = new Float32Array(N_AMBIENT);
 
 for (let i = 0; i < N_AMBIENT; i++) {
-  // 铺满全屏（相机FOV=60，z=5，宽约8.5单位，高约5.8单位）
   ambBase[i*3]   = (Math.random() - 0.5) * 10;
   ambBase[i*3+1] = (Math.random() - 0.5) * 7;
   ambBase[i*3+2] = (Math.random() - 0.5) * 1.5;
@@ -248,34 +339,33 @@ for (let i = 0; i < N_AMBIENT; i++) {
   ambPositions[i*3+1] = ambBase[i*3+1];
   ambPositions[i*3+2] = ambBase[i*3+2];
 
-  // 非常小的粒子（1-2px 感），暗淡，不抢主体
-  ambSizes[i]  = 0.015 + Math.random() * 0.020;   // 屏幕约 1-2px
-  ambAlphas[i] = 0.12  + Math.random() * 0.15;
-
-  ambOrbitR[i]   = 0.06 + Math.random() * 0.20;
-  ambOrbitSpd[i] = 0.05 + Math.random() * 0.15;
-  ambOrbitPh[i]  = Math.random() * Math.PI * 2;
+  ambSizes[i]     = 0.012 + Math.random() * 0.018;
+  ambAlphas[i]    = 0.07  + Math.random() * 0.10;
+  ambOrbitR[i]    = 0.06  + Math.random() * 0.20;
+  ambOrbitSpd[i]  = 0.05  + Math.random() * 0.15;
+  ambOrbitPh[i]   = Math.random() * Math.PI * 2;
+  ambColorVars[i] = (Math.random() - 0.5) * 0.20;
 }
 
 const ambGeo = new THREE.BufferGeometry();
-ambGeo.setAttribute('position', new THREE.BufferAttribute(ambPositions, 3));
-ambGeo.setAttribute('aSize',    new THREE.BufferAttribute(ambSizes, 1));
-ambGeo.setAttribute('aAlpha',   new THREE.BufferAttribute(ambAlphas, 1));
+ambGeo.setAttribute('position',  new THREE.BufferAttribute(ambPositions, 3));
+ambGeo.setAttribute('aSize',     new THREE.BufferAttribute(ambSizes, 1));
+ambGeo.setAttribute('aAlpha',    new THREE.BufferAttribute(ambAlphas, 1));
+ambGeo.setAttribute('aColorVar', new THREE.BufferAttribute(ambColorVars, 1));
 
 const ambMat = new THREE.ShaderMaterial({
   vertexShader,
   fragmentShader,
-  uniforms: { uColor: { value: new THREE.Color(0x2a1855) } },
+  uniforms:    { uColor: { value: new THREE.Color(0x2a1855) } },
   transparent: true,
   blending:    THREE.AdditiveBlending,
   depthWrite:  false,
 });
-
 scene.add(new THREE.Points(ambGeo, ambMat));
 
 
 // ============================================================
-// 7. 后处理：Bloom（克制）
+// 13. 后处理：Bloom
 // ============================================================
 
 const composer = new EffectComposer(renderer);
@@ -283,88 +373,140 @@ composer.addPass(new RenderPass(scene, camera));
 
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.7,   // strength（初始值，动态调整）
-  0.5,   // radius（扩散范围适中）
-  0.12   // threshold（低阈值让密集区域自然发光）
+  0.7,   // strength（动态调整）
+  0.6,   // radius
+  0.15   // threshold
 );
 composer.addPass(bloomPass);
 
 
 // ============================================================
-// 8. 状态 / blend 控制
+// 14. 状态 / blend 控制
 // ============================================================
 
 let currentMode   = 'IDLE';
 let targetBlend   = 0.0;
 let smoothBlend   = 0.0;
-let blendVelocity = 0.0;  // 弹簧物理速度
+let blendVelocity = 0.0;
 
 
 // ============================================================
-// 9. 动画主循环
+// 15. 动画主循环
 // ============================================================
 
 let time = 0;
 
 function animate() {
   requestAnimationFrame(animate);
-  time += 0.016;  // ~60fps
+  time += 0.016;
 
-  // ── 弹簧物理平滑 blend（ease-in-out 感） ──
+  // 弹簧物理平滑 blend
   const springF = (targetBlend - smoothBlend) * 0.035;
   blendVelocity = blendVelocity * 0.82 + springF;
   smoothBlend   = Math.max(0, Math.min(1, smoothBlend + blendVelocity));
 
-  // ── 整体呼吸脉动（5秒周期） ──
-  // 2π/5 ≈ 1.257
-  const breathe     = Math.sin(time * 1.257) * 0.5 + 0.5;  // 0→1→0，5s
-  const spreadScale = 1 + breathe * 0.06;                   // 高斯偏移轻微膨胀
+  // 全局呼吸脉动（5秒周期）
+  const breathe     = Math.sin(time * 1.257) * 0.5 + 0.5;
+  const spreadScale = 1 + breathe * 0.06;
 
-  // ── 更新脊柱粒子 ──
-  const pos  = spineGeo.attributes.position.array;
-  const sz   = spineGeo.attributes.aSize.array;
-  // const al = spineGeo.attributes.aAlpha.array;  // alpha 固定不变
+  // ── 主体粒子更新 ──────────────────────────────────────────
+  for (let i = 0; i < N_MAIN; i++) {
+    pAge[i]++;
 
-  // 级联波参数：底部粒子（spineT=1）先响应，顶部（spineT=0）后响应
-  const WAVE = 0.28;
+    // 随机游走：速度微扰 + 均值回归
+    velX[i] += (Math.random() - 0.5) * 0.0008;
+    if (velX[i] >  0.006) velX[i] =  0.006;
+    if (velX[i] < -0.006) velX[i] = -0.006;
+    driftX[i] = (driftX[i] + velX[i]) * 0.998;
 
-  for (let i = 0; i < N_SPINE; i++) {
-    // 级联 localBlend：底部领先 WAVE
+    velY[i] += (Math.random() - 0.5) * 0.0006;
+    if (velY[i] >  0.005) velY[i] =  0.005;
+    if (velY[i] < -0.005) velY[i] = -0.005;
+    driftY[i] = (driftY[i] + velY[i]) * 0.998;
+
+    // 死亡 → 重生
+    if (pAge[i] >= pMaxAge[i]) {
+      resetParticle(i);
+      allPositions[i*3]   = gatherX[i];
+      allPositions[i*3+1] = gatherY[i];
+      allPositions[i*3+2] = zDepth[i];
+      allAlphas[i]        = 0;
+      continue;
+    }
+
+    // 级联 localBlend（底部粒子先响应）
     const localBlend = Math.max(0, Math.min(1,
-      (smoothBlend - (1 - spineT[i]) * WAVE) / (1 - WAVE)
+      (smoothBlend - (1 - sT[i]) * WAVE) / (1 - WAVE)
     ));
 
-    // 基础位置：弯曲 ↔ 直立 插值（用 localBlend）
-    const cp = curvedPts[i];
-    const sp = straightPts[i];
-    const bx = cp.x + (sp.x - cp.x) * localBlend;
-    const by = cp.y + (sp.y - cp.y) * localBlend;
+    const bx      = cpX[i] + (spX[i] - cpX[i]) * localBlend;
+    const by      = cpY[i] + (spY[i] - cpY[i]) * localBlend;
+    const stableX = bx + gOffX[i] * spreadScale;
+    const stableY = by + gOffY[i] * spreadScale;
 
-    // 平滑噪声有机漂移（振幅 0.07/0.05，肉眼可见的缓慢游动）
-    const nx = smoothNoise(noiseOffX[i], noiseOffY[i],      time * 0.10) * 0.07;
-    const ny = smoothNoise(noiseOffX[i], noiseOffY[i] + 50, time * 0.08) * 0.05;
+    const ratio = pAge[i] / pMaxAge[i];
+    let px, py, alpha;
 
-    // 高斯偏移随呼吸轻微膨胀，z 轴保持固定深度（产生立体感）
-    pos[i*3]   = bx + gaussOffX[i] * spreadScale + nx;
-    pos[i*3+1] = by + gaussOffY[i] * spreadScale + ny;
-    pos[i*3+2] = zPos[i];
+    if (ratio < 0.2) {
+      // GATHERING：从随机点飞向稳定位置
+      const t = ratio / 0.2;
+      px    = gatherX[i] + (stableX - gatherX[i]) * t;
+      py    = gatherY[i] + (stableY - gatherY[i]) * t;
+      alpha = bAlphas[i] * t;
 
-    // 大小脉动（每粒子相位不同，±8%，周期约4s）
-    // 2π/4 ≈ 1.57
-    const pulse = 1.0 + Math.sin(time * 1.57 + pulsePhase[i]) * 0.08;
-    sz[i] = baseSizes[i] * pulse;
+    } else if (ratio < 0.8) {
+      // STABLE：稳定漂浮
+      px    = stableX + driftX[i];
+      py    = stableY + driftY[i];
+      alpha = bAlphas[i];
+
+    } else {
+      // DISPERSING：向聚合点方向飘散
+      const t = (ratio - 0.8) / 0.2;
+      px    = stableX + (gatherX[i] - stableX) * t + driftX[i] * (1 - t);
+      py    = stableY + (gatherY[i] - stableY) * t + driftY[i] * (1 - t);
+      alpha = bAlphas[i] * (1 - t);
+    }
+
+    allPositions[i*3]   = px;
+    allPositions[i*3+1] = py;
+    allPositions[i*3+2] = zDepth[i];
+
+    allSizes[i]  = bSizes[i] * (1.0 + Math.sin(time * 1.57 + pPhase[i]) * 0.08);
+    allAlphas[i] = alpha;
+
+    // 颜色缓慢漂变
+    allColorVars[i] += (Math.random() - 0.5) * 0.002;
+    if (allColorVars[i] >  0.25) allColorVars[i] =  0.25;
+    if (allColorVars[i] < -0.25) allColorVars[i] = -0.25;
   }
 
-  spineGeo.attributes.position.needsUpdate = true;
-  spineGeo.attributes.aSize.needsUpdate    = true;
+  // ── 椎节粒子：仅更新 X（随 blend 变化，Y/Z 静止）──────────
+  for (let j = 0; j < N_VERT; j++) {
+    const gi = N_MAIN + j;
+    const localBlend = Math.max(0, Math.min(1,
+      (smoothBlend - (1 - vtST[j]) * WAVE) / (1 - WAVE)
+    ));
+    allPositions[gi*3] = vtCurvedX[j] + vtDeltaX[j] * localBlend;
+  }
 
-  // ── 更新颜色（整体 smoothBlend 控制色调） ──
-  spineMat.uniforms.uColor.value.copy(getBlendColor(smoothBlend));
+  spineGeo.attributes.position.needsUpdate  = true;
+  spineGeo.attributes.aSize.needsUpdate     = true;
+  spineGeo.attributes.aAlpha.needsUpdate    = true;
+  spineGeo.attributes.aColorVar.needsUpdate = true;
 
-  // ── Bloom 随呼吸起伏（密集区自然发光） ──
-  bloomPass.strength = 0.55 + breathe * 0.30 + smoothBlend * 0.15;
+  // 颜色同步
+  const blendColor = getBlendColor(smoothBlend);
+  spineMat.uniforms.uColor.value.copy(blendColor);
 
-  // ── 更新环境微粒（圆形轨道漂浮） ──
+  // 体积光柱：颜色 + 呼吸透明度
+  volumeMat.uniforms.uColor.value.copy(blendColor);
+  volumeMat.uniforms.uAlpha.value = 0.05 + breathe * 0.06;
+
+  // Bloom 随呼吸 + blend 动态调整
+  bloomPass.strength = 0.6 + breathe * 0.35 + smoothBlend * 0.25;
+
+  // 环境微粒（圆形轨道漂浮）
   const ap = ambGeo.attributes.position.array;
   for (let i = 0; i < N_AMBIENT; i++) {
     ap[i*3]   = ambBase[i*3]   + Math.cos(time * ambOrbitSpd[i]       + ambOrbitPh[i]) * ambOrbitR[i];
@@ -372,7 +514,6 @@ function animate() {
   }
   ambGeo.attributes.position.needsUpdate = true;
 
-  // ── 调试 UI ──
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
 
   composer.render();
@@ -380,7 +521,7 @@ function animate() {
 
 
 // ============================================================
-// 10. SocketIO（与 Flask 通信）
+// 16. SocketIO（与 Flask 通信）
 // ============================================================
 
 const socket = io('http://localhost:5000');
@@ -402,7 +543,7 @@ socket.on('state_change', (data) => {
 
 
 // ============================================================
-// 11. 调试面板
+// 17. 调试面板
 // ============================================================
 
 const debugPanel  = document.getElementById('debug-panel');
@@ -424,7 +565,7 @@ function updateDebugUI() {
 
 
 // ============================================================
-// 12. 键盘快捷键
+// 18. 键盘快捷键
 // ============================================================
 
 document.addEventListener('keydown', (e) => {
@@ -437,7 +578,7 @@ document.addEventListener('keydown', (e) => {
 
 
 // ============================================================
-// 13. 窗口缩放响应
+// 19. 窗口缩放
 // ============================================================
 
 window.addEventListener('resize', () => {
@@ -448,5 +589,4 @@ window.addEventListener('resize', () => {
   composer.setSize(w, h);
 });
 
-// 所有变量声明完毕后再启动动画循环
 animate();
