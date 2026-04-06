@@ -51,7 +51,7 @@ const N_BONE  = 5000;                  // Layer A
 const N_VERT  = 3900;                  // Layer B (13 × 300)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
-const N_DIFF  = 4000;                  // Layer C
+const N_DIFF  = 12000;                 // Layer C（弥散粒子，3倍数量）
 const N_GLOW  = 60;                    // Layer D
 const N_DFULL = N_DIFF + N_GLOW;       // diffuseGeo 总量
 
@@ -290,10 +290,10 @@ const dfAlphas    = new Float32Array(N_DFULL);
 const dfColorVars = new Float32Array(N_DFULL);
 
 
-// ── Layer C：弥散粒子流（4000粒子）─────────────────────────
+// ── Layer C：弥散粒子流（12000粒子）─────────────────────────
 
-// 5条光带方向（相对于水平轴的角度偏移）
-const STREAM_ANGLES = [-0.55, -0.28, 0.0, 0.28, 0.55];
+// 光带方向（只用2条，减少交叉感）
+const STREAM_ANGLES = [-0.35, 0.35];
 
 const dPx      = new Float32Array(N_DIFF);
 const dPy      = new Float32Array(N_DIFF);
@@ -310,29 +310,30 @@ const dBAlpha  = new Float32Array(N_DIFF);
 function resetDiffuse(i, blend) {
   const vi   = Math.floor(Math.random() * 13);
   const side = Math.random() < 0.5 ? 1 : -1;
-  const si   = Math.floor(Math.random() * 5);
+  // 只用2条主光带（更集中）
+  const si   = Math.floor(Math.random() * 2);
 
   dVi[i]    = vi;
   dSide[i]  = side;
 
-  // 弧线初始方向：水平向外 + 光带角度 + 微小随机扰动
-  dAngle[i]  = (side > 0 ? 0 : Math.PI) + STREAM_ANGLES[si] + (Math.random() - 0.5) * 0.12;
-  // 曲率：极慢旋转让轨迹形成弧线
-  dCurveK[i] = (Math.random() < 0.5 ? 1 : -1) * (0.3 + Math.random() * 0.7);
-  dSpeed[i]  = 0.003 + Math.random() * 0.004;   // 非常慢
-  dMaxAge[i] = 400 + Math.random() * 600;        // 7-17秒
+  // 弧线初始方向：水平向外 + 光带角度 + 随机扰动
+  dAngle[i]  = (side > 0 ? 0 : Math.PI) + STREAM_ANGLES[si] + (Math.random() - 0.5) * 0.15;
+  // 曲率：温和的弧线弯曲
+  dCurveK[i] = (Math.random() < 0.5 ? 1 : -1) * (0.4 + Math.random() * 0.7);
+  dSpeed[i]  = 0.003 + Math.random() * 0.004;    // 慢速飘动
+  dMaxAge[i] = 350 + Math.random() * 500;        // 6-14秒
   dAge[i]    = 0;
 
   // 出生位置：紧贴椎节外侧顶点（跟随 blend）
-  const vtX = SPINE_CURVED[vi].x * (1 - blend) + side * (SIGMA_VX + 0.01);
-  const vtY = SPINE_CURVED[vi].y + (Math.random() - 0.5) * 0.025;
+  const vtX = SPINE_CURVED[vi].x * (1 - blend) + side * (SIGMA_VX * 0.9 + 0.02);
+  const vtY = SPINE_CURVED[vi].y + (Math.random() - 0.5) * 0.03;
   dPx[i] = vtX;
   dPy[i] = vtY;
 
-  // 大小差异明显（小的很小，大的是小的2-3倍）
+  // 粒子尺寸和透明度
   const sz = Math.random();
-  dBSize[i]  = 0.020 + sz * sz * 0.060;         // 非线性：多数小，少数大
-  dBAlpha[i] = 0.04  + Math.random() * 0.08;
+  dBSize[i]  = 0.055 + sz * sz * 0.12;
+  dBAlpha[i] = 0.15  + Math.random() * 0.16;
 
   dfColorVars[i] = (Math.random() - 0.5) * 0.18;
 }
@@ -526,8 +527,8 @@ function animate() {
     const fadeOut = 1.0 - smoothstep(0.85, 1.0, ratio);
     const alpha   = dBAlpha[i] * fadeIn * fadeOut;
 
-    // 弧线运动：方向极慢旋转
-    dAngle[i] += dCurveK[i] * 0.00045;
+    // 弧线运动：适中旋转速度
+    dAngle[i] += dCurveK[i] * 0.0009;
     dPx[i]    += Math.cos(dAngle[i]) * dSpeed[i];
     dPy[i]    += Math.sin(dAngle[i]) * dSpeed[i];
 

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAINA — 脊柱侧弯交互装置</title>
+  <script type="module" crossorigin src="/assets/index-B-OZzti2.js"></script>
+  <link rel="stylesheet" crossorigin href="/assets/index-DHwE30dM.css">
+</head>
+<body>
+
+  <!-- ① Three.js 渲染画布（全屏，最底层） -->
+  <canvas id="spine-canvas"></canvas>
+
+  <!-- ② HTML 叠加层：用来显示引导文字、状态提示等 -->
+  <div id="overlay">
+    <!-- 文字内容由 main.js 动态写入 -->
+  </div>
+
+  <!-- ③ 调试面板（开发时用，正式展览前用 D 键隐藏或直接删掉这段） -->
+  <div id="debug-panel">
+    <h3>🛠 调试面板</h3>
+
+    <div class="debug-row">
+      <span>当前阶段：</span>
+      <span id="debug-state" class="debug-value">IDLE</span>
+    </div>
+
+    <div class="debug-row">
+      <span>Blend 值：</span>
+      <span id="debug-blend" class="debug-value">0.00</span>
+    </div>
+
+    <div class="debug-section">
+      <label for="blend-slider">拖动模拟呼吸（硬件到货前用这个）：</label>
+      <input type="range" id="blend-slider" min="0" max="100" value="0" />
+      <p class="debug-hint">← 左边 = 脊柱弯曲（蓝紫）　右边 = 脊柱变直（暖金）</p>
+    </div>
+
+    <div class="debug-section">
+      <button id="btn-start">▶ 按钮：开始体验</button>
+      <button id="btn-reset">↺ 按钮：重置</button>
+    </div>
+
+    <p class="debug-hint">键盘快捷键：D = 隐藏/显示此面板 | F = 全屏</p>
+  </div>
+
+  <!-- ④ Vignette 暗角（CSS 径向遮罩，边缘渐暗） -->
+  <div id="vignette"></div>
+
+  <!-- Three.js 主程序（Vite 会处理模块导入） -->
+
+</body>
+</html>
