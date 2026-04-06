@@ -381,8 +381,6 @@ function animate() {
   composer.render();
 }
 
-animate();
-
 
 // ============================================================
 // 10. SocketIO（与 Flask 通信）
@@ -452,3 +450,6 @@ window.addEventListener('resize', () => {
   renderer.setSize(w, h);
   composer.setSize(w, h);
 });
+
+// 所有变量声明完毕后再启动动画循环
+animate();
