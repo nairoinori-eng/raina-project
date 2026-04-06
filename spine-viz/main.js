@@ -174,10 +174,11 @@ for (let i = 0; i < N_SPINE; i++) {
   // 离中心的距离（0=中心线，1=边缘）
   const dist = Math.min(1, Math.sqrt(gaussOffX[i]**2 + gaussOffY[i]**2) / (2.5 * sigma));
 
-  // 核心粒子：大一点、亮一点；边缘粒子：小且暗
-  // aSize * 60 = 屏幕像素数
-  baseSizes[i]  = (0.075 - dist * 0.038) + Math.random() * 0.018;  // 0.025-0.093
-  baseAlphas[i] = (0.85  - dist * 0.68)  + Math.random() * 0.15;   // 0.02-1.0
+  // 核心粒子：亮一些；边缘粒子：暗淡
+  // 注意：AdditiveBlending 叠加模式，3-4个粒子重叠时 alpha 会累加
+  // 所以单粒子 alpha 要控制在 0.1-0.25，否则叠加后变白
+  baseSizes[i]  = (0.075 - dist * 0.038) + Math.random() * 0.018;  // 屏幕约 2-5px
+  baseAlphas[i] = (0.22  - dist * 0.16)  + Math.random() * 0.06;   // 0.02-0.28
 
   // 噪声采样基点（每粒子不同，防止同步漂移）
   noiseOffX[i] = Math.random() * 100;
