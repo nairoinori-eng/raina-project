@@ -154,46 +154,43 @@ function smoothNoise(x, y, t) {
 }
 
 // 每个粒子的静态数据（初始化时确定，运行时不变）
-const spineT      = new Float32Array(N_SPINE);  // 在曲线上的位置 [0,1]，0=顶 1=底
-const gaussOffX   = new Float32Array(N_SPINE);  // 高斯偏移 x
-const gaussOffY   = new Float32Array(N_SPINE);  // 高斯偏移 y
-const noiseOffX   = new Float32Array(N_SPINE);  // 噪声采样基点 x
-const noiseOffY   = new Float32Array(N_SPINE);  // 噪声采样基点 y
-const baseSizes   = new Float32Array(N_SPINE);  // 粒子基础尺寸
-const baseAlphas  = new Float32Array(N_SPINE);  // 粒子基础透明度
-const pulsePhase  = new Float32Array(N_SPINE);  // 大小脉动相位
+const spineT      = new Float32Array(N_SPINE);
+const gaussOffX   = new Float32Array(N_SPINE);
+const gaussOffY   = new Float32Array(N_SPINE);
+const zPos        = new Float32Array(N_SPINE);  // z轴深度（产生立体感）
+const noiseOffX   = new Float32Array(N_SPINE);
+const noiseOffY   = new Float32Array(N_SPINE);
+const baseSizes   = new Float32Array(N_SPINE);
+const baseAlphas  = new Float32Array(N_SPINE);
+const pulsePhase  = new Float32Array(N_SPINE);
 
-// 曲线采样点（根据随机 spineT 采样，存储弯曲和直立两个位置）
 const curvedPts   = [];
 const straightPts = [];
 
-// 高斯分布参数
-const sigma = 0.042;  // 脊柱"宽度"标准差（越大越胖）
+// 高斯分布参数：0.042 太窄（6px），改为 0.18（约90px 宽，有体积感）
+const sigma = 0.18;
 
 for (let i = 0; i < N_SPINE; i++) {
-  // 在曲线上随机取一个位置（非均匀，更自然）
   spineT[i] = Math.random();
   curvedPts.push(curveCurved.getPoint(spineT[i]));
   straightPts.push(curveStraight.getPoint(spineT[i]));
 
-  // 高斯偏移：从脊柱中心线向外扩散
+  // 高斯偏移：x 方向 σ=0.18，y 方向较窄 σ=0.05
   gaussOffX[i] = gaussRand() * sigma;
-  gaussOffY[i] = gaussRand() * sigma * 0.25;  // y 方向更窄
+  gaussOffY[i] = gaussRand() * sigma * 0.28;
 
-  // 离中心的距离（0=中心线，1=边缘）
+  // z 轴深度：±0.35 随机，产生前后层次感
+  zPos[i] = gaussRand() * 0.35;
+
+  // 离中心的归一化距离（0=核心，1=边缘）
   const dist = Math.min(1, Math.sqrt(gaussOffX[i]**2 + gaussOffY[i]**2) / (2.5 * sigma));
 
-  // 核心粒子：亮一些；边缘粒子：暗淡
-  // 注意：AdditiveBlending 叠加模式，3-4个粒子重叠时 alpha 会累加
-  // 所以单粒子 alpha 要控制在 0.1-0.25，否则叠加后变白
-  baseSizes[i]  = (0.075 - dist * 0.038) + Math.random() * 0.018;  // 屏幕约 2-5px
-  baseAlphas[i] = (0.22  - dist * 0.16)  + Math.random() * 0.06;   // 0.02-0.28
+  // 核心大且亮，边缘小且暗（aSize * 60 = 屏幕像素）
+  baseSizes[i]  = (0.12 - dist * 0.06) + Math.random() * 0.03;   // 核心~7px，边缘~4px
+  baseAlphas[i] = (0.30 - dist * 0.23) + Math.random() * 0.08;   // 核心~0.38，边缘~0.03
 
-  // 噪声采样基点（每粒子不同，防止同步漂移）
   noiseOffX[i] = Math.random() * 100;
   noiseOffY[i] = Math.random() * 100;
-
-  // 脉动相位（每粒子错开）
   pulsePhase[i] = Math.random() * Math.PI * 2;
 }
 
@@ -286,9 +283,9 @@ composer.addPass(new RenderPass(scene, camera));
 
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.4,   // strength（随呼吸动态调整）
-  0.35,  // radius（不扩散太远）
-  0.28   // threshold（小粒子需要低一点才能触发晕光）
+  0.7,   // strength（初始值，动态调整）
+  0.5,   // radius（扩散范围适中）
+  0.12   // threshold（低阈值让密集区域自然发光）
 );
 composer.addPass(bloomPass);
 
@@ -343,14 +340,14 @@ function animate() {
     const bx = cp.x + (sp.x - cp.x) * localBlend;
     const by = cp.y + (sp.y - cp.y) * localBlend;
 
-    // 平滑噪声有机漂移（极慢，像在水中悬浮）
-    const nx = smoothNoise(noiseOffX[i], noiseOffY[i],      time * 0.10) * 0.028;
-    const ny = smoothNoise(noiseOffX[i], noiseOffY[i] + 50, time * 0.08) * 0.020;
+    // 平滑噪声有机漂移（振幅 0.07/0.05，肉眼可见的缓慢游动）
+    const nx = smoothNoise(noiseOffX[i], noiseOffY[i],      time * 0.10) * 0.07;
+    const ny = smoothNoise(noiseOffX[i], noiseOffY[i] + 50, time * 0.08) * 0.05;
 
-    // 高斯偏移随呼吸轻微膨胀
+    // 高斯偏移随呼吸轻微膨胀，z 轴保持固定深度（产生立体感）
     pos[i*3]   = bx + gaussOffX[i] * spreadScale + nx;
     pos[i*3+1] = by + gaussOffY[i] * spreadScale + ny;
-    pos[i*3+2] = 0;
+    pos[i*3+2] = zPos[i];
 
     // 大小脉动（每粒子相位不同，±8%，周期约4s）
     // 2π/4 ≈ 1.57
@@ -364,8 +361,8 @@ function animate() {
   // ── 更新颜色（整体 smoothBlend 控制色调） ──
   spineMat.uniforms.uColor.value.copy(getBlendColor(smoothBlend));
 
-  // ── Bloom 随呼吸起伏（克制范围） ──
-  bloomPass.strength = 0.30 + breathe * 0.12 + smoothBlend * 0.08;
+  // ── Bloom 随呼吸起伏（密集区自然发光） ──
+  bloomPass.strength = 0.55 + breathe * 0.30 + smoothBlend * 0.15;
 
   // ── 更新环境微粒（圆形轨道漂浮） ──
   const ap = ambGeo.attributes.position.array;
