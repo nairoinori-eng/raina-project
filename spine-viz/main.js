@@ -180,8 +180,8 @@ for (let i = 0; i < SPINE_PARTICLE_COUNT; i++) {
   positions[i * 3 + 1] = p.y + offsets[i * 2 + 1];
   positions[i * 3 + 2] = 0;
 
-  sizes[i]  = 1.5 + Math.random() * 3.5;        // 修复6：原 2-6，改为 1.5-5
-  alphas[i] = 0.4 + Math.random() * 0.6;
+  sizes[i]  = 1.0 + Math.random() * 2.5;        // 粒子更小
+  alphas[i] = 0.03 + Math.random() * 0.07;      // 大幅降低透明度（叠加模式下1000粒子会累积）
 }
 
 const spineGeometry = new THREE.BufferGeometry();
@@ -262,9 +262,9 @@ composer.addPass(new RenderPass(scene, camera));
 
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.12,   // strength：初始强度（很低，避免过曝）
-  0.5,    // radius：发光扩散半径
-  0.65,   // threshold：只有亮度 > 0.65 的像素才触发 bloom（大幅减少触发范围）
+  0.6,    // strength：发光强度
+  0.4,    // radius：发光扩散半径
+  0.85,   // threshold：只有非常亮的核心才触发 bloom
 );
 composer.addPass(bloomPass);
 
@@ -436,7 +436,7 @@ function animate() {
 
   // --- 修复1：Bloom 强度大幅降低（柔和微光，不过曝）---
   // 0.12（待机/弯曲）→ 0.32（完全伸直），远低于原来的 0.4-1.2
-  bloomPass.strength = 0.12 + smoothBlend * 0.20;
+  bloomPass.strength = 0.5 + smoothBlend * 0.4;  // 0.5 → 0.9，柔和范围
 
   // --- 修复5：更新环境微粒位置（圆形轨道，有机漂浮）---
   const ambPos = ambientGeometry.attributes.position.array;
