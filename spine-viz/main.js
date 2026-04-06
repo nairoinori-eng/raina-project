@@ -14,8 +14,7 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass }     from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { createNoise3D }  from 'simplex-noise';
-import { io }             from 'socket.io-client';
+import { io } from 'socket.io-client';
 
 
 // ============================================================
@@ -141,8 +140,18 @@ const fragmentShader = /* glsl */`
 // 5. 脊柱粒子系统（核心）
 // ============================================================
 
-// Simplex Noise 实例（用于有机漂移）
-const noise3D = createNoise3D();
+/**
+ * 内置平滑噪声（不依赖外部库）
+ * 用多层 sin/cos 叠加模拟 Perlin Noise 效果
+ * 输入：x, y 坐标 + 时间；输出：-1 到 1 的平滑随机值
+ */
+function smoothNoise(x, y, t) {
+  return (
+    Math.sin(x * 1.7 + t * 0.8) * Math.cos(y * 2.3 + t * 0.6) * 0.5 +
+    Math.sin(x * 3.1 + t * 0.4) * Math.cos(y * 1.9 + t * 0.9) * 0.3 +
+    Math.sin(x * 5.3 + t * 0.2) * Math.cos(y * 4.1 + t * 0.5) * 0.2
+  );
+}
 
 // 每个粒子的静态数据（初始化时确定，运行时不变）
 const spineT      = new Float32Array(N_SPINE);  // 在曲线上的位置 [0,1]，0=顶 1=底
@@ -334,9 +343,9 @@ function animate() {
     const bx = cp.x + (sp.x - cp.x) * localBlend;
     const by = cp.y + (sp.y - cp.y) * localBlend;
 
-    // Simplex Noise 有机漂移（极慢，像在水中悬浮）
-    const nx = noise3D(noiseOffX[i] + time * 0.12, noiseOffY[i]      + time * 0.08, 0) * 0.028;
-    const ny = noise3D(noiseOffX[i] + time * 0.09, noiseOffY[i] + 50 + time * 0.06, 0) * 0.020;
+    // 平滑噪声有机漂移（极慢，像在水中悬浮）
+    const nx = smoothNoise(noiseOffX[i], noiseOffY[i],      time * 0.10) * 0.028;
+    const ny = smoothNoise(noiseOffX[i], noiseOffY[i] + 50, time * 0.08) * 0.020;
 
     // 高斯偏移随呼吸轻微膨胀
     pos[i*3]   = bx + gaussOffX[i] * spreadScale + nx;

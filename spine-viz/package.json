@@ -9,7 +9,6 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "simplex-noise": "^4.0.1",
     "socket.io-client": "^4.7.5",
     "three": "^0.167.0"
   },
