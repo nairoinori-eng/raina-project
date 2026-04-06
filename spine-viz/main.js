@@ -82,12 +82,13 @@ function getBlendColor(blend) {
 
 const canvas = document.getElementById('spine-canvas');
 
-// alpha: true → 画布透明，CSS 径向渐变背景透过来
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, alpha: true });
+// alpha: false（EffectComposer + alpha:true 会导致白屏），改用 scene.background
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 
-const scene  = new THREE.Scene();  // 不设 background，透明
+const scene  = new THREE.Scene();
+scene.background = new THREE.Color(0x06060f);  // 极深蓝黑，CSS Vignette 覆盖在上方
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 0, 5);
