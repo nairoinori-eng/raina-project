@@ -180,8 +180,8 @@ for (let i = 0; i < SPINE_PARTICLE_COUNT; i++) {
   positions[i * 3 + 1] = p.y + offsets[i * 2 + 1];
   positions[i * 3 + 2] = 0;
 
-  sizes[i]  = 1.0 + Math.random() * 2.5;        // 粒子更小
-  alphas[i] = 0.03 + Math.random() * 0.07;      // 大幅降低透明度（叠加模式下1000粒子会累积）
+  sizes[i]  = 1.0 + Math.random() * 2.5;
+  alphas[i] = 0.005 + Math.random() * 0.010;    // 极低alpha（叠加模式，50粒子叠加后约0.5亮度）
 }
 
 const spineGeometry = new THREE.BufferGeometry();
