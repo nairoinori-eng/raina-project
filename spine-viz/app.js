@@ -257,10 +257,19 @@ for (let i = 0; i < N_BONE; i++) {
     taperFactor = Math.pow(Math.max(0, 1 - (bT[i] - 1) / TAPER_EXTEND), 1.5);
   }
 
-  // 管壁宽度随位置变化（腰椎宽、颈椎窄）
+  // ── 椎间空腔：计算当前粒子距最近椎体中心的远近 ──
+  // 13个椎体均匀分布在 t∈[0,1]，间距 = 1/12
+  // 靠近椎体中心 → 粗亮，靠近两椎之间 → 细暗（椎间盘区域）
+  const segPos = tClamped * 12;          // 0~12 连续值
+  const distFromVert = Math.abs(segPos - Math.round(segPos));  // 0=椎体中心, 0.5=两椎之间
+  // gapFactor: 1.0=椎体处（满宽满亮），~0.12=椎间盘处（窄暗但不完全空）
+  const gapFactor = 0.12 + 0.88 * smoothstep(0.42, 0.18, distFromVert);
+  // 椎体处管壁微微鼓出，椎间处收窄
+  const gapWidth = 0.5 + 0.5 * gapFactor;  // 0.56~1.0
+
   const widthScale = tubeWidthAt(tClamped);
-  const effectiveOuter = TUBE_OUTER * taperFactor * widthScale;
-  const effectiveInner = TUBE_INNER * taperFactor * widthScale;
+  const effectiveOuter = TUBE_OUTER * taperFactor * widthScale * gapWidth;
+  const effectiveInner = TUBE_INNER * taperFactor * widthScale * gapWidth;
 
   // 25% 粒子填充管壁内部
   const isInterior = Math.random() < 0.25;
@@ -276,7 +285,6 @@ for (let i = 0; i < N_BONE; i++) {
   const cosA = sideSign * Math.cos(angleMag) * r;
   bZ[i]      = Math.sin(angleMag) * r * TUBE_Y_SCALE;
 
-  // 弯曲态切线（在延伸区用端点切线）
   const ct         = curveCurved.getTangent(tClamped);
   bOffCurvedX[i]   = cosA * (-ct.y);
   bOffCurvedY[i]   = cosA * ct.x;
@@ -284,15 +292,13 @@ for (let i = 0; i < N_BONE; i++) {
   bOffStraightY[i] = 0;
 
   if (isInterior) {
-    // 内部填充粒子：明显可见
-    bBaseS[i] = (0.08 + Math.random() * 0.09) * Math.max(0.3, taperFactor);
-    bBaseA[i] = (0.13 + Math.random() * 0.10) * Math.max(0.3, taperFactor);
+    bBaseS[i] = (0.08 + Math.random() * 0.09) * Math.max(0.3, taperFactor) * gapFactor;
+    bBaseA[i] = (0.13 + Math.random() * 0.10) * Math.max(0.3, taperFactor) * gapFactor;
   } else {
     const wallRatio = effectiveOuter > effectiveInner
       ? (r - effectiveInner) / (effectiveOuter - effectiveInner) : 0;
-    // 大小和透明度加大随机范围，打破均匀感
     bBaseS[i] = (0.09 + wallRatio * 0.09 + Math.random() * 0.06) * (0.5 + Math.random() * 1.0) * Math.max(0.2, taperFactor);
-    bBaseA[i] = ((0.14 + wallRatio * 0.14) + Math.random() * 0.08) * taperFactor;
+    bBaseA[i] = ((0.14 + wallRatio * 0.14) + Math.random() * 0.08) * taperFactor * gapFactor;
   }
   bPhase[i] = Math.random() * Math.PI * 2;
 
