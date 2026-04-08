@@ -198,37 +198,93 @@ const bBaseS = new Float32Array(N_BONE);   // base size
 const bBaseA = new Float32Array(N_BONE);   // base alpha
 const bPhase = new Float32Array(N_BONE);
 
+// 预计算端点位置和切线，用于上下延伸渐隐（taper）
+const TAPER_EXTEND = 0.12;  // 两端各延伸 12%
+const EXTEND_SCALE = 5.0 * SPINE_SCALE;  // t到世界坐标的近似缩放
+const curveTopPt  = curveCurved.getPoint(0);
+const curveBotPt  = curveCurved.getPoint(1);
+const curveTopTan = curveCurved.getTangent(0);
+const curveBotTan = curveCurved.getTangent(1);
+const straightTopY = curveStraight.getPoint(0).y;
+const straightBotY = curveStraight.getPoint(1).y;
+
 for (let i = 0; i < N_BONE; i++) {
-  bT[i] = Math.random();
-  const cp = curveCurved.getPoint(bT[i]);
-  const sp = curveStraight.getPoint(bT[i]);
-  bCpX[i] = cp.x;  bCpY[i] = cp.y;
-  bSpX[i] = sp.x;  bSpY[i] = sp.y;
+  // 扩展范围：[-TAPER, 1+TAPER]，两端渐隐延伸
+  bT[i] = -TAPER_EXTEND + Math.random() * (1 + 2 * TAPER_EXTEND);
 
-  // 左右两侧对称分布：排除顶底角度保持中空感，sideSign 翻转左右
+  let cpx, cpy, spx, spy;
+  const tClamped = Math.max(0, Math.min(1, bT[i]));
+
+  if (bT[i] < 0) {
+    // 上端延伸：沿切线反方向外推
+    const ext = -bT[i] * EXTEND_SCALE;
+    cpx = curveTopPt.x - curveTopTan.x * ext;
+    cpy = curveTopPt.y - curveTopTan.y * ext;
+    spx = 0;
+    spy = straightTopY + ext;
+  } else if (bT[i] > 1) {
+    // 下端延伸：沿切线正方向外推
+    const ext = (bT[i] - 1) * EXTEND_SCALE;
+    cpx = curveBotPt.x + curveBotTan.x * ext;
+    cpy = curveBotPt.y + curveBotTan.y * ext;
+    spx = 0;
+    spy = straightBotY - ext;
+  } else {
+    const cp = curveCurved.getPoint(bT[i]);
+    const sp = curveStraight.getPoint(bT[i]);
+    cpx = cp.x; cpy = cp.y;
+    spx = sp.x; spy = sp.y;
+  }
+
+  bCpX[i] = cpx;  bCpY[i] = cpy;
+  bSpX[i] = spx;  bSpY[i] = spy;
+
+  // 渐隐因子：越靠近延伸末端越窄越淡
+  let taperFactor = 1.0;
+  if (bT[i] < 0) {
+    taperFactor = Math.pow(Math.max(0, 1 + bT[i] / TAPER_EXTEND), 1.5);
+  } else if (bT[i] > 1) {
+    taperFactor = Math.pow(Math.max(0, 1 - (bT[i] - 1) / TAPER_EXTEND), 1.5);
+  }
+
+  // 15% 粒子填充管壁内部（稀疏微光）
+  const isInterior = Math.random() < 0.15;
+
   const sideSign = Math.random() < 0.5 ? 1 : -1;
-  const angleMag = Math.random() * 1.1;   // 0~63°，不到顶底
-  const r        = TUBE_INNER + Math.pow(Math.random(), 0.5) * (TUBE_OUTER - TUBE_INNER);
-  const cosA     = sideSign * Math.cos(angleMag) * r;   // ← sideSign 控制左右对称
-  bZ[i]          = Math.sin(angleMag) * r * TUBE_Y_SCALE;
+  const angleMag = Math.random() * 1.1;
+  const effectiveOuter = TUBE_OUTER * taperFactor;
+  const effectiveInner = TUBE_INNER * taperFactor;
+  let r;
+  if (isInterior) {
+    r = Math.random() * effectiveInner;  // 管壁内侧
+  } else {
+    r = effectiveInner + Math.pow(Math.random(), 0.5) * (effectiveOuter - effectiveInner);
+  }
+  const cosA = sideSign * Math.cos(angleMag) * r;
+  bZ[i]      = Math.sin(angleMag) * r * TUBE_Y_SCALE;
 
-  // 弯曲状态：截面垂直于曲线切线方向
-  const ct         = curveCurved.getTangent(bT[i]);
+  // 弯曲态切线（在延伸区用端点切线）
+  const ct         = curveCurved.getTangent(tClamped);
   bOffCurvedX[i]   = cosA * (-ct.y);
   bOffCurvedY[i]   = cosA * ct.x;
-  // 直立状态：切线≈(0,-1,0)，垂直方向=(1,0,0)
   bOffStraightX[i] = cosA;
   bOffStraightY[i] = 0;
 
-  // 外壁粒子更大更亮，强化轮廓感
-  const wallRatio = (r - TUBE_INNER) / (TUBE_OUTER - TUBE_INNER);
-  bBaseS[i] = (0.11 + wallRatio * 0.07) * (0.6 + Math.random() * 0.8);
-  bBaseA[i] = (0.16 + wallRatio * 0.12) + Math.random() * 0.05;
+  if (isInterior) {
+    // 内部填充粒子：小而暗
+    bBaseS[i] = (0.04 + Math.random() * 0.05) * Math.max(0.3, taperFactor);
+    bBaseA[i] = (0.03 + Math.random() * 0.04) * Math.max(0.2, taperFactor);
+  } else {
+    const wallRatio = effectiveOuter > effectiveInner
+      ? (r - effectiveInner) / (effectiveOuter - effectiveInner) : 0;
+    bBaseS[i] = (0.11 + wallRatio * 0.07) * (0.6 + Math.random() * 0.8) * Math.max(0.2, taperFactor);
+    bBaseA[i] = ((0.16 + wallRatio * 0.12) + Math.random() * 0.05) * taperFactor;
+  }
   bPhase[i] = Math.random() * Math.PI * 2;
 
   spColorVars[i] = (Math.random() - 0.5) * 0.25;
-  spPositions[i*3]   = cp.x + bOffCurvedX[i];
-  spPositions[i*3+1] = cp.y + bOffCurvedY[i];
+  spPositions[i*3]   = cpx + bOffCurvedX[i];
+  spPositions[i*3+1] = cpy + bOffCurvedY[i];
   spPositions[i*3+2] = bZ[i];
 }
 
@@ -539,8 +595,8 @@ function animate() {
     const bx = bCpX[i] + (bSpX[i] - bCpX[i]) * lb;
     const by = bCpY[i] + (bSpY[i] - bCpY[i]) * lb;
 
-    // 两端渐隐（上下各 7% 范围内平滑淡出）
-    const endFade = smoothstep(0.0, 0.07, bT[i]) * smoothstep(1.0, 0.93, bT[i]);
+    // 两端渐隐：延伸区 taperFactor 已内置于 bBaseA，这里不再额外压暗
+    const endFade = 1.0;
 
     // 在弯曲/直立之间插值截面偏移（切线跟随，解决脱节）
     const offX = bOffCurvedX[i] * (1 - lb) + bOffStraightX[i] * lb;
