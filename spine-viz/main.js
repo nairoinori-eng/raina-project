@@ -207,6 +207,38 @@ const fragmentShader = /* glsl */`
   }
 `;
 
+const spineVertexShader = /* glsl */`
+  attribute vec2 aCurvedPos;
+  attribute vec2 aStraightPos;
+  attribute vec2 aCurvedOff;
+  attribute vec2 aStraightOff;
+  attribute float aZPos;
+  attribute float aParamT;
+  attribute float aSize;
+  attribute float aAlpha;
+  attribute float aPhase;
+  attribute float aColorVar;
+  uniform float uBlend;
+  uniform float uBreatheExpand;
+  uniform float uBreathe;
+  uniform float uTime;
+  varying float vAlpha;
+  varying float vColorVar;
+  void main() {
+    float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
+    vec2 center = mix(aCurvedPos, aStraightPos, lb);
+    vec2 off = mix(aCurvedOff, aStraightOff, lb);
+    vec3 pos = vec3(center.x + off.x * uBreatheExpand, center.y + off.y, aZPos);
+    float size = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
+    float alpha = aAlpha * (0.55 + uBreathe * 0.45);
+    vAlpha = alpha;
+    vColorVar = aColorVar;
+    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+    gl_PointSize = size * (300.0 / -mv.z);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
 
 // ============================================================
 // 7. spineGeo (Layer A + Layer B)
@@ -363,6 +395,8 @@ for (let i = 0; i < N_BONE; i++) {
   spPositions[i*3]   = cpx + bOffCurvedX[i];
   spPositions[i*3+1] = cpy + bOffCurvedY[i];
   spPositions[i*3+2] = bZ[i];
+  spSizes[i]  = bBaseS[i];
+  spAlphas[i] = bBaseA[i];
 }
 
 
@@ -483,19 +517,73 @@ spineGeo.setAttribute('aSize',     new THREE.BufferAttribute(spSizes, 1));
 spineGeo.setAttribute('aAlpha',    new THREE.BufferAttribute(spAlphas, 1));
 spineGeo.setAttribute('aColorVar', new THREE.BufferAttribute(spColorVars, 1));
 
+// ── GPU attribute packing (Layer A + Layer B into shared arrays) ──
+const gpuCurvedPos   = new Float32Array(N_SPINE * 2);
+const gpuStraightPos = new Float32Array(N_SPINE * 2);
+const gpuCurvedOff   = new Float32Array(N_SPINE * 2);
+const gpuStraightOff = new Float32Array(N_SPINE * 2);
+const gpuZPos        = new Float32Array(N_SPINE);
+const gpuParamT      = new Float32Array(N_SPINE);
+const gpuPhase       = new Float32Array(N_SPINE);
+
+// Pack Layer A (indices 0 .. N_BONE-1)
+for (let i = 0; i < N_BONE; i++) {
+  gpuCurvedPos[i * 2]     = bCpX[i];
+  gpuCurvedPos[i * 2 + 1] = bCpY[i];
+  gpuStraightPos[i * 2]     = bSpX[i];
+  gpuStraightPos[i * 2 + 1] = bSpY[i];
+  gpuCurvedOff[i * 2]     = bOffCurvedX[i];
+  gpuCurvedOff[i * 2 + 1] = bOffCurvedY[i];
+  gpuStraightOff[i * 2]     = bOffStraightX[i];
+  gpuStraightOff[i * 2 + 1] = bOffStraightY[i];
+  gpuZPos[i]   = bZ[i];
+  gpuParamT[i] = bT[i];
+  gpuPhase[i]  = bPhase[i];
+}
+
+// Pack Layer B (indices N_BONE .. N_SPINE-1)
+for (let j = 0; j < N_VERT; j++) {
+  const gi = N_BONE + j;
+  gpuCurvedPos[gi * 2]     = vCurvedX[j];
+  gpuCurvedPos[gi * 2 + 1] = vBaseY[j];
+  gpuStraightPos[gi * 2]     = 0;           // straight spine X is always 0
+  gpuStraightPos[gi * 2 + 1] = vBaseY[j];
+  gpuCurvedOff[gi * 2]     = vOffCurvedX[j];
+  gpuCurvedOff[gi * 2 + 1] = vOffCurvedY[j];
+  gpuStraightOff[gi * 2]     = vOffStraightX[j];
+  gpuStraightOff[gi * 2 + 1] = vOffStraightY[j];
+  gpuZPos[gi]   = vBaseZ[j];
+  gpuParamT[gi] = vST[j];
+  gpuPhase[gi]  = 0.0;  // Layer B has no per-particle phase
+}
+
+spineGeo.setAttribute('aCurvedPos',   new THREE.BufferAttribute(gpuCurvedPos, 2));
+spineGeo.setAttribute('aStraightPos', new THREE.BufferAttribute(gpuStraightPos, 2));
+spineGeo.setAttribute('aCurvedOff',   new THREE.BufferAttribute(gpuCurvedOff, 2));
+spineGeo.setAttribute('aStraightOff', new THREE.BufferAttribute(gpuStraightOff, 2));
+spineGeo.setAttribute('aZPos',        new THREE.BufferAttribute(gpuZPos, 1));
+spineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(gpuParamT, 1));
+spineGeo.setAttribute('aPhase',       new THREE.BufferAttribute(gpuPhase, 1));
+
 const spineMat = new THREE.ShaderMaterial({
-  vertexShader, fragmentShader,
+  vertexShader: spineVertexShader, fragmentShader,
   uniforms: {
-    uColor:     { value: COLOR_DARK.clone() },
-    uHighlight: { value: HL_DARK.clone() },
-    uAccent1:   { value: AC1_DARK.clone() },
-    uAccent2:   { value: AC2_DARK.clone() },
+    uColor:         { value: COLOR_DARK.clone() },
+    uHighlight:     { value: HL_DARK.clone() },
+    uAccent1:       { value: AC1_DARK.clone() },
+    uAccent2:       { value: AC2_DARK.clone() },
+    uBlend:         { value: 0.0 },
+    uBreatheExpand: { value: 1.0 },
+    uBreathe:       { value: 0.0 },
+    uTime:          { value: 0.0 },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
   depthWrite:  false,
 });
-spineGroup.add(new THREE.Points(spineGeo, spineMat));
+const spinePoints = new THREE.Points(spineGeo, spineMat);
+spinePoints.frustumCulled = false;
+spineGroup.add(spinePoints);
 
 
 // ============================================================
@@ -729,49 +817,11 @@ function animate() {
   // 脊柱缓慢摆动 ±20°，12秒一个周期
   spineGroup.rotation.y = Math.sin(time * 0.52) * 0.35;
 
-  // ── Layer A：骨骼柱体（位置 + 大小 + 透明度）──────────────
-  for (let i = 0; i < N_BONE; i++) {
-    const lb = Math.max(0, Math.min(1,
-      (smoothBlend - (1 - bT[i]) * WAVE) / (1 - WAVE)
-    ));
-    const bx = bCpX[i] + (bSpX[i] - bCpX[i]) * lb;
-    const by = bCpY[i] + (bSpY[i] - bCpY[i]) * lb;
-
-    // 两端渐隐：延伸区 taperFactor 已内置于 bBaseA，这里不再额外压暗
-    const endFade = 1.0;
-
-    // 在弯曲/直立之间插值截面偏移（切线跟随，解决脱节）
-    const offX = bOffCurvedX[i] * (1 - lb) + bOffStraightX[i] * lb;
-    const offY = bOffCurvedY[i] * (1 - lb) + bOffStraightY[i] * lb;
-    spPositions[i*3]   = bx + offX * breatheExpand;
-    spPositions[i*3+1] = by + offY;
-    spPositions[i*3+2] = bZ[i];
-
-    // 整体呼吸：最低亮度提高，暗时也清晰可见
-    spSizes[i]  = bBaseS[i] * (1.0 + Math.sin(time * 1.57 + bPhase[i]) * 0.06);
-    spAlphas[i] = bBaseA[i] * (0.55 + breathe * 0.45) * endFade;
-  }
-
-  // ── Layer B：椎节椭圆（切线对齐，随 blend 插值 + 呼吸扩张）────
-  for (let j = 0; j < N_VERT; j++) {
-    const gi = N_BONE + j;
-    const lb = Math.max(0, Math.min(1,
-      (smoothBlend - (1 - vST[j]) * WAVE) / (1 - WAVE)
-    ));
-    // 椎节中心：从弯曲位置插值到直立位置
-    const centerX = vCurvedX[j] + vDeltaX[j] * lb;
-    const centerY = vBaseY[j];
-    // 截面偏移：在弯曲态和直立态之间插值（与 Layer A 一致的切线对齐方式）
-    const offX = vOffCurvedX[j] * (1 - lb) + vOffStraightX[j] * lb;
-    const offY = vOffCurvedY[j] * (1 - lb) + vOffStraightY[j] * lb;
-    spPositions[gi*3]   = centerX + offX * breatheExpand;
-    spPositions[gi*3+1] = centerY + offY;
-    spAlphas[gi] = vBaseAlph[j] * (0.50 + breathe * 0.50);
-  }
-
-  spineGeo.attributes.position.needsUpdate = true;
-  spineGeo.attributes.aSize.needsUpdate    = true;
-  spineGeo.attributes.aAlpha.needsUpdate   = true;
+  // ── Layer A + B：GPU-driven (uniforms only) ──────────────
+  spineMat.uniforms.uBlend.value         = smoothBlend;
+  spineMat.uniforms.uBreatheExpand.value = breatheExpand;
+  spineMat.uniforms.uBreathe.value       = breathe;
+  spineMat.uniforms.uTime.value          = time;
 
   // 颜色同步（基色 + 高光 + 两种对比色 都跟随 blend）
   const blendColor = getBlendColor(smoothBlend);
