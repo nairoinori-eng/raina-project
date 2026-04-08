@@ -57,8 +57,8 @@ const N_BONE  = 80000;                 // Layer A（极致精细）
 const N_VERT  = 39000;                 // Layer B (13 × 3000)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
-const N_DIFF  = 6000;                  // Layer C（弥散粒子，减半提升帧率）
-const N_GLOW  = 60;                    // Layer D
+const N_DIFF  = 0;                     // Layer C（暂时关闭弥散粒子）
+const N_GLOW  = 0;                     // Layer D（暂时关闭辉光线）
 const N_DFULL = N_DIFF + N_GLOW;       // diffuseGeo 总量
 
 const N_AMB   = 300;                   // Layer E
