@@ -390,11 +390,12 @@ for (let vi = 0; vi < 13; vi++) {
     const radialNorm = vr / Math.max(VERT_OUTER, 0.001);
     const edgeSoft = 1.0 - smoothstep(0.7, 1.0, radialNorm);
     if (isVertFill) {
-      vBaseSize[idx] = (0.12 + Math.random() * 0.08) * (0.6 + 0.4 * yFalloff);
-      vBaseAlph[idx] = (0.15 + Math.random() * 0.10) * yFalloff * edgeSoft;
+      vBaseSize[idx] = (0.18 + Math.random() * 0.12) * (0.7 + 0.3 * yFalloff);
+      vBaseAlph[idx] = (0.12 + Math.random() * 0.08) * yFalloff * edgeSoft;
     } else {
-      vBaseSize[idx] = (0.16 + wallRatio * 0.10) * (0.7 + Math.random() * 0.5) * (0.5 + 0.5 * yFalloff);
-      vBaseAlph[idx] = ((0.26 + wallRatio * 0.10) + Math.random() * 0.05) * yFalloff * edgeSoft;
+      // 粒子尺寸增大，确保重叠形成实心面
+      vBaseSize[idx] = (0.24 + wallRatio * 0.10) * (0.8 + Math.random() * 0.5) * (0.65 + 0.35 * yFalloff);
+      vBaseAlph[idx] = ((0.22 + wallRatio * 0.10) + Math.random() * 0.04) * yFalloff * edgeSoft;
     }
 
     const gi = N_BONE + idx;
