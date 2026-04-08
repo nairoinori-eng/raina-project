@@ -72,20 +72,20 @@ const COLOR_DARK = new THREE.Color(0x3a2d6e);  // 深蓝紫（压暗回来）
 const COLOR_MID  = new THREE.Color(0x5c527a);  // 灰紫过渡
 const COLOR_GOLD = new THREE.Color(0xc4a882);  // 灰金色
 
-// 高光色（3D正面光感，比基色亮1.5~2倍）
-const HL_DARK = new THREE.Color(0x9585d8);   // 亮薰衣草
-const HL_MID  = new THREE.Color(0xbaa898);   // 亮灰紫金
-const HL_GOLD = new THREE.Color(0xeadcb8);   // 亮金
+// 高光色（接近白色的高亮，强烈正面光感）
+const HL_DARK = new THREE.Color(0xc0b0f0);   // 亮白紫
+const HL_MID  = new THREE.Color(0xe0d0c0);   // 亮白金
+const HL_GOLD = new THREE.Color(0xfff0d8);   // 近白暖光
 
-// 对比色1：暖色系（与蓝紫形成冷暖互补）
-const AC1_DARK = new THREE.Color(0xd07050);  // 珊瑚橘（暖 vs 冷紫）
-const AC1_MID  = new THREE.Color(0xd89840);  // 琥珀金（暖 vs 灰紫）
-const AC1_GOLD = new THREE.Color(0xc86088);  // 玫瑰粉（冷 vs 暖金）
+// 对比色1：暖色系（高饱和，明确可见）
+const AC1_DARK = new THREE.Color(0xff6840);  // 鲜橘红
+const AC1_MID  = new THREE.Color(0xf0a030);  // 鲜琥珀
+const AC1_GOLD = new THREE.Color(0xe05080);  // 鲜玫红
 
-// 对比色2：冷色系（互补方向的另一极）
-const AC2_DARK = new THREE.Color(0x38b8a8);  // 翡翠青（蓝紫的三角互补）
-const AC2_MID  = new THREE.Color(0x50a878);  // 翠绿（灰紫的互补）
-const AC2_GOLD = new THREE.Color(0x5888d0);  // 宝石蓝（暖金的互补）
+// 对比色2：冷色系（高饱和）
+const AC2_DARK = new THREE.Color(0x20e0c0);  // 鲜翡翠
+const AC2_MID  = new THREE.Color(0x30d870);  // 鲜翠绿
+const AC2_GOLD = new THREE.Color(0x4080f0);  // 鲜钴蓝
 
 
 // ============================================================
@@ -345,15 +345,20 @@ for (let i = 0; i < N_BONE; i++) {
   }
   bPhase[i] = Math.random() * Math.PI * 2;
 
-  // colorVar：Z靠前→高光(正值)，15%→暖对比色，8%→冷对比色
+  // colorVar：Z靠前→高光(正值)，对比色粒子更大更亮才能突出
   const zDepth = Math.abs(bZ[i]) / Math.max(effectiveOuter * TUBE_Y_SCALE, 0.01);
   const acRoll = Math.random();
   if (acRoll < 0.10) {
-    spColorVars[i] = -(0.15 + Math.random() * 0.35);   // 暖对比色（珊瑚/琥珀/玫瑰）
+    spColorVars[i] = -(0.25 + Math.random() * 0.25);   // 暖对比色
+    bBaseS[i] *= 1.6;  bBaseA[i] *= 1.8;               // 放大加亮才看得见
   } else if (acRoll < 0.18) {
-    spColorVars[i] = -(0.55 + Math.random() * 0.40);   // 冷对比色（翡翠/翠绿/宝石蓝）
+    spColorVars[i] = -(0.55 + Math.random() * 0.40);   // 冷对比色
+    bBaseS[i] *= 1.6;  bBaseA[i] *= 1.8;
+  } else if (acRoll < 0.28) {
+    spColorVars[i] = 0.6 + Math.random() * 0.4;        // 强高光粒子
+    bBaseS[i] *= 1.3;  bBaseA[i] *= 1.5;
   } else {
-    spColorVars[i] = (1 - zDepth) * 0.55 + (Math.random() - 0.5) * 0.12;
+    spColorVars[i] = (1 - zDepth) * 0.4 + (Math.random() - 0.5) * 0.1;
   }
   spPositions[i*3]   = cpx + bOffCurvedX[i];
   spPositions[i*3+1] = cpy + bOffCurvedY[i];
@@ -455,15 +460,19 @@ for (let vi = 0; vi < 13; vi++) {
     spPositions[gi*3+2] = gz;
     spSizes[gi]         = vBaseSize[idx];
     spAlphas[gi]        = vBaseAlph[idx];
-    // Z靠前→高光，12%暖对比色，8%冷对比色
     const vzDepth = Math.abs(gz) / Math.max(VERT_OUTER, 0.01);
     const vacRoll = Math.random();
-    if (vacRoll < 0.12) {
-      spColorVars[gi] = -(0.15 + Math.random() * 0.35);
-    } else if (vacRoll < 0.20) {
+    if (vacRoll < 0.10) {
+      spColorVars[gi] = -(0.25 + Math.random() * 0.25);
+      vBaseSize[idx] *= 1.5;  vBaseAlph[idx] *= 1.7;
+    } else if (vacRoll < 0.18) {
       spColorVars[gi] = -(0.55 + Math.random() * 0.40);
+      vBaseSize[idx] *= 1.5;  vBaseAlph[idx] *= 1.7;
+    } else if (vacRoll < 0.28) {
+      spColorVars[gi] = 0.6 + Math.random() * 0.4;
+      vBaseSize[idx] *= 1.3;  vBaseAlph[idx] *= 1.4;
     } else {
-      spColorVars[gi] = (1 - vzDepth) * 0.5 + (Math.random() - 0.5) * 0.15;
+      spColorVars[gi] = (1 - vzDepth) * 0.4 + (Math.random() - 0.5) * 0.12;
     }
   }
 }
