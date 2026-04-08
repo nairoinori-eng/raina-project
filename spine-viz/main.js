@@ -1,10 +1,10 @@
 /**
- * raina-project — Three.js 粒子脊柱主程序 v4
+ * raina-project — Three.js 粒子脊柱主程序 v5
  * =============================================
- * 四层架构：
- *   Layer A  骨骼柱体（5000，静止，两端渐隐）
- *   Layer B  椎节椭圆（13×300=3900，宽扁，明亮）
- *   Layer C  弥散粒子流（4000，弧线轨迹，从椎节侧边飘出）
+ * 五层架构：
+ *   Layer A  骨骼柱体（20000，空心管，呼吸横向扩张）
+ *   Layer B  椎节椭圆（13×400=5200，宽扁，呼吸完整调制+扩张）
+ *   Layer C  弥散粒子流（12000，curl噪声有机流动，水流/光流感）
  *   Layer D  脊柱辉光线（60个大粒子，跟随曲线弯曲）
  *   Layer E  环境星尘（300，圆形轨道）
  */
@@ -47,8 +47,8 @@ const curveStraight = new THREE.CatmullRomCurve3(SPINE_STRAIGHT);
 // 2. 粒子数量
 // ============================================================
 
-const N_BONE  = 5000;                  // Layer A
-const N_VERT  = 3900;                  // Layer B (13 × 300)
+const N_BONE  = 20000;                 // Layer A
+const N_VERT  = 5200;                  // Layer B (13 × 400)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
 const N_DIFF  = 12000;                 // Layer C（弥散粒子，3倍数量）
@@ -224,6 +224,7 @@ const SIGMA_VY = 0.028 * SPINE_SCALE;  // Y 窄（纵向）
 
 const vCurvedX  = new Float32Array(N_VERT);
 const vDeltaX   = new Float32Array(N_VERT);  // straightX - curvedX = -cx
+const vGxOff    = new Float32Array(N_VERT);  // 每粒子横向高斯偏移（呼吸扩张用）
 const vBaseY    = new Float32Array(N_VERT);
 const vBaseZ    = new Float32Array(N_VERT);
 const vST       = new Float32Array(N_VERT);
@@ -235,13 +236,14 @@ for (let vi = 0; vi < 13; vi++) {
   const cy = SPINE_CURVED[vi].y;
   const t  = vi / 12;
 
-  for (let j = 0; j < 300; j++) {
-    const idx = vi * 300 + j;
+  for (let j = 0; j < 400; j++) {
+    const idx = vi * 400 + j;
     const gx  = gaussRand() * SIGMA_VX;
     const gy  = gaussRand() * SIGMA_VY;
 
     vCurvedX[idx] = cx + gx;
     vDeltaX[idx]  = -cx;
+    vGxOff[idx]   = gx;
     vBaseY[idx]   = cy + gy;
     vBaseZ[idx]   = gaussRand() * 0.15;
     vST[idx]      = t;
@@ -292,9 +294,6 @@ const dfColorVars = new Float32Array(N_DFULL);
 
 // ── Layer C：弥散粒子流（12000粒子）─────────────────────────
 
-// 光带方向（只用2条，减少交叉感）
-const STREAM_ANGLES = [-0.35, 0.35];
-
 const dPx      = new Float32Array(N_DIFF);
 const dPy      = new Float32Array(N_DIFF);
 const dAngle   = new Float32Array(N_DIFF);
@@ -310,30 +309,28 @@ const dBAlpha  = new Float32Array(N_DIFF);
 function resetDiffuse(i, blend) {
   const vi   = Math.floor(Math.random() * 13);
   const side = Math.random() < 0.5 ? 1 : -1;
-  // 只用2条主光带（更集中）
-  const si   = Math.floor(Math.random() * 2);
 
-  dVi[i]    = vi;
-  dSide[i]  = side;
+  dVi[i]   = vi;
+  dSide[i] = side;
 
-  // 弧线初始方向：水平向外 + 光带角度 + 随机扰动
-  dAngle[i]  = (side > 0 ? 0 : Math.PI) + STREAM_ANGLES[si] + (Math.random() - 0.5) * 0.15;
-  // 曲率：温和的弧线弯曲
-  dCurveK[i] = (Math.random() < 0.5 ? 1 : -1) * (0.4 + Math.random() * 0.7);
-  dSpeed[i]  = 0.003 + Math.random() * 0.004;    // 慢速飘动
-  dMaxAge[i] = 350 + Math.random() * 500;        // 6-14秒
+  // 有机宽弧：无固定光带方向，±72° 内随机，curl噪声自然引导轨迹
+  const baseAngle = side > 0 ? 0 : Math.PI;
+  dAngle[i]  = baseAngle + (Math.random() - 0.5) * Math.PI * 0.8;
+  // 基础曲率：极慢，curl noise 主导转向
+  dCurveK[i] = (Math.random() < 0.5 ? 1 : -1) * (0.2 + Math.random() * 0.5);
+  dSpeed[i]  = 0.003 + Math.random() * 0.004;
+  dMaxAge[i] = 500 + Math.random() * 700;   // 8-20s
   dAge[i]    = 0;
 
-  // 出生位置：紧贴椎节外侧顶点（跟随 blend）
+  // 出生位置：椎节外侧
   const vtX = SPINE_CURVED[vi].x * (1 - blend) + side * (SIGMA_VX * 0.9 + 0.02);
-  const vtY = SPINE_CURVED[vi].y + (Math.random() - 0.5) * 0.03;
+  const vtY = SPINE_CURVED[vi].y + (Math.random() - 0.5) * 0.04;
   dPx[i] = vtX;
   dPy[i] = vtY;
 
-  // 粒子尺寸和透明度
   const sz = Math.random();
   dBSize[i]  = 0.055 + sz * sz * 0.12;
-  dBAlpha[i] = 0.15  + Math.random() * 0.16;
+  dBAlpha[i] = 0.14 + Math.random() * 0.14;
 
   dfColorVars[i] = (Math.random() - 0.5) * 0.18;
 }
@@ -471,8 +468,8 @@ function animate() {
   blendVelocity = blendVelocity * 0.82 + springF;
   smoothBlend   = Math.max(0, Math.min(1, smoothBlend + blendVelocity));
 
-  const breathe     = breatheCurve(time);
-  const spreadScale = 1 + breathe * 0.04;
+  const breathe       = breatheCurve(time);
+  const breatheExpand = 1 + breathe * 0.10;   // 横向呼吸扩张 ±10%
 
   // ── Layer A：骨骼柱体（位置 + 大小 + 透明度）──────────────
   for (let i = 0; i < N_BONE; i++) {
@@ -485,8 +482,8 @@ function animate() {
     // 两端渐隐（上下各 7% 范围内平滑淡出）
     const endFade = smoothstep(0.0, 0.07, bT[i]) * smoothstep(1.0, 0.93, bT[i]);
 
-    spPositions[i*3]   = bx + bOffX[i] * spreadScale;
-    spPositions[i*3+1] = by + bOffY[i] * spreadScale;
+    spPositions[i*3]   = bx + bOffX[i] * breatheExpand;  // X 随呼吸扩张
+    spPositions[i*3+1] = by + bOffY[i];                   // Y 不变
     spPositions[i*3+2] = bZ[i];
 
     // 整体呼吸：统一缓亮缓暗 + 两端渐隐
@@ -494,15 +491,16 @@ function animate() {
     spAlphas[i] = bBaseA[i] * (0.35 + breathe * 0.65) * endFade;  // 呼吸幅度大但不完全熄灭
   }
 
-  // ── Layer B：椎节椭圆（仅 X 随 blend 变化）────────────────
+  // ── Layer B：椎节椭圆（X 随 blend 变化 + 呼吸横向扩张）────
   for (let j = 0; j < N_VERT; j++) {
     const gi = N_BONE + j;
     const lb = Math.max(0, Math.min(1,
       (smoothBlend - (1 - vST[j]) * WAVE) / (1 - WAVE)
     ));
-    spPositions[gi*3] = vCurvedX[j] + vDeltaX[j] * lb;
-    // 椎节与骨骼统一呼吸节奏
-    spAlphas[gi] = vBaseAlph[j] * (0.40 + breathe * 0.60);
+    // 椎节中心随 blend 偏移，横向偏移随呼吸扩张
+    const cx_center = vCurvedX[j] + vDeltaX[j] * lb - vGxOff[j];
+    spPositions[gi*3] = cx_center + vGxOff[j] * breatheExpand;
+    spAlphas[gi] = vBaseAlph[j] * breathe;  // 完整呼吸调制（从0到最大）
   }
 
   spineGeo.attributes.position.needsUpdate = true;
@@ -527,8 +525,13 @@ function animate() {
     const fadeOut = 1.0 - smoothstep(0.85, 1.0, ratio);
     const alpha   = dBAlpha[i] * fadeIn * fadeOut;
 
-    // 弧线运动：适中旋转速度
-    dAngle[i] += dCurveK[i] * 0.0009;
+    // Curl 噪声场驱动：平滑变化的转向力，产生水流/光流感
+    const freq = 0.7;
+    const tf   = time * 0.03;
+    const nx   = dPx[i] * freq + tf;
+    const ny   = dPy[i] * freq * 0.6 + tf * 0.8;
+    const curlSteer = Math.sin(nx) * Math.cos(ny) * 0.0007;
+    dAngle[i] += curlSteer + dCurveK[i] * 0.00015;  // curl主导，基础曲率极弱
     dPx[i]    += Math.cos(dAngle[i]) * dSpeed[i];
     dPy[i]    += Math.sin(dAngle[i]) * dSpeed[i];
 
