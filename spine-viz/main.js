@@ -69,8 +69,8 @@ const N_AMB   = 300;                   // Layer E
 // 3. 颜色（低饱和度，优雅克制）
 // ============================================================
 
-const COLOR_DARK = new THREE.Color(0x2a2545);  // 降饱和但保持可见度
-const COLOR_MID  = new THREE.Color(0x4d4568);  // 低饱和度灰紫，偏亮
+const COLOR_DARK = new THREE.Color(0x3d3560);  // 偏亮蓝紫，blend=0时也能看清
+const COLOR_MID  = new THREE.Color(0x5c527a);  // 低饱和度灰紫
 const COLOR_GOLD = new THREE.Color(0xc4a882);  // 低饱和度高级灰金色
 
 
@@ -119,7 +119,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.85;
+renderer.toneMappingExposure = 1.0;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x05050d);
@@ -178,11 +178,17 @@ const spColorVars = new Float32Array(N_SPINE);
 
 // ── Layer A：骨骼柱体（5000粒子，静止，空心管状）─────────────
 
-// 空心管参数：大跨度 + 明确的中空（跟随 SPINE_SCALE 缩放）
-const TUBE_OUTER   = 0.10 * SPINE_SCALE;        // 外壁半径
-const TUBE_INNER   = 0.055 * SPINE_SCALE;       // 内壁半径
-const TUBE_THICK   = 0.018 * SPINE_SCALE;       // 壁厚度
-const TUBE_Y_SCALE = 0.28;                       // Y方向压扁
+// 空心管参数（跟随 SPINE_SCALE 缩放）
+const TUBE_OUTER   = 0.10 * SPINE_SCALE;
+const TUBE_INNER   = 0.055 * SPINE_SCALE;
+const TUBE_Y_SCALE = 0.28;
+
+// 管壁宽度沿脊柱变化（模拟真实椎体：颈椎窄→胸椎中→腰椎宽→骶椎收）
+function tubeWidthAt(t) {
+  // t=0(C7)→0.7, t~0.55(T11/L1)→1.3, t=0.8(L3/L4)→1.25, t=1(S1)→0.8
+  const lumbarPeak = Math.exp(-Math.pow((t - 0.65) * 3.0, 2)) * 0.5;
+  return 0.7 + lumbarPeak + t * 0.3;  // 基础从上到下渐宽 + 腰椎鼓起
+}
 
 const bCpX          = new Float32Array(N_BONE);
 const bCpY          = new Float32Array(N_BONE);
@@ -247,16 +253,19 @@ for (let i = 0; i < N_BONE; i++) {
     taperFactor = Math.pow(Math.max(0, 1 - (bT[i] - 1) / TAPER_EXTEND), 1.5);
   }
 
-  // 20% 粒子填充管壁内部
-  const isInterior = Math.random() < 0.20;
+  // 管壁宽度随位置变化（腰椎宽、颈椎窄）
+  const widthScale = tubeWidthAt(tClamped);
+  const effectiveOuter = TUBE_OUTER * taperFactor * widthScale;
+  const effectiveInner = TUBE_INNER * taperFactor * widthScale;
+
+  // 25% 粒子填充管壁内部
+  const isInterior = Math.random() < 0.25;
 
   const sideSign = Math.random() < 0.5 ? 1 : -1;
   const angleMag = Math.random() * 1.1;
-  const effectiveOuter = TUBE_OUTER * taperFactor;
-  const effectiveInner = TUBE_INNER * taperFactor;
   let r;
   if (isInterior) {
-    r = Math.random() * effectiveInner;  // 管壁内侧
+    r = Math.random() * effectiveInner;
   } else {
     r = effectiveInner + Math.pow(Math.random(), 0.5) * (effectiveOuter - effectiveInner);
   }
@@ -271,14 +280,15 @@ for (let i = 0; i < N_BONE; i++) {
   bOffStraightY[i] = 0;
 
   if (isInterior) {
-    // 内部填充粒子：稍小稍暗，但要看得见
-    bBaseS[i] = (0.07 + Math.random() * 0.08) * Math.max(0.3, taperFactor);
-    bBaseA[i] = (0.09 + Math.random() * 0.08) * Math.max(0.2, taperFactor);
+    // 内部填充粒子：明显可见
+    bBaseS[i] = (0.08 + Math.random() * 0.09) * Math.max(0.3, taperFactor);
+    bBaseA[i] = (0.13 + Math.random() * 0.10) * Math.max(0.3, taperFactor);
   } else {
     const wallRatio = effectiveOuter > effectiveInner
       ? (r - effectiveInner) / (effectiveOuter - effectiveInner) : 0;
-    bBaseS[i] = (0.11 + wallRatio * 0.07) * (0.6 + Math.random() * 0.8) * Math.max(0.2, taperFactor);
-    bBaseA[i] = ((0.16 + wallRatio * 0.12) + Math.random() * 0.05) * taperFactor;
+    // 大小和透明度加大随机范围，打破均匀感
+    bBaseS[i] = (0.09 + wallRatio * 0.09 + Math.random() * 0.06) * (0.5 + Math.random() * 1.0) * Math.max(0.2, taperFactor);
+    bBaseA[i] = ((0.14 + wallRatio * 0.14) + Math.random() * 0.08) * taperFactor;
   }
   bPhase[i] = Math.random() * Math.PI * 2;
 
@@ -291,8 +301,14 @@ for (let i = 0; i < N_BONE; i++) {
 
 // ── Layer B：椎节椭圆（3900粒子，宽扁，加粗强调）─────────────
 
-const VERT_OUTER = 0.15 * SPINE_SCALE;  // 椎节外径（略大于骨骼管，关节鼓出感）
-const VERT_INNER = 0.04 * SPINE_SCALE;  // 椎节内径
+const VERT_OUTER_BASE = 0.15 * SPINE_SCALE;  // 椎节外径基准
+const VERT_INNER = 0.02 * SPINE_SCALE;       // 椎节内径（更小，让内部也有粒子）
+
+// 椎节大小随位置变化（与真实椎体一致：腰椎大、胸椎小）
+function vertSizeAt(vi) {
+  const t = vi / 12;
+  return tubeWidthAt(t) * (0.85 + Math.random() * 0.15);  // 复用管壁宽度 + 随机扰动
+}
 
 const vCurvedX  = new Float32Array(N_VERT);
 const vDeltaX   = new Float32Array(N_VERT);  // straightX - curvedX = -cx
@@ -324,14 +340,23 @@ for (let vi = 0; vi < 13; vi++) {
   const t  = vi / 12;
   const ct = vertTangentsCurved[vi];  // 弯曲态切线
 
+  const vertScale = vertSizeAt(vi);
+  const VERT_OUTER = VERT_OUTER_BASE * vertScale;
+
   for (let j = 0; j < 800; j++) {
     const idx = vi * 800 + j;
-    // 环形分布：粒子在垂直于切线的平面上形成圆盘
+    // 椎体分布：不只是薄圆盘，而是有体积的椭球体
     const vAngle = Math.random() * Math.PI * 2;
-    const vr     = VERT_INNER + Math.random() * (VERT_OUTER - VERT_INNER);
-    const cosA   = Math.cos(vAngle) * vr;  // 截面内"水平"分量
-    const gz     = Math.sin(vAngle) * vr;  // 截面内"深度"分量
-    const gy     = gaussRand() * 0.012 * SPINE_SCALE;  // 沿切线方向的薄厚度
+    // 30% 粒子填充椎体内部（实心感），70% 在外壳（轮廓感）
+    const isVertFill = Math.random() < 0.3;
+    const vr = isVertFill
+      ? Math.pow(Math.random(), 0.5) * VERT_OUTER  // 面积均匀填充整个椎体
+      : VERT_INNER + Math.random() * (VERT_OUTER - VERT_INNER);  // 外壳
+    const cosA   = Math.cos(vAngle) * vr;
+    const gz     = Math.sin(vAngle) * vr;
+    // Y方向厚度增大：从纸片变成有体积的椎体（腰椎更厚）
+    const yThickness = (0.025 + vertScale * 0.015) * SPINE_SCALE;
+    const gy     = gaussRand() * yThickness;
 
     // 弯曲态：截面垂直于曲线切线（与 Layer A 骨骼管一致）
     vOffCurvedX[idx]   = cosA * (-ct.y) + gy * ct.x;
@@ -347,10 +372,18 @@ for (let vi = 0; vi < 13; vi++) {
     vBaseZ[idx]   = gz;
     vST[idx]      = t;
 
-    // 外缘更亮，强化关节轮廓
-    const wallRatio = (vr - VERT_INNER) / (VERT_OUTER - VERT_INNER);
-    vBaseSize[idx] = (0.16 + wallRatio * 0.12) * (0.7 + Math.random() * 0.6);
-    vBaseAlph[idx] = (0.22 + wallRatio * 0.14) + Math.random() * 0.06;
+    // 外壳亮、内部暗，产生体积感
+    const wallRatio = VERT_OUTER > VERT_INNER
+      ? Math.max(0, (vr - VERT_INNER) / (VERT_OUTER - VERT_INNER)) : 0;
+    if (isVertFill) {
+      // 椎体内部填充：较暗但可见
+      vBaseSize[idx] = (0.10 + Math.random() * 0.08) * vertScale;
+      vBaseAlph[idx] = (0.12 + Math.random() * 0.08);
+    } else {
+      // 外壳：亮且明显
+      vBaseSize[idx] = (0.14 + wallRatio * 0.14) * (0.7 + Math.random() * 0.6);
+      vBaseAlph[idx] = (0.24 + wallRatio * 0.16) + Math.random() * 0.06;
+    }
 
     const gi = N_BONE + idx;
     spPositions[gi*3]   = cx + vOffCurvedX[idx];
@@ -605,9 +638,9 @@ function animate() {
     spPositions[i*3+1] = by + offY;
     spPositions[i*3+2] = bZ[i];
 
-    // 整体呼吸：统一缓亮缓暗 + 两端渐隐
+    // 整体呼吸：最低亮度提高，暗时也清晰可见
     spSizes[i]  = bBaseS[i] * (1.0 + Math.sin(time * 1.57 + bPhase[i]) * 0.06);
-    spAlphas[i] = bBaseA[i] * (0.35 + breathe * 0.65) * endFade;  // 呼吸幅度大但不完全熄灭
+    spAlphas[i] = bBaseA[i] * (0.55 + breathe * 0.45) * endFade;
   }
 
   // ── Layer B：椎节椭圆（切线对齐，随 blend 插值 + 呼吸扩张）────
@@ -624,7 +657,7 @@ function animate() {
     const offY = vOffCurvedY[j] * (1 - lb) + vOffStraightY[j] * lb;
     spPositions[gi*3]   = centerX + offX * breatheExpand;
     spPositions[gi*3+1] = centerY + offY;
-    spAlphas[gi] = vBaseAlph[j] * (0.25 + breathe * 0.75);
+    spAlphas[gi] = vBaseAlph[j] * (0.50 + breathe * 0.50);
   }
 
   spineGeo.attributes.position.needsUpdate = true;
