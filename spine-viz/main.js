@@ -48,7 +48,7 @@ const curveStraight = new THREE.CatmullRomCurve3(SPINE_STRAIGHT);
 // ============================================================
 
 const N_BONE  = 20000;                 // Layer A
-const N_VERT  = 5200;                  // Layer B (13 × 400)
+const N_VERT  = 10400;                 // Layer B (13 × 800)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
 const N_DIFF  = 12000;                 // Layer C（弥散粒子，3倍数量）
@@ -196,11 +196,12 @@ for (let i = 0; i < N_BONE; i++) {
   bCpX[i] = cp.x;  bCpY[i] = cp.y;
   bSpX[i] = sp.x;  bSpY[i] = sp.y;
 
-  // XZ 平面圆环截面 + 切线旋转（解决弯曲处脱节）
-  const angle = Math.random() * Math.PI * 2;
-  const r     = TUBE_INNER + Math.pow(Math.random(), 0.5) * (TUBE_OUTER - TUBE_INNER);
-  const cosA  = Math.cos(angle) * r;
-  bZ[i]       = Math.sin(angle) * r;  // Z 深度分量（圆环截面）
+  // 严格左右两侧分布：排除顶底角度，使中心投影为空（中空感）
+  const sideSign = Math.random() < 0.5 ? 1 : -1;
+  const angle    = sideSign * Math.random() * 1.1;   // ±0~63°，不到顶底
+  const r        = TUBE_INNER + Math.pow(Math.random(), 0.5) * (TUBE_OUTER - TUBE_INNER);
+  const cosA     = Math.cos(angle) * r;
+  bZ[i]          = Math.sin(angle) * r;
 
   // 弯曲状态：截面垂直于曲线切线方向
   const ct         = curveCurved.getTangent(bT[i]);
@@ -242,7 +243,7 @@ for (let vi = 0; vi < 13; vi++) {
   const cy = SPINE_CURVED[vi].y;
   const t  = vi / 12;
 
-  for (let j = 0; j < 400; j++) {
+  for (let j = 0; j < 800; j++) {
     const idx = vi * 400 + j;
     // 环形分布：粒子在 XZ 平面圆盘边缘，形成可见的椎节轮廓
     const vAngle = Math.random() * Math.PI * 2;
@@ -299,62 +300,57 @@ const dfAlphas    = new Float32Array(N_DFULL);
 const dfColorVars = new Float32Array(N_DFULL);
 
 
-// ── Layer C：弥散粒子流（12000粒子）─────────────────────────
+// ── Layer C：贝塞尔弧线粒子流（12000粒子）───────────────────
 
-const dPx      = new Float32Array(N_DIFF);
-const dPy      = new Float32Array(N_DIFF);
-const dAngle   = new Float32Array(N_DIFF);
-const dCurveK  = new Float32Array(N_DIFF);  // 弧线曲率（慢旋转）
-const dSpeed   = new Float32Array(N_DIFF);
-const dAge     = new Float32Array(N_DIFF);
-const dMaxAge  = new Float32Array(N_DIFF);
-const dVi      = new Uint8Array(N_DIFF);    // 所属椎节（0-12）
-const dSide    = new Int8Array(N_DIFF);     // 出发侧（+1右, -1左）
-const dBSize   = new Float32Array(N_DIFF);
-const dBAlpha  = new Float32Array(N_DIFF);
-const flowAngle = new Float32Array(13);  // 每椎节当前流向偏角（上下摆动）
-const vCurveDir = new Float32Array(13); // 每椎节弯曲方向（同椎节粒子一致）
-for (let vi = 0; vi < 13; vi++) vCurveDir[vi] = Math.random() < 0.5 ? 1 : -1;
+const dPx   = new Float32Array(N_DIFF);  // P0 出生点 X（贝塞尔起点，不再更新）
+const dPy   = new Float32Array(N_DIFF);  // P0 出生点 Y
+const dBzX1 = new Float32Array(N_DIFF);  // 贝塞尔控制点1
+const dBzY1 = new Float32Array(N_DIFF);
+const dBzX2 = new Float32Array(N_DIFF);  // 贝塞尔控制点2
+const dBzY2 = new Float32Array(N_DIFF);
+const dBzX3 = new Float32Array(N_DIFF);  // 贝塞尔终点
+const dBzY3 = new Float32Array(N_DIFF);
+const dT    = new Float32Array(N_DIFF);  // 当前 t ∈ [0,1]
+const dDt   = new Float32Array(N_DIFF);  // 每帧步进
+const dVi   = new Uint8Array(N_DIFF);
+const dSide = new Int8Array(N_DIFF);
+const dBSize  = new Float32Array(N_DIFF);
+const dBAlpha = new Float32Array(N_DIFF);
+const flowAngle = new Float32Array(13);  // 每椎节流向偏角（缓慢上下摆动）
 
 function resetDiffuse(i, blend) {
   const vi   = Math.floor(Math.random() * 13);
   const side = Math.random() < 0.5 ? 1 : -1;
+  dVi[i] = vi;  dSide[i] = side;
 
-  dVi[i]   = vi;
-  dSide[i] = side;
-
-  const baseAngle = side > 0 ? 0 : Math.PI;
-  dAngle[i]  = baseAngle + flowAngle[vi] + (Math.random() - 0.5) * 0.18;
-  dCurveK[i] = vCurveDir[vi] * (0.5 + Math.random() * 0.3);  // 同椎节同方向弯
-  dSpeed[i]  = Math.random() < 0.3 ? 0.001 + Math.random() * 0.002 : 0.005 + Math.random() * 0.005;
-  dMaxAge[i] = 200 + Math.random() * 300;   // 缩短寿命，粒子聚成流束
-  dAge[i]    = 0;
-
-  // 出生位置：椎节外侧
+  // P0：出生在椎节外侧
   const vtX = SPINE_CURVED[vi].x * (1 - blend) + side * (VERT_OUTER * 0.9 + 0.02);
   const vtY = SPINE_CURVED[vi].y + (Math.random() - 0.5) * 0.04;
   dPx[i] = vtX;
   dPy[i] = vtY;
 
-  const sz = Math.random();
-  dBSize[i]  = 0.055 + sz * sz * 0.12;
-  dBAlpha[i] = 0.14 + Math.random() * 0.14;
+  // 同椎节共享 flowAngle 方向，微小扰动保留流束宽度
+  const yBias = flowAngle[vi] * 1.2;
+  const xOut  = side * 0.38;
+  const n = () => (Math.random() - 0.5) * 0.05;
 
+  dBzX1[i] = vtX + xOut       + n();   dBzY1[i] = vtY + yBias * 0.7 + n();
+  dBzX2[i] = vtX + xOut * 2.4 + n();   dBzY2[i] = vtY + yBias * 1.0 + n();
+  dBzX3[i] = vtX + xOut * 3.8 + n();   dBzY3[i] = vtY + yBias * 0.5 + n();
+
+  dT[i]  = 0;
+  dDt[i] = 0.0013 + Math.random() * 0.0007;
+
+  const sz = Math.random();
+  dBSize[i]  = 0.05 + sz * sz * 0.10;
+  dBAlpha[i] = 0.18 + Math.random() * 0.14;
   dfColorVars[i] = (Math.random() - 0.5) * 0.18;
 }
 
-// 初始化弥散粒子，错开相位
+// 初始化：随机 t 起点，贝塞尔求值无需估算
 for (let i = 0; i < N_DIFF; i++) {
   resetDiffuse(i, 0);
-  // 错开相位：估算粒子在弧线上的初始位置
-  const stagger = Math.random();
-  dAge[i] = stagger * dMaxAge[i];
-  const steps = dAge[i];
-  // 弧线中点角估算（避免 stagger 粒子分布在直线上）
-  const midA = dAngle[i] + dCurveK[i] * 0.002 * steps * 0.5;
-  dAngle[i] += dCurveK[i] * 0.002 * steps;
-  dPx[i] += Math.cos(midA) * dSpeed[i] * steps;
-  dPy[i] += Math.sin(midA) * dSpeed[i] * steps;
+  dT[i] = Math.random();
 }
 
 
@@ -445,9 +441,9 @@ composer.addPass(new RenderPass(scene, camera));
 
 const bloomPass = new UnrealBloomPass(
   new THREE.Vector2(window.innerWidth, window.innerHeight),
-  0.38,  // strength（适度）
-  0.35,  // radius
-  0.30   // threshold
+  0.18,  // strength（降低防过曝）
+  0.18,  // radius（收紧光晕，保持中空可见）
+  0.35   // threshold（提高门槛，只有亮点发光）
 );
 composer.addPass(bloomPass);
 
@@ -525,40 +521,34 @@ function animate() {
   spineMat.uniforms.uColor.value.copy(blendColor);
   diffuseMat.uniforms.uColor.value.copy(blendColor);
 
-  // 更新每椎节流向角（上下慢摆）和弯曲方向（缓慢翻转）
+  // 更新每椎节流向角（各椎节相位错开，驱动贝塞尔 Y 偏向）
   for (let vi = 0; vi < 13; vi++) {
     flowAngle[vi] = Math.sin(time * 0.35 + vi * 0.7) * 0.45;
-    vCurveDir[vi] = Math.sign(Math.sin(time * 0.08 + vi * 1.1));  // ~80s周期翻转方向
   }
 
-  // ── Layer C：弥散粒子流（弧线轨迹）────────────────────────
+  // ── Layer C：贝塞尔弧线粒子流────────────────────────────────
   for (let i = 0; i < N_DIFF; i++) {
-    dAge[i]++;
-
-    if (dAge[i] >= dMaxAge[i]) {
+    dT[i] += dDt[i];
+    if (dT[i] >= 1.0) {
       resetDiffuse(i, smoothBlend);
     }
 
-    const ratio   = dAge[i] / dMaxAge[i];
-    const fadeIn  = smoothstep(0.0, 0.10, ratio);
-    const fadeOut = 1.0 - smoothstep(0.85, 1.0, ratio);
-    const alpha   = dBAlpha[i] * fadeIn * fadeOut;
+    const t  = dT[i];
+    const u  = 1 - t;
+    const u2 = u * u, u3 = u2 * u;
+    const t2 = t * t, t3 = t2 * t;
 
-    // Curl 噪声场驱动：平滑变化的转向力，产生水流/光流感
-    const freq = 0.7;
-    const tf   = time * 0.03;
-    const nx   = dPx[i] * freq + tf;
-    const ny   = dPy[i] * freq * 0.6 + tf * 0.8;
-    const curlSteer = Math.sin(nx) * Math.cos(ny) * 0.0001;  // 极弱，仅保留有机感
-    dAngle[i] += curlSteer + dCurveK[i] * 0.002;   // vCurveDir主导弯曲方向
-    dPx[i]    += Math.cos(dAngle[i]) * dSpeed[i];
-    dPy[i]    += Math.sin(dAngle[i]) * dSpeed[i];
+    const x = u3*dPx[i] + 3*u2*t*dBzX1[i] + 3*u*t2*dBzX2[i] + t3*dBzX3[i];
+    const y = u3*dPy[i] + 3*u2*t*dBzY1[i] + 3*u*t2*dBzY2[i] + t3*dBzY3[i];
 
-    dfPositions[i*3]   = dPx[i];
-    dfPositions[i*3+1] = dPy[i];
+    const fadeIn  = smoothstep(0.0, 0.08, t);
+    const fadeOut = 1.0 - smoothstep(0.85, 1.0, t);
+
+    dfPositions[i*3]   = x;
+    dfPositions[i*3+1] = y;
     dfPositions[i*3+2] = 0.1;
     dfSizes[i]  = dBSize[i];
-    dfAlphas[i] = alpha;
+    dfAlphas[i] = dBAlpha[i] * fadeIn * fadeOut;
   }
 
   // ── Layer D：辉光线（跟随脊柱曲线，随 blend 变直）──────────
@@ -586,7 +576,7 @@ function animate() {
   ambGeo.attributes.position.needsUpdate = true;
 
   // Bloom 随呼吸调整（幅度收小，保持颗粒感）
-  bloomPass.strength = 0.28 + breathe * 0.15 + smoothBlend * 0.12;
+  bloomPass.strength = 0.14 + breathe * 0.07 + smoothBlend * 0.05;
 
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
 
