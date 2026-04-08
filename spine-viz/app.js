@@ -53,8 +53,8 @@ const curveStraight = new THREE.CatmullRomCurve3(SPINE_STRAIGHT);
 // 2. 粒子数量
 // ============================================================
 
-const N_BONE  = 50000;                 // Layer A（细粒子高密度）
-const N_VERT  = 31200;                 // Layer B (13 × 2400)
+const N_BONE  = 65000;                 // Layer A（更细更密）
+const N_VERT  = 36400;                 // Layer B (13 × 2800)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
 const N_DIFF  = 12000;                 // Layer C（弥散粒子，3倍数量）
@@ -335,12 +335,12 @@ for (let i = 0; i < N_BONE; i++) {
   bOffStraightY[i] = 0;
 
   if (isInterior) {
-    bBaseS[i] = (0.05 + Math.random() * 0.04) * Math.max(0.3, taperFactor) * gapFactor;
+    bBaseS[i] = (0.035 + Math.random() * 0.03) * Math.max(0.3, taperFactor) * gapFactor;
     bBaseA[i] = (0.10 + Math.random() * 0.07) * Math.max(0.3, taperFactor) * gapFactor;
   } else {
     const wallRatio = effectiveOuter > effectiveInner
       ? (r - effectiveInner) / (effectiveOuter - effectiveInner) : 0;
-    bBaseS[i] = (0.06 + wallRatio * 0.04 + Math.random() * 0.03) * (0.6 + Math.random() * 0.8) * Math.max(0.2, taperFactor);
+    bBaseS[i] = (0.04 + wallRatio * 0.03 + Math.random() * 0.02) * (0.6 + Math.random() * 0.7) * Math.max(0.2, taperFactor);
     bBaseA[i] = ((0.12 + wallRatio * 0.10) + Math.random() * 0.05) * taperFactor * gapFactor;
   }
   bPhase[i] = Math.random() * Math.PI * 2;
@@ -350,13 +350,13 @@ for (let i = 0; i < N_BONE; i++) {
   const acRoll = Math.random();
   if (acRoll < 0.10) {
     spColorVars[i] = -(0.25 + Math.random() * 0.25);   // 暖对比色
-    bBaseS[i] *= 1.6;  bBaseA[i] *= 1.8;               // 放大加亮才看得见
+    bBaseA[i] *= 2.5;                                    // 只加亮不放大
   } else if (acRoll < 0.18) {
     spColorVars[i] = -(0.55 + Math.random() * 0.40);   // 冷对比色
-    bBaseS[i] *= 1.6;  bBaseA[i] *= 1.8;
+    bBaseA[i] *= 2.5;
   } else if (acRoll < 0.28) {
     spColorVars[i] = 0.6 + Math.random() * 0.4;        // 强高光粒子
-    bBaseS[i] *= 1.3;  bBaseA[i] *= 1.5;
+    bBaseA[i] *= 2.0;
   } else {
     spColorVars[i] = (1 - zDepth) * 0.4 + (Math.random() - 0.5) * 0.1;
   }
@@ -411,7 +411,7 @@ for (let vi = 0; vi < 13; vi++) {
   const vertScale = vertSizeAt(vi);
   const VERT_OUTER = VERT_OUTER_BASE * vertScale;
 
-  for (let j = 0; j < 2400; j++) {
+  for (let j = 0; j < 2800; j++) {
     const idx = vi * 800 + j;
     const vAngle = Math.random() * Math.PI * 2;
     // 85% 外壳（清晰轮廓），15% 内部填充（体积感）
@@ -447,10 +447,10 @@ for (let vi = 0; vi < 13; vi++) {
     const radialNorm = vr / Math.max(VERT_OUTER, 0.001);
     const edgeSoft = 1.0 - smoothstep(0.7, 1.0, radialNorm);
     if (isVertFill) {
-      vBaseSize[idx] = (0.07 + Math.random() * 0.05) * (0.7 + 0.3 * yFalloff);
+      vBaseSize[idx] = (0.04 + Math.random() * 0.03) * (0.7 + 0.3 * yFalloff);
       vBaseAlph[idx] = (0.10 + Math.random() * 0.07) * yFalloff * edgeSoft;
     } else {
-      vBaseSize[idx] = (0.09 + wallRatio * 0.05) * (0.7 + Math.random() * 0.5) * (0.65 + 0.35 * yFalloff);
+      vBaseSize[idx] = (0.05 + wallRatio * 0.03) * (0.7 + Math.random() * 0.5) * (0.65 + 0.35 * yFalloff);
       vBaseAlph[idx] = ((0.18 + wallRatio * 0.10) + Math.random() * 0.04) * yFalloff * edgeSoft;
     }
 
@@ -464,13 +464,13 @@ for (let vi = 0; vi < 13; vi++) {
     const vacRoll = Math.random();
     if (vacRoll < 0.10) {
       spColorVars[gi] = -(0.25 + Math.random() * 0.25);
-      vBaseSize[idx] *= 1.5;  vBaseAlph[idx] *= 1.7;
+      vBaseAlph[idx] *= 2.5;
     } else if (vacRoll < 0.18) {
       spColorVars[gi] = -(0.55 + Math.random() * 0.40);
-      vBaseSize[idx] *= 1.5;  vBaseAlph[idx] *= 1.7;
+      vBaseAlph[idx] *= 2.5;
     } else if (vacRoll < 0.28) {
       spColorVars[gi] = 0.6 + Math.random() * 0.4;
-      vBaseSize[idx] *= 1.3;  vBaseAlph[idx] *= 1.4;
+      vBaseAlph[idx] *= 2.0;
     } else {
       spColorVars[gi] = (1 - vzDepth) * 0.4 + (Math.random() - 0.5) * 0.12;
     }
