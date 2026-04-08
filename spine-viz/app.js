@@ -179,7 +179,7 @@ const spColorVars = new Float32Array(N_SPINE);
 // ── Layer A：骨骼柱体（5000粒子，静止，空心管状）─────────────
 
 // 空心管参数（跟随 SPINE_SCALE 缩放）
-const TUBE_OUTER   = 0.10 * SPINE_SCALE;
+const TUBE_OUTER   = 0.14 * SPINE_SCALE;
 const TUBE_INNER   = 0.055 * SPINE_SCALE;
 const TUBE_Y_SCALE = 0.28;
 
@@ -311,7 +311,7 @@ for (let i = 0; i < N_BONE; i++) {
 
 // ── Layer B：椎节椭圆（3900粒子，宽扁，加粗强调）─────────────
 
-const VERT_OUTER_BASE = 0.15 * SPINE_SCALE;  // 椎节外径基准
+const VERT_OUTER_BASE = 0.20 * SPINE_SCALE;  // 椎节外径基准
 const VERT_INNER = 0.04 * SPINE_SCALE;       // 椎节内径
 
 // 椎节大小随位置微调（腰椎稍大，但幅度克制避免毛刺）
@@ -627,7 +627,7 @@ function animate() {
   smoothBlend   = Math.max(0, Math.min(1, smoothBlend + blendVelocity));
 
   const breathe       = breatheCurve(time);
-  const breatheExpand = 1 + breathe * 0.10;   // 横向呼吸扩张 ±10%
+  const breatheExpand = 1 + breathe * 0.20;   // 横向呼吸扩张 ±20%，明显呼吸感
 
   // ── Layer A：骨骼柱体（位置 + 大小 + 透明度）──────────────
   for (let i = 0; i < N_BONE; i++) {
