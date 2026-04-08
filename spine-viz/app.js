@@ -54,8 +54,8 @@ const curveStraight = new THREE.CatmullRomCurve3(SPINE_STRAIGHT);
 // 2. 粒子数量
 // ============================================================
 
-const N_BONE  = 20000;                 // Layer A
-const N_VERT  = 16900;                 // Layer B (13 × 1300)
+const N_BONE  = 32000;                 // Layer A（细粒子高密度）
+const N_VERT  = 23400;                 // Layer B (13 × 1800)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
 const N_DIFF  = 12000;                 // Layer C（弥散粒子，3倍数量）
@@ -292,13 +292,13 @@ for (let i = 0; i < N_BONE; i++) {
   bOffStraightY[i] = 0;
 
   if (isInterior) {
-    bBaseS[i] = (0.13 + Math.random() * 0.10) * Math.max(0.3, taperFactor) * gapFactor;
-    bBaseA[i] = (0.11 + Math.random() * 0.08) * Math.max(0.3, taperFactor) * gapFactor;
+    bBaseS[i] = (0.05 + Math.random() * 0.04) * Math.max(0.3, taperFactor) * gapFactor;
+    bBaseA[i] = (0.10 + Math.random() * 0.07) * Math.max(0.3, taperFactor) * gapFactor;
   } else {
     const wallRatio = effectiveOuter > effectiveInner
       ? (r - effectiveInner) / (effectiveOuter - effectiveInner) : 0;
-    bBaseS[i] = (0.16 + wallRatio * 0.10 + Math.random() * 0.06) * (0.7 + Math.random() * 0.8) * Math.max(0.2, taperFactor);
-    bBaseA[i] = ((0.13 + wallRatio * 0.12) + Math.random() * 0.06) * taperFactor * gapFactor;
+    bBaseS[i] = (0.06 + wallRatio * 0.04 + Math.random() * 0.03) * (0.6 + Math.random() * 0.8) * Math.max(0.2, taperFactor);
+    bBaseA[i] = ((0.12 + wallRatio * 0.10) + Math.random() * 0.05) * taperFactor * gapFactor;
   }
   bPhase[i] = Math.random() * Math.PI * 2;
 
@@ -354,7 +354,7 @@ for (let vi = 0; vi < 13; vi++) {
   const vertScale = vertSizeAt(vi);
   const VERT_OUTER = VERT_OUTER_BASE * vertScale;
 
-  for (let j = 0; j < 1300; j++) {
+  for (let j = 0; j < 1800; j++) {
     const idx = vi * 800 + j;
     const vAngle = Math.random() * Math.PI * 2;
     // 85% 外壳（清晰轮廓），15% 内部填充（体积感）
@@ -390,12 +390,11 @@ for (let vi = 0; vi < 13; vi++) {
     const radialNorm = vr / Math.max(VERT_OUTER, 0.001);
     const edgeSoft = 1.0 - smoothstep(0.7, 1.0, radialNorm);
     if (isVertFill) {
-      vBaseSize[idx] = (0.18 + Math.random() * 0.12) * (0.7 + 0.3 * yFalloff);
-      vBaseAlph[idx] = (0.12 + Math.random() * 0.08) * yFalloff * edgeSoft;
+      vBaseSize[idx] = (0.07 + Math.random() * 0.05) * (0.7 + 0.3 * yFalloff);
+      vBaseAlph[idx] = (0.10 + Math.random() * 0.07) * yFalloff * edgeSoft;
     } else {
-      // 粒子尺寸增大，确保重叠形成实心面
-      vBaseSize[idx] = (0.24 + wallRatio * 0.10) * (0.8 + Math.random() * 0.5) * (0.65 + 0.35 * yFalloff);
-      vBaseAlph[idx] = ((0.22 + wallRatio * 0.10) + Math.random() * 0.04) * yFalloff * edgeSoft;
+      vBaseSize[idx] = (0.09 + wallRatio * 0.05) * (0.7 + Math.random() * 0.5) * (0.65 + 0.35 * yFalloff);
+      vBaseAlph[idx] = ((0.18 + wallRatio * 0.10) + Math.random() * 0.04) * yFalloff * edgeSoft;
     }
 
     const gi = N_BONE + idx;
