@@ -57,7 +57,7 @@ const N_BONE  = 80000;                 // Layer A（极致精细）
 const N_VERT  = 39000;                 // Layer B (13 × 3000)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
-const N_DIFF  = 12000;                 // Layer C（弥散粒子，3倍数量）
+const N_DIFF  = 6000;                  // Layer C（弥散粒子，减半提升帧率）
 const N_GLOW  = 60;                    // Layer D
 const N_DFULL = N_DIFF + N_GLOW;       // diffuseGeo 总量
 
@@ -709,7 +709,170 @@ spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 
 
 // ============================================================
-// 9. ambGeo (Layer E)
+// 9. vineGeo (Layer F — 藤蔓/根须)
+// ============================================================
+
+const N_VINES = 14;
+const VINE_PPV = 400;   // 每根藤蔓400粒子
+const N_VINE_TOTAL = N_VINES * VINE_PPV;
+
+// 藤蔓路径定义：从椎节两侧长出，蜿蜒曲折
+function makeVineCurve(vi, side, segments, reach, windAmp) {
+  const ox = SPINE_CURVED[vi].x;
+  const oy = SPINE_CURVED[vi].y;
+  const pts = [new THREE.Vector3(ox, oy, 0)];
+  let cx = ox, cy = oy;
+  for (let s = 1; s <= segments; s++) {
+    const p = s / segments;
+    // 每段向外延伸 + 上下蜿蜒
+    cx += side * reach / segments * (0.4 + Math.random() * 0.6);
+    cy += Math.sin(p * Math.PI * 2.5 + Math.random() * 1.5) * windAmp * 0.35
+        + (Math.random() - 0.5) * 0.12;
+    // 加一点Z深度让藤蔓不完全在同一平面
+    const cz = Math.sin(p * Math.PI * 1.5) * 0.08;
+    pts.push(new THREE.Vector3(cx, cy, cz));
+  }
+  return new THREE.CatmullRomCurve3(pts);
+}
+
+// 预生成 14 根藤蔓（参考用户草图的布局）
+const vineData = [
+  // 上部：椎节 1-3
+  { vi: 1,  side:  1, segs: 5, reach: 1.4, wind: 0.9 },
+  { vi: 1,  side:  1, segs: 4, reach: 0.8, wind: 0.6 },   // 短枝
+  { vi: 2,  side: -1, segs: 6, reach: 1.8, wind: 1.1 },
+  // 中上：椎节 4-6
+  { vi: 4,  side:  1, segs: 5, reach: 1.5, wind: 0.8 },
+  { vi: 5,  side: -1, segs: 6, reach: 2.0, wind: 1.0 },
+  { vi: 5,  side: -1, segs: 4, reach: 0.7, wind: 0.5 },   // 短枝
+  // 中下：椎节 7-9
+  { vi: 7,  side: -1, segs: 5, reach: 1.6, wind: 1.2 },
+  { vi: 7,  side:  1, segs: 5, reach: 1.3, wind: 0.7 },
+  { vi: 9,  side:  1, segs: 6, reach: 2.2, wind: 1.0 },
+  // 下部：椎节 10-12
+  { vi: 10, side: -1, segs: 6, reach: 1.9, wind: 0.9 },
+  { vi: 10, side:  1, segs: 4, reach: 0.9, wind: 0.6 },
+  { vi: 11, side: -1, segs: 5, reach: 1.4, wind: 1.1 },
+  { vi: 12, side:  1, segs: 5, reach: 1.5, wind: 0.8 },
+  { vi: 12, side: -1, segs: 4, reach: 1.0, wind: 0.7 },
+];
+
+const vineCurves = vineData.map(d => makeVineCurve(d.vi, d.side, d.segs, d.reach, d.wind));
+const vineOriginT = vineData.map(d => d.vi / 12);   // 每根藤蔓的椎节 t 值
+
+// 粒子分布
+const vnPositions = new Float32Array(N_VINE_TOTAL * 3);
+const vnVineT     = new Float32Array(N_VINE_TOTAL);  // 沿藤蔓的 t
+const vnPhase     = new Float32Array(N_VINE_TOTAL);  // 能量脉冲相位
+const vnSizes     = new Float32Array(N_VINE_TOTAL);
+const vnAlphas    = new Float32Array(N_VINE_TOTAL);
+const vnColorVars = new Float32Array(N_VINE_TOTAL);
+const vnOriginT   = new Float32Array(N_VINE_TOTAL);  // 来源椎节的 t（用于 blend 联动）
+
+for (let v = 0; v < N_VINES; v++) {
+  const curve = vineCurves[v];
+  const phase = Math.random() * 1.5;   // 每根藤蔓的脉冲起始相位
+
+  for (let p = 0; p < VINE_PPV; p++) {
+    const idx = v * VINE_PPV + p;
+    const t = p / (VINE_PPV - 1);
+
+    const pt = curve.getPoint(t);
+    const tan = curve.getTangent(t);
+
+    // 粒子沿藤蔓横向高斯展宽（根部粗、末端细）
+    const width = (0.018 + Math.random() * 0.008) * (1 - t * 0.6);
+    const spread = gaussRand() * width;
+    const perpX = -tan.y, perpY = tan.x;
+
+    vnPositions[idx * 3]     = pt.x + perpX * spread;
+    vnPositions[idx * 3 + 1] = pt.y + perpY * spread;
+    vnPositions[idx * 3 + 2] = pt.z + (Math.random() - 0.5) * 0.03;
+
+    vnVineT[idx]   = t;
+    vnPhase[idx]   = phase;
+    vnOriginT[idx] = vineOriginT[v];
+    vnSizes[idx]   = 0.025 + Math.random() * 0.018;
+    vnAlphas[idx]  = 0.18 + Math.random() * 0.12;
+
+    // 颜色：60%跟随基色，20%高光，10%暖对比，10%冷对比
+    const cRoll = Math.random();
+    if (cRoll < 0.10) vnColorVars[idx] = -(0.2 + Math.random() * 0.3);
+    else if (cRoll < 0.20) vnColorVars[idx] = -(0.55 + Math.random() * 0.4);
+    else if (cRoll < 0.40) vnColorVars[idx] = 0.4 + Math.random() * 0.5;
+    else vnColorVars[idx] = (Math.random() - 0.5) * 0.2;
+  }
+}
+
+const vineGeo = new THREE.BufferGeometry();
+vineGeo.setAttribute('position',  new THREE.BufferAttribute(vnPositions, 3));
+vineGeo.setAttribute('aSize',     new THREE.BufferAttribute(vnSizes, 1));
+vineGeo.setAttribute('aAlpha',    new THREE.BufferAttribute(vnAlphas, 1));
+vineGeo.setAttribute('aColorVar', new THREE.BufferAttribute(vnColorVars, 1));
+vineGeo.setAttribute('aVineT',    new THREE.BufferAttribute(vnVineT, 1));
+vineGeo.setAttribute('aVinePhase',new THREE.BufferAttribute(vnPhase, 1));
+vineGeo.setAttribute('aOriginT',  new THREE.BufferAttribute(vnOriginT, 1));
+
+// 藤蔓专属 vertex shader：生长 + 能量脉冲
+const vineVertexShader = /* glsl */`
+  attribute float aSize;
+  attribute float aAlpha;
+  attribute float aColorVar;
+  attribute float aVineT;
+  attribute float aVinePhase;
+  attribute float aOriginT;
+
+  uniform float uBlend;
+  uniform float uTime;
+
+  varying float vAlpha;
+  varying float vColorVar;
+
+  void main() {
+    // 生长：blend 0.2→0.8 时藤蔓从根到末梢逐渐显现
+    float growth = clamp((uBlend - 0.15) / 0.55, 0.0, 1.0);
+    float visible = smoothstep(growth + 0.01, growth - 0.08, aVineT);
+
+    // 能量脉冲：高斯光团沿藤蔓流动（从根到梢）
+    float pulsePos = mod(uTime * 0.13 + aVinePhase, 1.4) - 0.15;
+    float pulse = exp(-pow((aVineT - pulsePos) * 10.0, 2.0));
+
+    // 末端渐细渐暗
+    float tipFade = 1.0 - aVineT * 0.55;
+
+    float alpha = aAlpha * visible * tipFade * (0.25 + pulse * 0.75);
+    float sz    = aSize * (0.7 + pulse * 0.6) * tipFade;
+
+    vAlpha    = alpha;
+    vColorVar = aColorVar + pulse * 0.25;
+
+    vec4 mv = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = sz * (300.0 / -mv.z);
+    gl_Position  = projectionMatrix * mv;
+  }
+`;
+
+const vineMat = new THREE.ShaderMaterial({
+  vertexShader: vineVertexShader, fragmentShader,
+  uniforms: {
+    uColor:     { value: COLOR_DARK.clone() },
+    uHighlight: { value: HL_DARK.clone() },
+    uAccent1:   { value: AC1_DARK.clone() },
+    uAccent2:   { value: AC2_DARK.clone() },
+    uBlend:     { value: 0.0 },
+    uTime:      { value: 0.0 },
+  },
+  transparent: true,
+  blending:    THREE.AdditiveBlending,
+  depthWrite:  false,
+});
+const vinePoints = new THREE.Points(vineGeo, vineMat);
+vinePoints.frustumCulled = false;
+spineGroup.add(vinePoints);
+
+
+// ============================================================
+// 10. ambGeo (Layer E)
 // ============================================================
 
 const ambBase     = new Float32Array(N_AMB * 3);
@@ -836,6 +999,13 @@ function animate() {
   diffuseMat.uniforms.uHighlight.value.copy(hlColor);
   diffuseMat.uniforms.uAccent1.value.copy(ac1Color);
   diffuseMat.uniforms.uAccent2.value.copy(ac2Color);
+  // 藤蔓颜色 + 动画
+  vineMat.uniforms.uColor.value.copy(blendColor);
+  vineMat.uniforms.uHighlight.value.copy(hlColor);
+  vineMat.uniforms.uAccent1.value.copy(ac1Color);
+  vineMat.uniforms.uAccent2.value.copy(ac2Color);
+  vineMat.uniforms.uBlend.value = smoothBlend;
+  vineMat.uniforms.uTime.value  = time;
 
   // ── Layer C：贝塞尔弧线粒子流────────────────────────────────
   for (let i = 0; i < N_DIFF; i++) {
