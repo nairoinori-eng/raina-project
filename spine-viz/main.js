@@ -305,6 +305,7 @@ const dVi      = new Uint8Array(N_DIFF);    // 所属椎节（0-12）
 const dSide    = new Int8Array(N_DIFF);     // 出发侧（+1右, -1左）
 const dBSize   = new Float32Array(N_DIFF);
 const dBAlpha  = new Float32Array(N_DIFF);
+const flowAngle = new Float32Array(13);  // 每椎节当前流向偏角（上下摆动）
 
 function resetDiffuse(i, blend) {
   const vi   = Math.floor(Math.random() * 13);
@@ -315,10 +316,10 @@ function resetDiffuse(i, blend) {
 
   // 有机宽弧：无固定光带方向，±72° 内随机，curl噪声自然引导轨迹
   const baseAngle = side > 0 ? 0 : Math.PI;
-  dAngle[i]  = baseAngle + (Math.random() - 0.5) * Math.PI * 0.8;
-  // 基础曲率：极慢，curl noise 主导转向
-  dCurveK[i] = (Math.random() < 0.5 ? 1 : -1) * (0.2 + Math.random() * 0.5);
-  dSpeed[i]  = 0.003 + Math.random() * 0.004;
+  dAngle[i]  = baseAngle + flowAngle[vi] + (Math.random() - 0.5) * 0.18;  // 紧跟椎节流向 ±10°
+  dCurveK[i] = (Math.random() < 0.5 ? 1 : -1) * (0.6 + Math.random() * 0.8);  // 更强弯曲 → S形
+  // 速度分层：慢粒子密集（宽段）+ 快粒子稀疏（细流）
+  dSpeed[i]  = Math.random() < 0.3 ? 0.001 + Math.random() * 0.002 : 0.005 + Math.random() * 0.005;
   dMaxAge[i] = 500 + Math.random() * 700;   // 8-20s
   dAge[i]    = 0;
 
@@ -512,6 +513,11 @@ function animate() {
   spineMat.uniforms.uColor.value.copy(blendColor);
   diffuseMat.uniforms.uColor.value.copy(blendColor);
 
+  // 更新每椎节流向角（上下慢摆，各椎节相位错开）
+  for (let vi = 0; vi < 13; vi++) {
+    flowAngle[vi] = Math.sin(time * 0.35 + vi * 0.7) * 0.45;  // ±26° 上下摆动
+  }
+
   // ── Layer C：弥散粒子流（弧线轨迹）────────────────────────
   for (let i = 0; i < N_DIFF; i++) {
     dAge[i]++;
@@ -530,7 +536,7 @@ function animate() {
     const tf   = time * 0.03;
     const nx   = dPx[i] * freq + tf;
     const ny   = dPy[i] * freq * 0.6 + tf * 0.8;
-    const curlSteer = Math.sin(nx) * Math.cos(ny) * 0.0007;
+    const curlSteer = Math.sin(nx) * Math.cos(ny) * 0.002;
     dAngle[i] += curlSteer + dCurveK[i] * 0.00015;  // curl主导，基础曲率极弱
     dPx[i]    += Math.cos(dAngle[i]) * dSpeed[i];
     dPy[i]    += Math.sin(dAngle[i]) * dSpeed[i];
