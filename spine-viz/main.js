@@ -278,16 +278,17 @@ for (let i = 0; i < N_BONE; i++) {
   // 25% 粒子填充管壁内部
   const isInterior = Math.random() < 0.25;
 
-  // 完整360°截面分布（圆形管），侧面看也有立体感
-  const tubeAngle = Math.random() * Math.PI * 2;
+  // 左右两壁分布（保持中空感）+ 大角度范围（Z深度立体感）
+  const sideSign = Math.random() < 0.5 ? 1 : -1;
+  const angleMag = Math.random() * 1.35;   // 0~77°，比原来63°更宽，Z覆盖更深
   let r;
   if (isInterior) {
     r = Math.random() * effectiveInner;
   } else {
     r = effectiveInner + Math.pow(Math.random(), 0.5) * (effectiveOuter - effectiveInner);
   }
-  const cosA = Math.cos(tubeAngle) * r;
-  bZ[i]      = Math.sin(tubeAngle) * r * TUBE_Y_SCALE;
+  const cosA = sideSign * Math.cos(angleMag) * r;
+  bZ[i]      = Math.sin(angleMag) * r * TUBE_Y_SCALE;
 
   const ct         = curveCurved.getTangent(tClamped);
   bOffCurvedX[i]   = cosA * (-ct.y);
