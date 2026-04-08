@@ -69,7 +69,7 @@ const N_AMB   = 300;                   // Layer E
 // 3. 颜色（低饱和度，优雅克制）
 // ============================================================
 
-const COLOR_DARK = new THREE.Color(0x3d3560);  // 偏亮蓝紫，blend=0时也能看清
+const COLOR_DARK = new THREE.Color(0x6050a0);  // 明亮蓝紫，blend=0时清晰可见
 const COLOR_MID  = new THREE.Color(0x5c527a);  // 低饱和度灰紫
 const COLOR_GOLD = new THREE.Color(0xc4a882);  // 低饱和度高级灰金色
 
@@ -119,7 +119,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 1.3;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x05050d);
@@ -185,7 +185,7 @@ const spColorVars = new Float32Array(N_SPINE);
 // 空心管参数（跟随 SPINE_SCALE 缩放）
 const TUBE_OUTER   = 0.14 * SPINE_SCALE;
 const TUBE_INNER   = 0.055 * SPINE_SCALE;
-const TUBE_Y_SCALE = 0.6;              // Z深度（0.28太扁看不出转动，0.6接近圆形）
+const TUBE_Y_SCALE = 0.85;             // Z深度（接近圆形截面，转动时有明显立体感）
 
 // 管壁宽度沿脊柱变化（模拟真实椎体：颈椎窄→胸椎中→腰椎宽→骶椎收）
 function tubeWidthAt(t) {
@@ -636,8 +636,8 @@ function animate() {
   const breathe       = breatheCurve(time);
   const breatheExpand = 1 + breathe * 0.20;   // 横向呼吸扩张 ±20%
 
-  // 脊柱缓慢摆动 ±20°，约25秒一个周期，展示3D立体感
-  spineGroup.rotation.y = Math.sin(time * 0.25) * 0.35;
+  // 脊柱缓慢摆动 ±35°，约18秒一个周期
+  spineGroup.rotation.y = Math.sin(time * 0.35) * 0.6;
 
   // ── Layer A：骨骼柱体（位置 + 大小 + 透明度）──────────────
   for (let i = 0; i < N_BONE; i++) {
