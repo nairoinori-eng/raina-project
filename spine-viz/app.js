@@ -446,7 +446,7 @@ function resetDiffuse(i, blend) {
 
   // P0：出生在椎节外侧（沿曲线位置）
   const spineX = SPINE_CURVED[vi].x * (1 - blend);
-  const vtX = spineX + side * (VERT_OUTER * 0.9 + 0.02);
+  const vtX = spineX + side * (VERT_OUTER_BASE * 0.9 + 0.02);
   const vtY = SPINE_CURVED[vi].y + (Math.random() - 0.5) * 0.06;
   dPx[i] = vtX;
   dPy[i] = vtY;
