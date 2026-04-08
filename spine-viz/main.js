@@ -537,8 +537,8 @@ function animate() {
     const tf   = time * 0.03;
     const nx   = dPx[i] * freq + tf;
     const ny   = dPy[i] * freq * 0.6 + tf * 0.8;
-    const curlSteer = Math.sin(nx) * Math.cos(ny) * 0.002;
-    dAngle[i] += curlSteer + dCurveK[i] * 0.00015;  // curl主导，基础曲率极弱
+    const curlSteer = Math.sin(nx) * Math.cos(ny) * 0.0001;  // 极弱，仅保留有机感
+    dAngle[i] += curlSteer + dCurveK[i] * 0.002;   // vCurveDir主导弯曲方向
     dPx[i]    += Math.cos(dAngle[i]) * dSpeed[i];
     dPy[i]    += Math.sin(dAngle[i]) * dSpeed[i];
 
