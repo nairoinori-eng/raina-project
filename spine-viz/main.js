@@ -386,12 +386,15 @@ for (let vi = 0; vi < 13; vi++) {
 
     const wallRatio = VERT_OUTER > VERT_INNER
       ? Math.max(0, (vr - VERT_INNER) / (VERT_OUTER - VERT_INNER)) : 0;
+    // 径向边缘柔化：越靠近外缘越暗，消除毛刺
+    const radialNorm = vr / Math.max(VERT_OUTER, 0.001);
+    const edgeSoft = 1.0 - smoothstep(0.55, 1.0, radialNorm);
     if (isVertFill) {
       vBaseSize[idx] = (0.12 + Math.random() * 0.08) * (0.6 + 0.4 * yFalloff);
-      vBaseAlph[idx] = (0.15 + Math.random() * 0.10) * yFalloff;
+      vBaseAlph[idx] = (0.15 + Math.random() * 0.10) * yFalloff * edgeSoft;
     } else {
-      vBaseSize[idx] = (0.16 + wallRatio * 0.12) * (0.7 + Math.random() * 0.6) * (0.5 + 0.5 * yFalloff);
-      vBaseAlph[idx] = ((0.26 + wallRatio * 0.14) + Math.random() * 0.06) * yFalloff;
+      vBaseSize[idx] = (0.16 + wallRatio * 0.10) * (0.7 + Math.random() * 0.5) * (0.5 + 0.5 * yFalloff);
+      vBaseAlph[idx] = ((0.26 + wallRatio * 0.10) + Math.random() * 0.05) * yFalloff * edgeSoft;
     }
 
     const gi = N_BONE + idx;
