@@ -53,8 +53,8 @@ const curveStraight = new THREE.CatmullRomCurve3(SPINE_STRAIGHT);
 // 2. 粒子数量
 // ============================================================
 
-const N_BONE  = 65000;                 // Layer A（更细更密）
-const N_VERT  = 36400;                 // Layer B (13 × 2800)
+const N_BONE  = 80000;                 // Layer A（极致精细）
+const N_VERT  = 39000;                 // Layer B (13 × 3000)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
 const N_DIFF  = 12000;                 // Layer C（弥散粒子，3倍数量）
@@ -77,15 +77,15 @@ const HL_DARK = new THREE.Color(0xc0b0f0);   // 亮白紫
 const HL_MID  = new THREE.Color(0xe0d0c0);   // 亮白金
 const HL_GOLD = new THREE.Color(0xfff0d8);   // 近白暖光
 
-// 对比色1：暖色系（高饱和，明确可见）
+// 对比色1：暖色系（高饱和）
 const AC1_DARK = new THREE.Color(0xff6840);  // 鲜橘红
 const AC1_MID  = new THREE.Color(0xf0a030);  // 鲜琥珀
-const AC1_GOLD = new THREE.Color(0xe05080);  // 鲜玫红
+const AC1_GOLD = new THREE.Color(0xff3090);  // 亮品红（在金色中极醒目）
 
 // 对比色2：冷色系（高饱和）
 const AC2_DARK = new THREE.Color(0x20e0c0);  // 鲜翡翠
 const AC2_MID  = new THREE.Color(0x30d870);  // 鲜翠绿
-const AC2_GOLD = new THREE.Color(0x4080f0);  // 鲜钴蓝
+const AC2_GOLD = new THREE.Color(0x2868ff);  // 亮宝蓝（金色的互补色）
 
 
 // ============================================================
@@ -350,13 +350,13 @@ for (let i = 0; i < N_BONE; i++) {
   const acRoll = Math.random();
   if (acRoll < 0.10) {
     spColorVars[i] = -(0.25 + Math.random() * 0.25);   // 暖对比色
-    bBaseA[i] *= 2.5;                                    // 只加亮不放大
+    bBaseA[i] *= 3.5;
   } else if (acRoll < 0.18) {
     spColorVars[i] = -(0.55 + Math.random() * 0.40);   // 冷对比色
-    bBaseA[i] *= 2.5;
+    bBaseA[i] *= 3.5;
   } else if (acRoll < 0.28) {
     spColorVars[i] = 0.6 + Math.random() * 0.4;        // 强高光粒子
-    bBaseA[i] *= 2.0;
+    bBaseA[i] *= 2.5;
   } else {
     spColorVars[i] = (1 - zDepth) * 0.4 + (Math.random() - 0.5) * 0.1;
   }
@@ -411,7 +411,7 @@ for (let vi = 0; vi < 13; vi++) {
   const vertScale = vertSizeAt(vi);
   const VERT_OUTER = VERT_OUTER_BASE * vertScale;
 
-  for (let j = 0; j < 2800; j++) {
+  for (let j = 0; j < 3000; j++) {
     const idx = vi * 800 + j;
     const vAngle = Math.random() * Math.PI * 2;
     // 85% 外壳（清晰轮廓），15% 内部填充（体积感）
@@ -464,13 +464,13 @@ for (let vi = 0; vi < 13; vi++) {
     const vacRoll = Math.random();
     if (vacRoll < 0.10) {
       spColorVars[gi] = -(0.25 + Math.random() * 0.25);
-      vBaseAlph[idx] *= 2.5;
+      vBaseAlph[idx] *= 3.5;
     } else if (vacRoll < 0.18) {
       spColorVars[gi] = -(0.55 + Math.random() * 0.40);
-      vBaseAlph[idx] *= 2.5;
+      vBaseAlph[idx] *= 3.5;
     } else if (vacRoll < 0.28) {
       spColorVars[gi] = 0.6 + Math.random() * 0.4;
-      vBaseAlph[idx] *= 2.0;
+      vBaseAlph[idx] *= 2.5;
     } else {
       spColorVars[gi] = (1 - vzDepth) * 0.4 + (Math.random() - 0.5) * 0.12;
     }
