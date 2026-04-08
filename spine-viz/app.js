@@ -68,9 +68,19 @@ const N_AMB   = 300;                   // Layer E
 // 3. 颜色（低饱和度，优雅克制）
 // ============================================================
 
-const COLOR_DARK = new THREE.Color(0x7868b8);  // 亮蓝紫，blend=0时清晰
-const COLOR_MID  = new THREE.Color(0x5c527a);  // 低饱和度灰紫
-const COLOR_GOLD = new THREE.Color(0xc4a882);  // 低饱和度高级灰金色
+const COLOR_DARK = new THREE.Color(0x3a2d6e);  // 深蓝紫（压暗回来）
+const COLOR_MID  = new THREE.Color(0x5c527a);  // 灰紫过渡
+const COLOR_GOLD = new THREE.Color(0xc4a882);  // 灰金色
+
+// 高光色（3D正面光感，比基色亮1.5~2倍）
+const HL_DARK = new THREE.Color(0x9585d8);   // 亮薰衣草
+const HL_MID  = new THREE.Color(0xbaa898);   // 亮灰紫金
+const HL_GOLD = new THREE.Color(0xeadcb8);   // 亮金
+
+// 对比色点缀（冷暖互补）
+const AC_DARK = new THREE.Color(0x3878a0);   // 青蓝（冷调点缀蓝紫）
+const AC_MID  = new THREE.Color(0xa06878);   // 玫瑰灰（点缀灰紫）
+const AC_GOLD = new THREE.Color(0xc08870);   // 铜粉（暖调点缀金色）
 
 
 // ============================================================
@@ -100,11 +110,20 @@ function breatheCurve(t) {
 
 function getBlendColor(blend) {
   const c = new THREE.Color();
-  if (blend < 0.5) {
-    c.lerpColors(COLOR_DARK, COLOR_MID, blend * 2);
-  } else {
-    c.lerpColors(COLOR_MID, COLOR_GOLD, (blend - 0.5) * 2);
-  }
+  if (blend < 0.5) c.lerpColors(COLOR_DARK, COLOR_MID, blend * 2);
+  else c.lerpColors(COLOR_MID, COLOR_GOLD, (blend - 0.5) * 2);
+  return c;
+}
+function getHighlightColor(blend) {
+  const c = new THREE.Color();
+  if (blend < 0.5) c.lerpColors(HL_DARK, HL_MID, blend * 2);
+  else c.lerpColors(HL_MID, HL_GOLD, (blend - 0.5) * 2);
+  return c;
+}
+function getAccentColor(blend) {
+  const c = new THREE.Color();
+  if (blend < 0.5) c.lerpColors(AC_DARK, AC_MID, blend * 2);
+  else c.lerpColors(AC_MID, AC_GOLD, (blend - 0.5) * 2);
   return c;
 }
 
@@ -151,15 +170,22 @@ const vertexShader = /* glsl */`
 `;
 
 const fragmentShader = /* glsl */`
-  uniform  vec3  uColor;
-  varying  float vAlpha;
-  varying  float vColorVar;
+  uniform vec3 uColor;
+  uniform vec3 uHighlight;
+  uniform vec3 uAccent;
+  varying float vAlpha;
+  varying float vColorVar;
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
-    vec3 c = uColor + vec3(vColorVar * 0.12, vColorVar * 0.03, -vColorVar * 0.10);
-    c = clamp(c, 0.0, 0.82);  // 限制单粒子最大亮度，防叠加过曝
-    // 收紧核心，削弱光晕 — 保持粒子颗粒感
+    // colorVar > 0 → 混入高光色，colorVar < 0 → 混入对比色
+    vec3 c;
+    if (vColorVar > 0.0) {
+      c = mix(uColor, uHighlight, clamp(vColorVar, 0.0, 1.0));
+    } else {
+      c = mix(uColor, uAccent, clamp(-vColorVar, 0.0, 1.0));
+    }
+    c = clamp(c, 0.0, 0.88);
     float core  = exp(-d * d * 24.0);
     float halo  = exp(-d * d * 10.0) * 0.12;
     float alpha = (core + halo) * vAlpha;
@@ -305,7 +331,14 @@ for (let i = 0; i < N_BONE; i++) {
   }
   bPhase[i] = Math.random() * Math.PI * 2;
 
-  spColorVars[i] = (Math.random() - 0.5) * 0.25;
+  // colorVar：Z靠前→高光(正值)，随机8%→对比色(负值)
+  const zDepth = Math.abs(bZ[i]) / Math.max(effectiveOuter * TUBE_Y_SCALE, 0.01);
+  const isAccentP = Math.random() < 0.08;
+  if (isAccentP) {
+    spColorVars[i] = -(0.3 + Math.random() * 0.5);   // 对比色粒子
+  } else {
+    spColorVars[i] = (1 - zDepth) * 0.55 + (Math.random() - 0.5) * 0.12;  // Z越前越亮
+  }
   spPositions[i*3]   = cpx + bOffCurvedX[i];
   spPositions[i*3+1] = cpy + bOffCurvedY[i];
   spPositions[i*3+2] = bZ[i];
@@ -406,7 +439,12 @@ for (let vi = 0; vi < 13; vi++) {
     spPositions[gi*3+2] = gz;
     spSizes[gi]         = vBaseSize[idx];
     spAlphas[gi]        = vBaseAlph[idx];
-    spColorVars[gi]     = (Math.random() - 0.5) * 0.35;
+    // Z靠前→高光，随机10%→对比色
+    const vzDepth = Math.abs(gz) / Math.max(VERT_OUTER, 0.01);
+    const isVAccent = Math.random() < 0.10;
+    spColorVars[gi] = isVAccent
+      ? -(0.3 + Math.random() * 0.5)
+      : (1 - vzDepth) * 0.5 + (Math.random() - 0.5) * 0.15;
   }
 }
 
@@ -418,7 +456,11 @@ spineGeo.setAttribute('aColorVar', new THREE.BufferAttribute(spColorVars, 1));
 
 const spineMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
-  uniforms:    { uColor: { value: COLOR_DARK.clone() } },
+  uniforms: {
+    uColor:     { value: COLOR_DARK.clone() },
+    uHighlight: { value: HL_DARK.clone() },
+    uAccent:    { value: AC_DARK.clone() },
+  },
   transparent: true,
   blending:    THREE.AdditiveBlending,
   depthWrite:  false,
@@ -535,7 +577,11 @@ diffuseGeo.setAttribute('aColorVar', new THREE.BufferAttribute(dfColorVars, 1));
 
 const diffuseMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
-  uniforms:    { uColor: { value: COLOR_DARK.clone() } },
+  uniforms: {
+    uColor:     { value: COLOR_DARK.clone() },
+    uHighlight: { value: HL_DARK.clone() },
+    uAccent:    { value: AC_DARK.clone() },
+  },
   transparent: true,
   blending:    THREE.AdditiveBlending,
   depthWrite:  false,
@@ -579,7 +625,11 @@ ambGeo.setAttribute('aColorVar', new THREE.BufferAttribute(ambCVars, 1));
 
 const ambMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
-  uniforms:    { uColor: { value: new THREE.Color(0x18102e) } },
+  uniforms: {
+    uColor:     { value: new THREE.Color(0x18102e) },
+    uHighlight: { value: new THREE.Color(0x18102e) },
+    uAccent:    { value: new THREE.Color(0x18102e) },
+  },
   transparent: true,
   blending:    THREE.AdditiveBlending,
   depthWrite:  false,
@@ -680,10 +730,16 @@ function animate() {
   spineGeo.attributes.aSize.needsUpdate    = true;
   spineGeo.attributes.aAlpha.needsUpdate   = true;
 
-  // 颜色同步
+  // 颜色同步（基色 + 高光 + 对比色 都跟随 blend）
   const blendColor = getBlendColor(smoothBlend);
+  const hlColor    = getHighlightColor(smoothBlend);
+  const acColor    = getAccentColor(smoothBlend);
   spineMat.uniforms.uColor.value.copy(blendColor);
+  spineMat.uniforms.uHighlight.value.copy(hlColor);
+  spineMat.uniforms.uAccent.value.copy(acColor);
   diffuseMat.uniforms.uColor.value.copy(blendColor);
+  diffuseMat.uniforms.uHighlight.value.copy(hlColor);
+  diffuseMat.uniforms.uAccent.value.copy(acColor);
 
   // ── Layer C：贝塞尔弧线粒子流────────────────────────────────
   for (let i = 0; i < N_DIFF; i++) {
