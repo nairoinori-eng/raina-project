@@ -55,7 +55,7 @@ const curveStraight = new THREE.CatmullRomCurve3(SPINE_STRAIGHT);
 // ============================================================
 
 const N_BONE  = 20000;                 // Layer A
-const N_VERT  = 10400;                 // Layer B (13 × 800)
+const N_VERT  = 16900;                 // Layer B (13 × 1300)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
 const N_DIFF  = 12000;                 // Layer C（弥散粒子，3倍数量）
@@ -354,7 +354,7 @@ for (let vi = 0; vi < 13; vi++) {
   const vertScale = vertSizeAt(vi);
   const VERT_OUTER = VERT_OUTER_BASE * vertScale;
 
-  for (let j = 0; j < 800; j++) {
+  for (let j = 0; j < 1300; j++) {
     const idx = vi * 800 + j;
     const vAngle = Math.random() * Math.PI * 2;
     // 85% 外壳（清晰轮廓），15% 内部填充（体积感）
@@ -388,7 +388,7 @@ for (let vi = 0; vi < 13; vi++) {
       ? Math.max(0, (vr - VERT_INNER) / (VERT_OUTER - VERT_INNER)) : 0;
     // 径向边缘柔化：越靠近外缘越暗，消除毛刺
     const radialNorm = vr / Math.max(VERT_OUTER, 0.001);
-    const edgeSoft = 1.0 - smoothstep(0.55, 1.0, radialNorm);
+    const edgeSoft = 1.0 - smoothstep(0.7, 1.0, radialNorm);
     if (isVertFill) {
       vBaseSize[idx] = (0.12 + Math.random() * 0.08) * (0.6 + 0.4 * yFalloff);
       vBaseAlph[idx] = (0.15 + Math.random() * 0.10) * yFalloff * edgeSoft;
