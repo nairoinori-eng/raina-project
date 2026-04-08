@@ -607,7 +607,8 @@ const debugBlend  = document.getElementById('debug-blend');
 const blendSlider = document.getElementById('blend-slider');
 
 blendSlider.addEventListener('input', () => {
-  socket.emit('set_blend', { value: blendSlider.value / 100 });
+  targetBlend = blendSlider.value / 100;   // 本地直接生效，无需 Flask
+  socket.emit('set_blend', { value: targetBlend });
 });
 
 document.getElementById('btn-start').addEventListener('click', () => socket.emit('button_press'));
