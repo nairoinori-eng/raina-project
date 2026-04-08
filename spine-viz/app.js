@@ -633,6 +633,8 @@ function animate() {
   const breathe       = breatheCurve(time);
   const breatheExpand = 1 + breathe * 0.20;   // 横向呼吸扩张 ±20%
 
+  // 脊柱缓慢摆动 ±20°，12秒一个周期
+  spineGroup.rotation.y = Math.sin(time * 0.52) * 0.35;
 
   // ── Layer A：骨骼柱体（位置 + 大小 + 透明度）──────────────
   for (let i = 0; i < N_BONE; i++) {
