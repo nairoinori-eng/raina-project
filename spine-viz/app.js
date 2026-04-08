@@ -205,12 +205,12 @@ for (let i = 0; i < N_BONE; i++) {
   bCpX[i] = cp.x;  bCpY[i] = cp.y;
   bSpX[i] = sp.x;  bSpY[i] = sp.y;
 
-  // 严格左右两侧分布：排除顶底角度，使中心投影为空（中空感）
+  // 左右两侧对称分布：排除顶底角度保持中空感，sideSign 翻转左右
   const sideSign = Math.random() < 0.5 ? 1 : -1;
-  const angle    = sideSign * Math.random() * 1.1;   // ±0~63°，不到顶底
+  const angleMag = Math.random() * 1.1;   // 0~63°，不到顶底
   const r        = TUBE_INNER + Math.pow(Math.random(), 0.5) * (TUBE_OUTER - TUBE_INNER);
-  const cosA     = Math.cos(angle) * r;
-  bZ[i]          = Math.sin(angle) * r * TUBE_Y_SCALE;  // 压扁深度，管壁投影更清晰
+  const cosA     = sideSign * Math.cos(angleMag) * r;   // ← sideSign 控制左右对称
+  bZ[i]          = Math.sin(angleMag) * r * TUBE_Y_SCALE;
 
   // 弯曲状态：截面垂直于曲线切线方向
   const ct         = curveCurved.getTangent(bT[i]);
