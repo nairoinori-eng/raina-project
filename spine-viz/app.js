@@ -156,15 +156,12 @@ const fragmentShader = /* glsl */`
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
     vec3 c = uColor + vec3(vColorVar * 0.12, vColorVar * 0.03, -vColorVar * 0.10);
-    c = clamp(c, 0.0, 1.0);
+    c = clamp(c, 0.0, 0.82);  // 限制单粒子最大亮度，防叠加过曝
     // 收紧核心，削弱光晕 — 保持粒子颗粒感
     float core  = exp(-d * d * 24.0);
-    float halo  = exp(-d * d * 10.0) * 0.12;   // 光晕更弱
+    float halo  = exp(-d * d * 10.0) * 0.12;
     float alpha = (core + halo) * vAlpha;
-    // 预乘 alpha 并限制最终亮度，防止叠加过曝
-    vec3 premul = c * alpha;
-    premul = min(premul, vec3(0.85));
-    gl_FragColor = vec4(premul, alpha);
+    gl_FragColor = vec4(c, alpha);
   }
 `;
 
