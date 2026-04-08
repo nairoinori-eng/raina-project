@@ -53,8 +53,8 @@ const curveStraight = new THREE.CatmullRomCurve3(SPINE_STRAIGHT);
 // 2. 粒子数量
 // ============================================================
 
-const N_BONE  = 55000;                 // Layer A（精细但不过度）
-const N_VERT  = 33800;                 // Layer B (13 × 2600)
+const N_BONE  = 80000;                 // Layer A（极致精细）
+const N_VERT  = 39000;                 // Layer B (13 × 3000)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
 const N_DIFF  = 0;                     // Layer C（暂时关闭弥散粒子）
@@ -445,7 +445,7 @@ for (let vi = 0; vi < 13; vi++) {
   const vertScale = vertSizeAt(vi);
   const VERT_OUTER = VERT_OUTER_BASE * vertScale;
 
-  for (let j = 0; j < 2600; j++) {
+  for (let j = 0; j < 3000; j++) {
     const idx = vi * 800 + j;
     const vAngle = Math.random() * Math.PI * 2;
     // 85% 外壳（清晰轮廓），15% 内部填充（体积感）
@@ -713,7 +713,7 @@ spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 // ============================================================
 
 const N_VINES = 8;       // 8根长藤蔓
-const VINE_PPV = 1800;   // 每根1800粒子
+const VINE_PPV = 2500;   // 每根2500粒子
 const N_VINE_TOTAL = N_VINES * VINE_PPV;
 
 // 生成沿脊柱全长蜿蜒的藤蔓曲线
