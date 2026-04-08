@@ -185,7 +185,7 @@ const spColorVars = new Float32Array(N_SPINE);
 // 空心管参数（跟随 SPINE_SCALE 缩放）
 const TUBE_OUTER   = 0.14 * SPINE_SCALE;
 const TUBE_INNER   = 0.055 * SPINE_SCALE;
-const TUBE_Y_SCALE = 0.85;             // Z深度（接近圆形截面，转动时有明显立体感）
+const TUBE_Y_SCALE = 1.0;              // Z深度=X深度，真正的圆形截面
 
 // 管壁宽度沿脊柱变化（模拟真实椎体：颈椎窄→胸椎中→腰椎宽→骶椎收）
 function tubeWidthAt(t) {
@@ -278,16 +278,16 @@ for (let i = 0; i < N_BONE; i++) {
   // 25% 粒子填充管壁内部
   const isInterior = Math.random() < 0.25;
 
-  const sideSign = Math.random() < 0.5 ? 1 : -1;
-  const angleMag = Math.random() * 1.1;
+  // 完整360°截面分布（圆形管），侧面看也有立体感
+  const tubeAngle = Math.random() * Math.PI * 2;
   let r;
   if (isInterior) {
     r = Math.random() * effectiveInner;
   } else {
     r = effectiveInner + Math.pow(Math.random(), 0.5) * (effectiveOuter - effectiveInner);
   }
-  const cosA = sideSign * Math.cos(angleMag) * r;
-  bZ[i]      = Math.sin(angleMag) * r * TUBE_Y_SCALE;
+  const cosA = Math.cos(tubeAngle) * r;
+  bZ[i]      = Math.sin(tubeAngle) * r * TUBE_Y_SCALE;
 
   const ct         = curveCurved.getTangent(tClamped);
   bOffCurvedX[i]   = cosA * (-ct.y);
@@ -636,8 +636,8 @@ function animate() {
   const breathe       = breatheCurve(time);
   const breatheExpand = 1 + breathe * 0.20;   // 横向呼吸扩张 ±20%
 
-  // 脊柱缓慢摆动 ±35°，约18秒一个周期
-  spineGroup.rotation.y = Math.sin(time * 0.35) * 0.6;
+  // 脊柱缓慢摆动 ±15°，约22秒一个周期（微妙3D感，不暴露侧面）
+  spineGroup.rotation.y = Math.sin(time * 0.28) * 0.26;
 
   // ── Layer A：骨骼柱体（位置 + 大小 + 透明度）──────────────
   for (let i = 0; i < N_BONE; i++) {
