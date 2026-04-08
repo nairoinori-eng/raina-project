@@ -170,8 +170,8 @@ const spColorVars = new Float32Array(N_SPINE);
 // ── Layer A：骨骼柱体（5000粒子，静止，空心管状）─────────────
 
 // 空心管参数：大跨度 + 明确的中空（跟随 SPINE_SCALE 缩放）
-const TUBE_OUTER   = 0.10 * SPINE_SCALE;        // 外壁半径
-const TUBE_INNER   = 0.055 * SPINE_SCALE;       // 内壁半径
+const TUBE_OUTER   = 0.22 * SPINE_SCALE;        // 外壁半径
+const TUBE_INNER   = 0.12 * SPINE_SCALE;        // 内壁半径
 const TUBE_THICK   = 0.018 * SPINE_SCALE;       // 壁厚度
 const TUBE_Y_SCALE = 0.28;                       // Y方向压扁
 
@@ -332,7 +332,7 @@ function resetDiffuse(i, blend) {
   // 每个椎节固定流向：偶数向上，奇数向下，同节粒子不交叉
   const vertDir = (vi % 2 === 0) ? 1 : -1;
   const yBias = vertDir * (0.28 + Math.random() * 0.18);  // 固定方向 + 少量随机宽度
-  const xOut  = side * 0.32;
+  const xOut  = side * 0.75;
   const n = () => (Math.random() - 0.5) * 0.04;
 
   dBzX1[i] = vtX + xOut       + n();   dBzY1[i] = vtY + yBias * 0.6 + n();
