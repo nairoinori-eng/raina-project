@@ -222,16 +222,20 @@ for (let i = 0; i < N_BONE; i++) {
   const tClamped = Math.max(0, Math.min(1, bT[i]));
 
   if (bT[i] < 0) {
-    // 上端延伸：沿切线反方向外推
-    const ext = -bT[i] * EXTEND_SCALE;
-    cpx = curveTopPt.x - curveTopTan.x * ext;
+    // 上端延伸：沿切线外推 + 柔和内收弯曲
+    const rawExt = -bT[i];  // 0→TAPER_EXTEND
+    const ext = rawExt * EXTEND_SCALE;
+    const bend = rawExt * rawExt * 2.0;  // 二次曲线，越远越弯向中心
+    cpx = curveTopPt.x - curveTopTan.x * ext + (0 - curveTopPt.x) * bend;
     cpy = curveTopPt.y - curveTopTan.y * ext;
     spx = 0;
     spy = straightTopY + ext;
   } else if (bT[i] > 1) {
-    // 下端延伸：沿切线正方向外推
-    const ext = (bT[i] - 1) * EXTEND_SCALE;
-    cpx = curveBotPt.x + curveBotTan.x * ext;
+    // 下端延伸：沿切线外推 + 柔和内收弯曲
+    const rawExt = bT[i] - 1;  // 0→TAPER_EXTEND
+    const ext = rawExt * EXTEND_SCALE;
+    const bend = rawExt * rawExt * 2.0;
+    cpx = curveBotPt.x + curveBotTan.x * ext + (0 - curveBotPt.x) * bend;
     cpy = curveBotPt.y + curveBotTan.y * ext;
     spx = 0;
     spy = straightBotY - ext;
@@ -302,12 +306,13 @@ for (let i = 0; i < N_BONE; i++) {
 // ── Layer B：椎节椭圆（3900粒子，宽扁，加粗强调）─────────────
 
 const VERT_OUTER_BASE = 0.15 * SPINE_SCALE;  // 椎节外径基准
-const VERT_INNER = 0.02 * SPINE_SCALE;       // 椎节内径（更小，让内部也有粒子）
+const VERT_INNER = 0.04 * SPINE_SCALE;       // 椎节内径
 
-// 椎节大小随位置变化（与真实椎体一致：腰椎大、胸椎小）
+// 椎节大小随位置微调（腰椎稍大，但幅度克制避免毛刺）
 function vertSizeAt(vi) {
   const t = vi / 12;
-  return tubeWidthAt(t) * (0.85 + Math.random() * 0.15);  // 复用管壁宽度 + 随机扰动
+  const lumbarBump = Math.exp(-Math.pow((t - 0.65) * 3.5, 2)) * 0.15;
+  return 1.0 + lumbarBump + t * 0.08;  // 1.0~1.2，很温和
 }
 
 const vCurvedX  = new Float32Array(N_VERT);
@@ -345,18 +350,16 @@ for (let vi = 0; vi < 13; vi++) {
 
   for (let j = 0; j < 800; j++) {
     const idx = vi * 800 + j;
-    // 椎体分布：不只是薄圆盘，而是有体积的椭球体
     const vAngle = Math.random() * Math.PI * 2;
-    // 30% 粒子填充椎体内部（实心感），70% 在外壳（轮廓感）
-    const isVertFill = Math.random() < 0.3;
+    // 85% 外壳（清晰轮廓），15% 内部填充（体积感）
+    const isVertFill = Math.random() < 0.15;
     const vr = isVertFill
-      ? Math.pow(Math.random(), 0.5) * VERT_OUTER  // 面积均匀填充整个椎体
-      : VERT_INNER + Math.random() * (VERT_OUTER - VERT_INNER);  // 外壳
+      ? Math.pow(Math.random(), 0.5) * VERT_OUTER
+      : VERT_INNER + Math.random() * (VERT_OUTER - VERT_INNER);
     const cosA   = Math.cos(vAngle) * vr;
     const gz     = Math.sin(vAngle) * vr;
-    // Y方向厚度增大：从纸片变成有体积的椎体（腰椎更厚）
-    const yThickness = (0.025 + vertScale * 0.015) * SPINE_SCALE;
-    const gy     = gaussRand() * yThickness;
+    // Y方向适度厚度（不要太厚，避免切线插值时变形）
+    const gy     = gaussRand() * 0.016 * SPINE_SCALE;
 
     // 弯曲态：截面垂直于曲线切线（与 Layer A 骨骼管一致）
     vOffCurvedX[idx]   = cosA * (-ct.y) + gy * ct.x;
@@ -372,17 +375,15 @@ for (let vi = 0; vi < 13; vi++) {
     vBaseZ[idx]   = gz;
     vST[idx]      = t;
 
-    // 外壳亮、内部暗，产生体积感
     const wallRatio = VERT_OUTER > VERT_INNER
       ? Math.max(0, (vr - VERT_INNER) / (VERT_OUTER - VERT_INNER)) : 0;
     if (isVertFill) {
-      // 椎体内部填充：较暗但可见
-      vBaseSize[idx] = (0.10 + Math.random() * 0.08) * vertScale;
-      vBaseAlph[idx] = (0.12 + Math.random() * 0.08);
+      vBaseSize[idx] = (0.12 + Math.random() * 0.08);
+      vBaseAlph[idx] = (0.15 + Math.random() * 0.10);
     } else {
-      // 外壳：亮且明显
-      vBaseSize[idx] = (0.14 + wallRatio * 0.14) * (0.7 + Math.random() * 0.6);
-      vBaseAlph[idx] = (0.24 + wallRatio * 0.16) + Math.random() * 0.06;
+      // 外壳：实且亮，恢复清晰椎节感
+      vBaseSize[idx] = (0.16 + wallRatio * 0.12) * (0.7 + Math.random() * 0.6);
+      vBaseAlph[idx] = (0.26 + wallRatio * 0.14) + Math.random() * 0.06;
     }
 
     const gi = N_BONE + idx;
