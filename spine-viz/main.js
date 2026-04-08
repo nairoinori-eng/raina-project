@@ -175,14 +175,16 @@ const TUBE_INNER   = 0.055 * SPINE_SCALE;       // 内壁半径
 const TUBE_THICK   = 0.018 * SPINE_SCALE;       // 壁厚度
 const TUBE_Y_SCALE = 0.28;                       // Y方向压扁
 
-const bCpX   = new Float32Array(N_BONE);
-const bCpY   = new Float32Array(N_BONE);
-const bSpX   = new Float32Array(N_BONE);
-const bSpY   = new Float32Array(N_BONE);
-const bT     = new Float32Array(N_BONE);
-const bOffX  = new Float32Array(N_BONE);
-const bOffY  = new Float32Array(N_BONE);
-const bZ     = new Float32Array(N_BONE);
+const bCpX          = new Float32Array(N_BONE);
+const bCpY          = new Float32Array(N_BONE);
+const bSpX          = new Float32Array(N_BONE);
+const bSpY          = new Float32Array(N_BONE);
+const bT            = new Float32Array(N_BONE);
+const bOffCurvedX   = new Float32Array(N_BONE);  // 弯曲状态截面偏移（切线旋转）
+const bOffCurvedY   = new Float32Array(N_BONE);
+const bOffStraightX = new Float32Array(N_BONE);  // 直立状态截面偏移
+const bOffStraightY = new Float32Array(N_BONE);
+const bZ            = new Float32Array(N_BONE);
 const bBaseS = new Float32Array(N_BONE);   // base size
 const bBaseA = new Float32Array(N_BONE);   // base alpha
 const bPhase = new Float32Array(N_BONE);
@@ -194,33 +196,37 @@ for (let i = 0; i < N_BONE; i++) {
   bCpX[i] = cp.x;  bCpY[i] = cp.y;
   bSpX[i] = sp.x;  bSpY[i] = sp.y;
 
-  // 薄壁空心管：粒子严格分布在 [TUBE_INNER, TUBE_OUTER] 薄环上
+  // XZ 平面圆环截面 + 切线旋转（解决弯曲处脱节）
   const angle = Math.random() * Math.PI * 2;
-  // 半径：在薄壁环内均匀分布（不是从中心开始的高斯）
-  const r = TUBE_INNER + Math.pow(Math.random(), 0.5) * (TUBE_OUTER - TUBE_INNER);
+  const r     = TUBE_INNER + Math.pow(Math.random(), 0.5) * (TUBE_OUTER - TUBE_INNER);
+  const cosA  = Math.cos(angle) * r;
+  bZ[i]       = Math.sin(angle) * r;  // Z 深度分量（圆环截面）
 
-  bOffX[i] = Math.cos(angle) * r;
-  bOffY[i] = Math.sin(angle) * r * TUBE_Y_SCALE;
-  bZ[i]    = gaussRand() * 0.35;
+  // 弯曲状态：截面垂直于曲线切线方向
+  const ct         = curveCurved.getTangent(bT[i]);
+  bOffCurvedX[i]   = cosA * (-ct.y);
+  bOffCurvedY[i]   = cosA * ct.x;
+  // 直立状态：切线≈(0,-1,0)，垂直方向=(1,0,0)
+  bOffStraightX[i] = cosA;
+  bOffStraightY[i] = 0;
 
   // 外壁粒子更大更亮，强化轮廓感
-  const wallRatio = (r - TUBE_INNER) / (TUBE_OUTER - TUBE_INNER);  // 0=内壁, 1=外壁
+  const wallRatio = (r - TUBE_INNER) / (TUBE_OUTER - TUBE_INNER);
   bBaseS[i] = (0.11 + wallRatio * 0.07) * (0.6 + Math.random() * 0.8);
-  bBaseA[i] = (0.16 + wallRatio * 0.12) + Math.random() * 0.05;  // 提高基础亮度
+  bBaseA[i] = (0.16 + wallRatio * 0.12) + Math.random() * 0.05;
   bPhase[i] = Math.random() * Math.PI * 2;
 
   spColorVars[i] = (Math.random() - 0.5) * 0.25;
-  // 初始位置（动画第一帧会覆盖，先占位）
-  spPositions[i*3]   = cp.x + bOffX[i];
-  spPositions[i*3+1] = cp.y + bOffY[i];
+  spPositions[i*3]   = cp.x + bOffCurvedX[i];
+  spPositions[i*3+1] = cp.y + bOffCurvedY[i];
   spPositions[i*3+2] = bZ[i];
 }
 
 
 // ── Layer B：椎节椭圆（3900粒子，宽扁，加粗强调）─────────────
 
-const SIGMA_VX = 0.14 * SPINE_SCALE;   // X 宽（横向）
-const SIGMA_VY = 0.028 * SPINE_SCALE;  // Y 窄（纵向）
+const VERT_OUTER = 0.15 * SPINE_SCALE;  // 椎节外径（略大于骨骼管，关节鼓出感）
+const VERT_INNER = 0.04 * SPINE_SCALE;  // 椎节内径
 
 const vCurvedX  = new Float32Array(N_VERT);
 const vDeltaX   = new Float32Array(N_VERT);  // straightX - curvedX = -cx
@@ -238,23 +244,24 @@ for (let vi = 0; vi < 13; vi++) {
 
   for (let j = 0; j < 400; j++) {
     const idx = vi * 400 + j;
-    const gx  = gaussRand() * SIGMA_VX;
-    const gy  = gaussRand() * SIGMA_VY;
+    // 环形分布：粒子在 XZ 平面圆盘边缘，形成可见的椎节轮廓
+    const vAngle = Math.random() * Math.PI * 2;
+    const vr     = VERT_INNER + Math.random() * (VERT_OUTER - VERT_INNER);
+    const gx     = Math.cos(vAngle) * vr;
+    const gy     = gaussRand() * 0.012 * SPINE_SCALE;  // 极薄 Y（扁圆盘）
+    const gz     = Math.sin(vAngle) * vr;
 
     vCurvedX[idx] = cx + gx;
     vDeltaX[idx]  = -cx;
     vGxOff[idx]   = gx;
     vBaseY[idx]   = cy + gy;
-    vBaseZ[idx]   = gaussRand() * 0.15;
+    vBaseZ[idx]   = gz;
     vST[idx]      = t;
 
-    const distX = Math.abs(gx) / SIGMA_VX;
-    const distY = Math.abs(gy) / SIGMA_VY;
-    const dist  = Math.min(1, Math.sqrt(distX*distX + distY*distY) * 0.6);
-
-    // 大粒子，明显大于骨骼 — 椎节要"鼓出来"
-    vBaseSize[idx] = (0.22 - dist * 0.08) * (0.70 + Math.random() * 0.70);
-    vBaseAlph[idx] = (0.60 - dist * 0.20) + Math.random() * 0.12;  // 提高基础亮度
+    // 外缘更亮，强化关节轮廓
+    const wallRatio = (vr - VERT_INNER) / (VERT_OUTER - VERT_INNER);
+    vBaseSize[idx] = (0.16 + wallRatio * 0.12) * (0.7 + Math.random() * 0.6);
+    vBaseAlph[idx] = (0.45 + wallRatio * 0.25) + Math.random() * 0.10;
 
     const gi = N_BONE + idx;
     spPositions[gi*3]   = cx + gx;
@@ -324,7 +331,7 @@ function resetDiffuse(i, blend) {
   dAge[i]    = 0;
 
   // 出生位置：椎节外侧
-  const vtX = SPINE_CURVED[vi].x * (1 - blend) + side * (SIGMA_VX * 0.9 + 0.02);
+  const vtX = SPINE_CURVED[vi].x * (1 - blend) + side * (VERT_OUTER * 0.9 + 0.02);
   const vtY = SPINE_CURVED[vi].y + (Math.random() - 0.5) * 0.04;
   dPx[i] = vtX;
   dPy[i] = vtY;
@@ -343,9 +350,11 @@ for (let i = 0; i < N_DIFF; i++) {
   const stagger = Math.random();
   dAge[i] = stagger * dMaxAge[i];
   const steps = dAge[i];
-  // 简化估算（不考虑弧线曲率）
-  dPx[i] += Math.cos(dAngle[i]) * dSpeed[i] * steps;
-  dPy[i] += Math.sin(dAngle[i]) * dSpeed[i] * steps;
+  // 弧线中点角估算（避免 stagger 粒子分布在直线上）
+  const midA = dAngle[i] + dCurveK[i] * 0.002 * steps * 0.5;
+  dAngle[i] += dCurveK[i] * 0.002 * steps;
+  dPx[i] += Math.cos(midA) * dSpeed[i] * steps;
+  dPy[i] += Math.sin(midA) * dSpeed[i] * steps;
 }
 
 
@@ -483,8 +492,11 @@ function animate() {
     // 两端渐隐（上下各 7% 范围内平滑淡出）
     const endFade = smoothstep(0.0, 0.07, bT[i]) * smoothstep(1.0, 0.93, bT[i]);
 
-    spPositions[i*3]   = bx + bOffX[i] * breatheExpand;  // X 随呼吸扩张
-    spPositions[i*3+1] = by + bOffY[i];                   // Y 不变
+    // 在弯曲/直立之间插值截面偏移（切线跟随，解决脱节）
+    const offX = bOffCurvedX[i] * (1 - lb) + bOffStraightX[i] * lb;
+    const offY = bOffCurvedY[i] * (1 - lb) + bOffStraightY[i] * lb;
+    spPositions[i*3]   = bx + offX * breatheExpand;
+    spPositions[i*3+1] = by + offY;
     spPositions[i*3+2] = bZ[i];
 
     // 整体呼吸：统一缓亮缓暗 + 两端渐隐
@@ -501,7 +513,7 @@ function animate() {
     // 椎节中心随 blend 偏移，横向偏移随呼吸扩张
     const cx_center = vCurvedX[j] + vDeltaX[j] * lb - vGxOff[j];
     spPositions[gi*3] = cx_center + vGxOff[j] * breatheExpand;
-    spAlphas[gi] = vBaseAlph[j] * breathe;  // 完整呼吸调制（从0到最大）
+    spAlphas[gi] = vBaseAlph[j] * (0.25 + breathe * 0.75);  // 保留最低亮度
   }
 
   spineGeo.attributes.position.needsUpdate = true;
