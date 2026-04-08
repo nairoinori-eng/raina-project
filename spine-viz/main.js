@@ -292,13 +292,13 @@ for (let i = 0; i < N_BONE; i++) {
   bOffStraightY[i] = 0;
 
   if (isInterior) {
-    bBaseS[i] = (0.08 + Math.random() * 0.09) * Math.max(0.3, taperFactor) * gapFactor;
-    bBaseA[i] = (0.13 + Math.random() * 0.10) * Math.max(0.3, taperFactor) * gapFactor;
+    bBaseS[i] = (0.13 + Math.random() * 0.10) * Math.max(0.3, taperFactor) * gapFactor;
+    bBaseA[i] = (0.11 + Math.random() * 0.08) * Math.max(0.3, taperFactor) * gapFactor;
   } else {
     const wallRatio = effectiveOuter > effectiveInner
       ? (r - effectiveInner) / (effectiveOuter - effectiveInner) : 0;
-    bBaseS[i] = (0.09 + wallRatio * 0.09 + Math.random() * 0.06) * (0.5 + Math.random() * 1.0) * Math.max(0.2, taperFactor);
-    bBaseA[i] = ((0.14 + wallRatio * 0.14) + Math.random() * 0.08) * taperFactor * gapFactor;
+    bBaseS[i] = (0.16 + wallRatio * 0.10 + Math.random() * 0.06) * (0.7 + Math.random() * 0.8) * Math.max(0.2, taperFactor);
+    bBaseA[i] = ((0.13 + wallRatio * 0.12) + Math.random() * 0.06) * taperFactor * gapFactor;
   }
   bPhase[i] = Math.random() * Math.PI * 2;
 
