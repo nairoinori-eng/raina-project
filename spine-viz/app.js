@@ -77,10 +77,15 @@ const HL_DARK = new THREE.Color(0x9585d8);   // 亮薰衣草
 const HL_MID  = new THREE.Color(0xbaa898);   // 亮灰紫金
 const HL_GOLD = new THREE.Color(0xeadcb8);   // 亮金
 
-// 对比色点缀（冷暖互补）
-const AC_DARK = new THREE.Color(0x3878a0);   // 青蓝（冷调点缀蓝紫）
-const AC_MID  = new THREE.Color(0xa06878);   // 玫瑰灰（点缀灰紫）
-const AC_GOLD = new THREE.Color(0xc08870);   // 铜粉（暖调点缀金色）
+// 对比色1：暖色系（与蓝紫形成冷暖互补）
+const AC1_DARK = new THREE.Color(0xd07050);  // 珊瑚橘（暖 vs 冷紫）
+const AC1_MID  = new THREE.Color(0xd89840);  // 琥珀金（暖 vs 灰紫）
+const AC1_GOLD = new THREE.Color(0xc86088);  // 玫瑰粉（冷 vs 暖金）
+
+// 对比色2：冷色系（互补方向的另一极）
+const AC2_DARK = new THREE.Color(0x38b8a8);  // 翡翠青（蓝紫的三角互补）
+const AC2_MID  = new THREE.Color(0x50a878);  // 翠绿（灰紫的互补）
+const AC2_GOLD = new THREE.Color(0x5888d0);  // 宝石蓝（暖金的互补）
 
 
 // ============================================================
@@ -120,10 +125,16 @@ function getHighlightColor(blend) {
   else c.lerpColors(HL_MID, HL_GOLD, (blend - 0.5) * 2);
   return c;
 }
-function getAccentColor(blend) {
+function getAccent1Color(blend) {
   const c = new THREE.Color();
-  if (blend < 0.5) c.lerpColors(AC_DARK, AC_MID, blend * 2);
-  else c.lerpColors(AC_MID, AC_GOLD, (blend - 0.5) * 2);
+  if (blend < 0.5) c.lerpColors(AC1_DARK, AC1_MID, blend * 2);
+  else c.lerpColors(AC1_MID, AC1_GOLD, (blend - 0.5) * 2);
+  return c;
+}
+function getAccent2Color(blend) {
+  const c = new THREE.Color();
+  if (blend < 0.5) c.lerpColors(AC2_DARK, AC2_MID, blend * 2);
+  else c.lerpColors(AC2_MID, AC2_GOLD, (blend - 0.5) * 2);
   return c;
 }
 
@@ -172,18 +183,21 @@ const vertexShader = /* glsl */`
 const fragmentShader = /* glsl */`
   uniform vec3 uColor;
   uniform vec3 uHighlight;
-  uniform vec3 uAccent;
+  uniform vec3 uAccent1;
+  uniform vec3 uAccent2;
   varying float vAlpha;
   varying float vColorVar;
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
-    // colorVar > 0 → 混入高光色，colorVar < 0 → 混入对比色
+    // colorVar > 0: 高光，-0.5~0: 暖对比色，< -0.5: 冷对比色
     vec3 c;
     if (vColorVar > 0.0) {
       c = mix(uColor, uHighlight, clamp(vColorVar, 0.0, 1.0));
+    } else if (vColorVar > -0.5) {
+      c = mix(uColor, uAccent1, clamp(-vColorVar * 2.0, 0.0, 1.0));
     } else {
-      c = mix(uColor, uAccent, clamp(-vColorVar, 0.0, 1.0));
+      c = mix(uColor, uAccent2, clamp((-vColorVar - 0.5) * 2.0, 0.0, 1.0));
     }
     c = clamp(c, 0.0, 0.88);
     float core  = exp(-d * d * 24.0);
@@ -331,13 +345,15 @@ for (let i = 0; i < N_BONE; i++) {
   }
   bPhase[i] = Math.random() * Math.PI * 2;
 
-  // colorVar：Z靠前→高光(正值)，随机8%→对比色(负值)
+  // colorVar：Z靠前→高光(正值)，15%→暖对比色，8%→冷对比色
   const zDepth = Math.abs(bZ[i]) / Math.max(effectiveOuter * TUBE_Y_SCALE, 0.01);
-  const isAccentP = Math.random() < 0.08;
-  if (isAccentP) {
-    spColorVars[i] = -(0.3 + Math.random() * 0.5);   // 对比色粒子
+  const acRoll = Math.random();
+  if (acRoll < 0.10) {
+    spColorVars[i] = -(0.15 + Math.random() * 0.35);   // 暖对比色（珊瑚/琥珀/玫瑰）
+  } else if (acRoll < 0.18) {
+    spColorVars[i] = -(0.55 + Math.random() * 0.40);   // 冷对比色（翡翠/翠绿/宝石蓝）
   } else {
-    spColorVars[i] = (1 - zDepth) * 0.55 + (Math.random() - 0.5) * 0.12;  // Z越前越亮
+    spColorVars[i] = (1 - zDepth) * 0.55 + (Math.random() - 0.5) * 0.12;
   }
   spPositions[i*3]   = cpx + bOffCurvedX[i];
   spPositions[i*3+1] = cpy + bOffCurvedY[i];
@@ -439,12 +455,16 @@ for (let vi = 0; vi < 13; vi++) {
     spPositions[gi*3+2] = gz;
     spSizes[gi]         = vBaseSize[idx];
     spAlphas[gi]        = vBaseAlph[idx];
-    // Z靠前→高光，随机10%→对比色
+    // Z靠前→高光，12%暖对比色，8%冷对比色
     const vzDepth = Math.abs(gz) / Math.max(VERT_OUTER, 0.01);
-    const isVAccent = Math.random() < 0.10;
-    spColorVars[gi] = isVAccent
-      ? -(0.3 + Math.random() * 0.5)
-      : (1 - vzDepth) * 0.5 + (Math.random() - 0.5) * 0.15;
+    const vacRoll = Math.random();
+    if (vacRoll < 0.12) {
+      spColorVars[gi] = -(0.15 + Math.random() * 0.35);
+    } else if (vacRoll < 0.20) {
+      spColorVars[gi] = -(0.55 + Math.random() * 0.40);
+    } else {
+      spColorVars[gi] = (1 - vzDepth) * 0.5 + (Math.random() - 0.5) * 0.15;
+    }
   }
 }
 
@@ -459,7 +479,8 @@ const spineMat = new THREE.ShaderMaterial({
   uniforms: {
     uColor:     { value: COLOR_DARK.clone() },
     uHighlight: { value: HL_DARK.clone() },
-    uAccent:    { value: AC_DARK.clone() },
+    uAccent1:   { value: AC1_DARK.clone() },
+    uAccent2:   { value: AC2_DARK.clone() },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -580,7 +601,8 @@ const diffuseMat = new THREE.ShaderMaterial({
   uniforms: {
     uColor:     { value: COLOR_DARK.clone() },
     uHighlight: { value: HL_DARK.clone() },
-    uAccent:    { value: AC_DARK.clone() },
+    uAccent1:   { value: AC1_DARK.clone() },
+    uAccent2:   { value: AC2_DARK.clone() },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -628,7 +650,8 @@ const ambMat = new THREE.ShaderMaterial({
   uniforms: {
     uColor:     { value: new THREE.Color(0x18102e) },
     uHighlight: { value: new THREE.Color(0x18102e) },
-    uAccent:    { value: new THREE.Color(0x18102e) },
+    uAccent1:   { value: new THREE.Color(0x18102e) },
+    uAccent2:   { value: new THREE.Color(0x18102e) },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -730,16 +753,19 @@ function animate() {
   spineGeo.attributes.aSize.needsUpdate    = true;
   spineGeo.attributes.aAlpha.needsUpdate   = true;
 
-  // 颜色同步（基色 + 高光 + 对比色 都跟随 blend）
+  // 颜色同步（基色 + 高光 + 两种对比色 都跟随 blend）
   const blendColor = getBlendColor(smoothBlend);
   const hlColor    = getHighlightColor(smoothBlend);
-  const acColor    = getAccentColor(smoothBlend);
+  const ac1Color   = getAccent1Color(smoothBlend);
+  const ac2Color   = getAccent2Color(smoothBlend);
   spineMat.uniforms.uColor.value.copy(blendColor);
   spineMat.uniforms.uHighlight.value.copy(hlColor);
-  spineMat.uniforms.uAccent.value.copy(acColor);
+  spineMat.uniforms.uAccent1.value.copy(ac1Color);
+  spineMat.uniforms.uAccent2.value.copy(ac2Color);
   diffuseMat.uniforms.uColor.value.copy(blendColor);
   diffuseMat.uniforms.uHighlight.value.copy(hlColor);
-  diffuseMat.uniforms.uAccent.value.copy(acColor);
+  diffuseMat.uniforms.uAccent1.value.copy(ac1Color);
+  diffuseMat.uniforms.uAccent2.value.copy(ac2Color);
 
   // ── Layer C：贝塞尔弧线粒子流────────────────────────────────
   for (let i = 0; i < N_DIFF; i++) {
