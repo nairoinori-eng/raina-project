@@ -54,8 +54,8 @@ const curveStraight = new THREE.CatmullRomCurve3(SPINE_STRAIGHT);
 // 2. 粒子数量
 // ============================================================
 
-const N_BONE  = 32000;                 // Layer A（细粒子高密度）
-const N_VERT  = 23400;                 // Layer B (13 × 1800)
+const N_BONE  = 50000;                 // Layer A（细粒子高密度）
+const N_VERT  = 31200;                 // Layer B (13 × 2400)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
 const N_DIFF  = 12000;                 // Layer C（弥散粒子，3倍数量）
@@ -123,6 +123,10 @@ renderer.toneMappingExposure = 1.0;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x05050d);
+
+// 脊柱父容器：用于整体缓慢摆动，增加3D立体感
+const spineGroup = new THREE.Group();
+scene.add(spineGroup);
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
 camera.position.set(0, 0, 5);
@@ -354,7 +358,7 @@ for (let vi = 0; vi < 13; vi++) {
   const vertScale = vertSizeAt(vi);
   const VERT_OUTER = VERT_OUTER_BASE * vertScale;
 
-  for (let j = 0; j < 1800; j++) {
+  for (let j = 0; j < 2400; j++) {
     const idx = vi * 800 + j;
     const vAngle = Math.random() * Math.PI * 2;
     // 85% 外壳（清晰轮廓），15% 内部填充（体积感）
@@ -420,7 +424,7 @@ const spineMat = new THREE.ShaderMaterial({
   blending:    THREE.AdditiveBlending,
   depthWrite:  false,
 });
-scene.add(new THREE.Points(spineGeo, spineMat));
+spineGroup.add(new THREE.Points(spineGeo, spineMat));
 
 
 // ============================================================
@@ -537,7 +541,7 @@ const diffuseMat = new THREE.ShaderMaterial({
   blending:    THREE.AdditiveBlending,
   depthWrite:  false,
 });
-scene.add(new THREE.Points(diffuseGeo, diffuseMat));
+spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 
 
 // ============================================================
@@ -630,7 +634,10 @@ function animate() {
   smoothBlend   = Math.max(0, Math.min(1, smoothBlend + blendVelocity));
 
   const breathe       = breatheCurve(time);
-  const breatheExpand = 1 + breathe * 0.20;   // 横向呼吸扩张 ±20%，明显呼吸感
+  const breatheExpand = 1 + breathe * 0.20;   // 横向呼吸扩张 ±20%
+
+  // 脊柱缓慢摆动 ±10°，约20秒一个周期，展示3D立体感
+  spineGroup.rotation.y = Math.sin(time * 0.31) * 0.17;
 
   // ── Layer A：骨骼柱体（位置 + 大小 + 透明度）──────────────
   for (let i = 0; i < N_BONE; i++) {
