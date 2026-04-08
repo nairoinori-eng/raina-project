@@ -185,7 +185,7 @@ const spColorVars = new Float32Array(N_SPINE);
 // 空心管参数（跟随 SPINE_SCALE 缩放）
 const TUBE_OUTER   = 0.14 * SPINE_SCALE;
 const TUBE_INNER   = 0.055 * SPINE_SCALE;
-const TUBE_Y_SCALE = 0.28;
+const TUBE_Y_SCALE = 0.6;              // Z深度（0.28太扁看不出转动，0.6接近圆形）
 
 // 管壁宽度沿脊柱变化（模拟真实椎体：颈椎窄→胸椎中→腰椎宽→骶椎收）
 function tubeWidthAt(t) {
@@ -636,8 +636,8 @@ function animate() {
   const breathe       = breatheCurve(time);
   const breatheExpand = 1 + breathe * 0.20;   // 横向呼吸扩张 ±20%
 
-  // 脊柱缓慢摆动 ±10°，约20秒一个周期，展示3D立体感
-  spineGroup.rotation.y = Math.sin(time * 0.31) * 0.17;
+  // 脊柱缓慢摆动 ±20°，约25秒一个周期，展示3D立体感
+  spineGroup.rotation.y = Math.sin(time * 0.25) * 0.35;
 
   // ── Layer A：骨骼柱体（位置 + 大小 + 透明度）──────────────
   for (let i = 0; i < N_BONE; i++) {
