@@ -364,8 +364,11 @@ for (let vi = 0; vi < 13; vi++) {
       : VERT_INNER + Math.random() * (VERT_OUTER - VERT_INNER);
     const cosA   = Math.cos(vAngle) * vr;
     const gz     = Math.sin(vAngle) * vr;
-    // Y方向适度厚度（不要太厚，避免切线插值时变形）
-    const gy     = gaussRand() * 0.016 * SPINE_SCALE;
+    // Y方向扩大分布范围，用 alpha 衰减制造上下渐变（立体感）
+    const ySigma = 0.030 * SPINE_SCALE;
+    const gy     = gaussRand() * ySigma;
+    const yNorm  = Math.abs(gy) / ySigma;  // 归一化距离（0=中心，1~3=边缘）
+    const yFalloff = Math.exp(-yNorm * yNorm * 1.2);  // 高斯衰减：中心亮、边缘暗
 
     // 弯曲态：截面垂直于曲线切线（与 Layer A 骨骼管一致）
     vOffCurvedX[idx]   = cosA * (-ct.y) + gy * ct.x;
@@ -374,9 +377,9 @@ for (let vi = 0; vi < 13; vi++) {
     vOffStraightX[idx] = cosA;
     vOffStraightY[idx] = gy;
 
-    vCurvedX[idx] = cx;  // 存椎节中心 x（不含偏移）
+    vCurvedX[idx] = cx;
     vDeltaX[idx]  = -cx;
-    vGxOff[idx]   = cosA;  // 存截面偏移量（用于呼吸扩张）
+    vGxOff[idx]   = cosA;
     vBaseY[idx]   = cy;
     vBaseZ[idx]   = gz;
     vST[idx]      = t;
@@ -384,12 +387,11 @@ for (let vi = 0; vi < 13; vi++) {
     const wallRatio = VERT_OUTER > VERT_INNER
       ? Math.max(0, (vr - VERT_INNER) / (VERT_OUTER - VERT_INNER)) : 0;
     if (isVertFill) {
-      vBaseSize[idx] = (0.12 + Math.random() * 0.08);
-      vBaseAlph[idx] = (0.15 + Math.random() * 0.10);
+      vBaseSize[idx] = (0.12 + Math.random() * 0.08) * (0.6 + 0.4 * yFalloff);
+      vBaseAlph[idx] = (0.15 + Math.random() * 0.10) * yFalloff;
     } else {
-      // 外壳：实且亮，恢复清晰椎节感
-      vBaseSize[idx] = (0.16 + wallRatio * 0.12) * (0.7 + Math.random() * 0.6);
-      vBaseAlph[idx] = (0.26 + wallRatio * 0.14) + Math.random() * 0.06;
+      vBaseSize[idx] = (0.16 + wallRatio * 0.12) * (0.7 + Math.random() * 0.6) * (0.5 + 0.5 * yFalloff);
+      vBaseAlph[idx] = ((0.26 + wallRatio * 0.14) + Math.random() * 0.06) * yFalloff;
     }
 
     const gi = N_BONE + idx;
