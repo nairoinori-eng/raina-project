@@ -19,7 +19,6 @@ import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass }     from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { OutputPass }     from 'three/examples/jsm/postprocessing/OutputPass.js';
 import { io } from 'socket.io-client';
 
 
@@ -69,7 +68,7 @@ const N_AMB   = 300;                   // Layer E
 // 3. 颜色（低饱和度，优雅克制）
 // ============================================================
 
-const COLOR_DARK = new THREE.Color(0x6050a0);  // 明亮蓝紫，blend=0时清晰可见
+const COLOR_DARK = new THREE.Color(0x7868b8);  // 亮蓝紫，blend=0时清晰
 const COLOR_MID  = new THREE.Color(0x5c527a);  // 低饱和度灰紫
 const COLOR_GOLD = new THREE.Color(0xc4a882);  // 低饱和度高级灰金色
 
@@ -118,8 +117,7 @@ const canvas = document.getElementById('spine-canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
 renderer.setSize(window.innerWidth, window.innerHeight);
-renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.3;
+// 不用色调映射（ACES会把暗色压太狠），用shader clamp防过曝即可
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x05050d);
@@ -604,8 +602,6 @@ const bloomPass = new UnrealBloomPass(
 );
 composer.addPass(bloomPass);
 
-// OutputPass 应用 tone mapping 到最终画面，防止 AdditiveBlending 过曝
-composer.addPass(new OutputPass());
 
 
 // ============================================================
@@ -637,8 +633,6 @@ function animate() {
   const breathe       = breatheCurve(time);
   const breatheExpand = 1 + breathe * 0.20;   // 横向呼吸扩张 ±20%
 
-  // 脊柱缓慢摆动 ±15°，约22秒一个周期（微妙3D感，不暴露侧面）
-  spineGroup.rotation.y = Math.sin(time * 0.28) * 0.26;
 
   // ── Layer A：骨骼柱体（位置 + 大小 + 透明度）──────────────
   for (let i = 0; i < N_BONE; i++) {
