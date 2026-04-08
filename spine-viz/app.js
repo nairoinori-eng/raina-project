@@ -709,69 +709,59 @@ spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 
 
 // ============================================================
-// 9. vineGeo (Layer F — 藤蔓/根须)
+// 9. vineGeo (Layer F — 长藤蔓，沿脊柱全长蜿蜒缠绕)
 // ============================================================
 
-const N_VINES = 14;
-const VINE_PPV = 400;   // 每根藤蔓400粒子
+const N_VINES = 8;       // 8根长藤蔓
+const VINE_PPV = 1500;   // 每根1500粒子（密实可见）
 const N_VINE_TOTAL = N_VINES * VINE_PPV;
 
-// 藤蔓路径定义：从椎节两侧长出，蜿蜒曲折
-function makeVineCurve(vi, side, segments, reach, windAmp) {
-  const ox = SPINE_CURVED[vi].x;
-  const oy = SPINE_CURVED[vi].y;
-  const pts = [new THREE.Vector3(ox, oy, 0)];
-  let cx = ox, cy = oy;
-  for (let s = 1; s <= segments; s++) {
-    const p = s / segments;
-    // 每段向外延伸 + 上下蜿蜒
-    cx += side * reach / segments * (0.4 + Math.random() * 0.6);
-    cy += Math.sin(p * Math.PI * 2.5 + Math.random() * 1.5) * windAmp * 0.35
-        + (Math.random() - 0.5) * 0.12;
-    // 加一点Z深度让藤蔓不完全在同一平面
-    const cz = Math.sin(p * Math.PI * 1.5) * 0.08;
-    pts.push(new THREE.Vector3(cx, cy, cz));
+// 生成沿脊柱全长蜿蜒的藤蔓曲线
+// 藤蔓跟随脊柱走向，左右摆动形成缠绕感
+function makeLongVine(amplitude, freq, phase, zAmp) {
+  const pts = [];
+  const steps = 40;
+  for (let s = 0; s <= steps; s++) {
+    const t = s / steps;
+    const sp = curveCurved.getPoint(t);
+    // 正弦波横向摆动 + 随机扰动 → 蜿蜒感
+    const windX = Math.sin(t * Math.PI * freq + phase) * amplitude
+                + Math.sin(t * Math.PI * freq * 2.3 + phase * 1.7) * amplitude * 0.3;
+    const windY = Math.cos(t * Math.PI * freq * 0.6 + phase * 0.8) * amplitude * 0.15;
+    const windZ = Math.sin(t * Math.PI * freq * 1.4 + phase * 2.1) * zAmp;
+    pts.push(new THREE.Vector3(sp.x + windX, sp.y + windY, windZ));
   }
   return new THREE.CatmullRomCurve3(pts);
 }
 
-// 预生成 14 根藤蔓（参考用户草图的布局）
-const vineData = [
-  // 上部：椎节 1-3
-  { vi: 1,  side:  1, segs: 5, reach: 1.4, wind: 0.9 },
-  { vi: 1,  side:  1, segs: 4, reach: 0.8, wind: 0.6 },   // 短枝
-  { vi: 2,  side: -1, segs: 6, reach: 1.8, wind: 1.1 },
-  // 中上：椎节 4-6
-  { vi: 4,  side:  1, segs: 5, reach: 1.5, wind: 0.8 },
-  { vi: 5,  side: -1, segs: 6, reach: 2.0, wind: 1.0 },
-  { vi: 5,  side: -1, segs: 4, reach: 0.7, wind: 0.5 },   // 短枝
-  // 中下：椎节 7-9
-  { vi: 7,  side: -1, segs: 5, reach: 1.6, wind: 1.2 },
-  { vi: 7,  side:  1, segs: 5, reach: 1.3, wind: 0.7 },
-  { vi: 9,  side:  1, segs: 6, reach: 2.2, wind: 1.0 },
-  // 下部：椎节 10-12
-  { vi: 10, side: -1, segs: 6, reach: 1.9, wind: 0.9 },
-  { vi: 10, side:  1, segs: 4, reach: 0.9, wind: 0.6 },
-  { vi: 11, side: -1, segs: 5, reach: 1.4, wind: 1.1 },
-  { vi: 12, side:  1, segs: 5, reach: 1.5, wind: 0.8 },
-  { vi: 12, side: -1, segs: 4, reach: 1.0, wind: 0.7 },
+// 8根藤蔓：不同振幅/频率/相位，形成丰富的缠绕层次
+const vineConfigs = [
+  { amp: 0.28, freq: 3.0, phase: 0.0,  zAmp: 0.12 },   // 主藤1：宽幅慢摆
+  { amp: 0.32, freq: 3.0, phase: 3.14, zAmp: 0.10 },   // 主藤2：与1对称
+  { amp: 0.18, freq: 4.5, phase: 1.2,  zAmp: 0.08 },   // 细藤3：快摆
+  { amp: 0.22, freq: 4.5, phase: 4.3,  zAmp: 0.09 },   // 细藤4：与3对称
+  { amp: 0.38, freq: 2.0, phase: 0.8,  zAmp: 0.15 },   // 大藤5：最宽最慢
+  { amp: 0.35, freq: 2.0, phase: 3.9,  zAmp: 0.14 },   // 大藤6：与5对称
+  { amp: 0.14, freq: 6.0, phase: 2.5,  zAmp: 0.06 },   // 丝藤7：贴近脊柱快摆
+  { amp: 0.16, freq: 5.5, phase: 5.2,  zAmp: 0.07 },   // 丝藤8：与7对称
 ];
 
-const vineCurves = vineData.map(d => makeVineCurve(d.vi, d.side, d.segs, d.reach, d.wind));
-const vineOriginT = vineData.map(d => d.vi / 12);   // 每根藤蔓的椎节 t 值
+const vineCurves = vineConfigs.map(c => makeLongVine(c.amp, c.freq, c.phase, c.zAmp));
 
 // 粒子分布
 const vnPositions = new Float32Array(N_VINE_TOTAL * 3);
-const vnVineT     = new Float32Array(N_VINE_TOTAL);  // 沿藤蔓的 t
-const vnPhase     = new Float32Array(N_VINE_TOTAL);  // 能量脉冲相位
+const vnVineT     = new Float32Array(N_VINE_TOTAL);
+const vnPhase     = new Float32Array(N_VINE_TOTAL);
 const vnSizes     = new Float32Array(N_VINE_TOTAL);
 const vnAlphas    = new Float32Array(N_VINE_TOTAL);
 const vnColorVars = new Float32Array(N_VINE_TOTAL);
-const vnOriginT   = new Float32Array(N_VINE_TOTAL);  // 来源椎节的 t（用于 blend 联动）
 
 for (let v = 0; v < N_VINES; v++) {
   const curve = vineCurves[v];
-  const phase = Math.random() * 1.5;   // 每根藤蔓的脉冲起始相位
+  const pulsePhase = v * 0.4 + Math.random() * 0.5;  // 每根不同的脉冲相位
+  const cfg = vineConfigs[v];
+  // 粗藤vs细藤的粒子宽度
+  const baseWidth = cfg.amp > 0.25 ? 0.025 : 0.018;
 
   for (let p = 0; p < VINE_PPV; p++) {
     const idx = v * VINE_PPV + p;
@@ -780,47 +770,43 @@ for (let v = 0; v < N_VINES; v++) {
     const pt = curve.getPoint(t);
     const tan = curve.getTangent(t);
 
-    // 粒子沿藤蔓横向高斯展宽（根部粗、末端细）
-    const width = (0.018 + Math.random() * 0.008) * (1 - t * 0.6);
-    const spread = gaussRand() * width;
+    // 高斯展宽（藤蔓粗细）
+    const spread = gaussRand() * baseWidth;
     const perpX = -tan.y, perpY = tan.x;
 
     vnPositions[idx * 3]     = pt.x + perpX * spread;
     vnPositions[idx * 3 + 1] = pt.y + perpY * spread;
-    vnPositions[idx * 3 + 2] = pt.z + (Math.random() - 0.5) * 0.03;
+    vnPositions[idx * 3 + 2] = pt.z + (Math.random() - 0.5) * 0.02;
 
     vnVineT[idx]   = t;
-    vnPhase[idx]   = phase;
-    vnOriginT[idx] = vineOriginT[v];
-    vnSizes[idx]   = 0.025 + Math.random() * 0.018;
-    vnAlphas[idx]  = 0.18 + Math.random() * 0.12;
+    vnPhase[idx]   = pulsePhase;
+    vnSizes[idx]   = 0.025 + Math.random() * 0.015;
+    vnAlphas[idx]  = 0.22 + Math.random() * 0.15;
 
-    // 颜色：60%跟随基色，20%高光，10%暖对比，10%冷对比
+    // 颜色分配
     const cRoll = Math.random();
-    if (cRoll < 0.10) vnColorVars[idx] = -(0.2 + Math.random() * 0.3);
-    else if (cRoll < 0.20) vnColorVars[idx] = -(0.55 + Math.random() * 0.4);
-    else if (cRoll < 0.40) vnColorVars[idx] = 0.4 + Math.random() * 0.5;
-    else vnColorVars[idx] = (Math.random() - 0.5) * 0.2;
+    if (cRoll < 0.08)      vnColorVars[idx] = -(0.25 + Math.random() * 0.25);  // 暖对比
+    else if (cRoll < 0.15) vnColorVars[idx] = -(0.55 + Math.random() * 0.4);   // 冷对比
+    else if (cRoll < 0.35) vnColorVars[idx] = 0.4 + Math.random() * 0.5;       // 高光
+    else vnColorVars[idx] = (Math.random() - 0.5) * 0.15;
   }
 }
 
 const vineGeo = new THREE.BufferGeometry();
-vineGeo.setAttribute('position',  new THREE.BufferAttribute(vnPositions, 3));
-vineGeo.setAttribute('aSize',     new THREE.BufferAttribute(vnSizes, 1));
-vineGeo.setAttribute('aAlpha',    new THREE.BufferAttribute(vnAlphas, 1));
-vineGeo.setAttribute('aColorVar', new THREE.BufferAttribute(vnColorVars, 1));
-vineGeo.setAttribute('aVineT',    new THREE.BufferAttribute(vnVineT, 1));
-vineGeo.setAttribute('aVinePhase',new THREE.BufferAttribute(vnPhase, 1));
-vineGeo.setAttribute('aOriginT',  new THREE.BufferAttribute(vnOriginT, 1));
+vineGeo.setAttribute('position',   new THREE.BufferAttribute(vnPositions, 3));
+vineGeo.setAttribute('aSize',      new THREE.BufferAttribute(vnSizes, 1));
+vineGeo.setAttribute('aAlpha',     new THREE.BufferAttribute(vnAlphas, 1));
+vineGeo.setAttribute('aColorVar',  new THREE.BufferAttribute(vnColorVars, 1));
+vineGeo.setAttribute('aVineT',     new THREE.BufferAttribute(vnVineT, 1));
+vineGeo.setAttribute('aVinePhase', new THREE.BufferAttribute(vnPhase, 1));
 
-// 藤蔓专属 vertex shader：生长 + 能量脉冲
+// 藤蔓 vertex shader：生长 + 能量脉冲流动
 const vineVertexShader = /* glsl */`
   attribute float aSize;
   attribute float aAlpha;
   attribute float aColorVar;
   attribute float aVineT;
   attribute float aVinePhase;
-  attribute float aOriginT;
 
   uniform float uBlend;
   uniform float uTime;
@@ -829,22 +815,23 @@ const vineVertexShader = /* glsl */`
   varying float vColorVar;
 
   void main() {
-    // 生长：blend 0.2→0.8 时藤蔓从根到末梢逐渐显现
+    // 生长：blend 0.15→0.7 时藤蔓从上端到下端逐渐显现
     float growth = clamp((uBlend - 0.15) / 0.55, 0.0, 1.0);
-    float visible = smoothstep(growth + 0.01, growth - 0.08, aVineT);
+    float visible = smoothstep(growth + 0.02, growth - 0.10, aVineT);
 
-    // 能量脉冲：高斯光团沿藤蔓流动（从根到梢）
-    float pulsePos = mod(uTime * 0.13 + aVinePhase, 1.4) - 0.15;
-    float pulse = exp(-pow((aVineT - pulsePos) * 10.0, 2.0));
+    // 能量脉冲：高斯光团从上往下流动
+    float pulseSpeed = 0.10;
+    float pulsePos = mod(uTime * pulseSpeed + aVinePhase, 1.5) - 0.2;
+    float pulse = exp(-pow((aVineT - pulsePos) * 8.0, 2.0));
 
-    // 末端渐细渐暗
-    float tipFade = 1.0 - aVineT * 0.55;
+    // 两端渐隐（藤蔓头尾自然消失）
+    float endFade = smoothstep(0.0, 0.05, aVineT) * smoothstep(1.0, 0.92, aVineT);
 
-    float alpha = aAlpha * visible * tipFade * (0.25 + pulse * 0.75);
-    float sz    = aSize * (0.7 + pulse * 0.6) * tipFade;
+    float alpha = aAlpha * visible * endFade * (0.3 + pulse * 0.7);
+    float sz    = aSize * (0.8 + pulse * 0.5);
 
     vAlpha    = alpha;
-    vColorVar = aColorVar + pulse * 0.25;
+    vColorVar = aColorVar + pulse * 0.3;
 
     vec4 mv = modelViewMatrix * vec4(position, 1.0);
     gl_PointSize = sz * (300.0 / -mv.z);
