@@ -201,7 +201,7 @@ for (let i = 0; i < N_BONE; i++) {
   const angle    = sideSign * Math.random() * 1.1;   // ±0~63°，不到顶底
   const r        = TUBE_INNER + Math.pow(Math.random(), 0.5) * (TUBE_OUTER - TUBE_INNER);
   const cosA     = Math.cos(angle) * r;
-  bZ[i]          = Math.sin(angle) * r;
+  bZ[i]          = Math.sin(angle) * r * TUBE_Y_SCALE;  // 压扁深度，管壁投影更清晰
 
   // 弯曲状态：截面垂直于曲线切线方向
   const ct         = curveCurved.getTangent(bT[i]);
@@ -244,7 +244,7 @@ for (let vi = 0; vi < 13; vi++) {
   const t  = vi / 12;
 
   for (let j = 0; j < 800; j++) {
-    const idx = vi * 400 + j;
+    const idx = vi * 800 + j;
     // 环形分布：粒子在 XZ 平面圆盘边缘，形成可见的椎节轮廓
     const vAngle = Math.random() * Math.PI * 2;
     const vr     = VERT_INNER + Math.random() * (VERT_OUTER - VERT_INNER);
@@ -262,7 +262,7 @@ for (let vi = 0; vi < 13; vi++) {
     // 外缘更亮，强化关节轮廓
     const wallRatio = (vr - VERT_INNER) / (VERT_OUTER - VERT_INNER);
     vBaseSize[idx] = (0.16 + wallRatio * 0.12) * (0.7 + Math.random() * 0.6);
-    vBaseAlph[idx] = (0.45 + wallRatio * 0.25) + Math.random() * 0.10;
+    vBaseAlph[idx] = (0.22 + wallRatio * 0.14) + Math.random() * 0.06;  // 降低防过曝
 
     const gi = N_BONE + idx;
     spPositions[gi*3]   = cx + gx;
@@ -329,14 +329,15 @@ function resetDiffuse(i, blend) {
   dPx[i] = vtX;
   dPy[i] = vtY;
 
-  // 同椎节共享 flowAngle 方向，微小扰动保留流束宽度
-  const yBias = flowAngle[vi] * 1.2;
-  const xOut  = side * 0.38;
-  const n = () => (Math.random() - 0.5) * 0.05;
+  // 每个椎节固定流向：偶数向上，奇数向下，同节粒子不交叉
+  const vertDir = (vi % 2 === 0) ? 1 : -1;
+  const yBias = vertDir * (0.28 + Math.random() * 0.18);  // 固定方向 + 少量随机宽度
+  const xOut  = side * 0.32;
+  const n = () => (Math.random() - 0.5) * 0.04;
 
-  dBzX1[i] = vtX + xOut       + n();   dBzY1[i] = vtY + yBias * 0.7 + n();
-  dBzX2[i] = vtX + xOut * 2.4 + n();   dBzY2[i] = vtY + yBias * 1.0 + n();
-  dBzX3[i] = vtX + xOut * 3.8 + n();   dBzY3[i] = vtY + yBias * 0.5 + n();
+  dBzX1[i] = vtX + xOut       + n();   dBzY1[i] = vtY + yBias * 0.6 + n();
+  dBzX2[i] = vtX + xOut * 2.2 + n();   dBzY2[i] = vtY + yBias * 1.0 + n();
+  dBzX3[i] = vtX + xOut * 3.4 + n();   dBzY3[i] = vtY + yBias * 0.7 + n();
 
   dT[i]  = 0;
   dDt[i] = 0.0013 + Math.random() * 0.0007;
@@ -520,11 +521,6 @@ function animate() {
   const blendColor = getBlendColor(smoothBlend);
   spineMat.uniforms.uColor.value.copy(blendColor);
   diffuseMat.uniforms.uColor.value.copy(blendColor);
-
-  // 更新每椎节流向角（各椎节相位错开，驱动贝塞尔 Y 偏向）
-  for (let vi = 0; vi < 13; vi++) {
-    flowAngle[vi] = Math.sin(time * 0.35 + vi * 0.7) * 0.45;
-  }
 
   // ── Layer C：贝塞尔弧线粒子流────────────────────────────────
   for (let i = 0; i < N_DIFF; i++) {
