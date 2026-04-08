@@ -247,8 +247,8 @@ for (let i = 0; i < N_BONE; i++) {
     taperFactor = Math.pow(Math.max(0, 1 - (bT[i] - 1) / TAPER_EXTEND), 1.5);
   }
 
-  // 15% 粒子填充管壁内部（稀疏微光）
-  const isInterior = Math.random() < 0.15;
+  // 20% 粒子填充管壁内部
+  const isInterior = Math.random() < 0.20;
 
   const sideSign = Math.random() < 0.5 ? 1 : -1;
   const angleMag = Math.random() * 1.1;
@@ -271,9 +271,9 @@ for (let i = 0; i < N_BONE; i++) {
   bOffStraightY[i] = 0;
 
   if (isInterior) {
-    // 内部填充粒子：小而暗
-    bBaseS[i] = (0.04 + Math.random() * 0.05) * Math.max(0.3, taperFactor);
-    bBaseA[i] = (0.03 + Math.random() * 0.04) * Math.max(0.2, taperFactor);
+    // 内部填充粒子：稍小稍暗，但要看得见
+    bBaseS[i] = (0.07 + Math.random() * 0.08) * Math.max(0.3, taperFactor);
+    bBaseA[i] = (0.09 + Math.random() * 0.08) * Math.max(0.2, taperFactor);
   } else {
     const wallRatio = effectiveOuter > effectiveInner
       ? (r - effectiveInner) / (effectiveOuter - effectiveInner) : 0;
