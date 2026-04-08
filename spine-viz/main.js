@@ -713,7 +713,7 @@ spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 // ============================================================
 
 const N_VINES = 8;       // 8根长藤蔓
-const VINE_PPV = 1500;   // 每根1500粒子（密实可见）
+const VINE_PPV = 2500;   // 每根2500粒子
 const N_VINE_TOTAL = N_VINES * VINE_PPV;
 
 // 生成沿脊柱全长蜿蜒的藤蔓曲线
@@ -736,14 +736,14 @@ function makeLongVine(amplitude, freq, phase, zAmp) {
 
 // 8根藤蔓：不同振幅/频率/相位，形成丰富的缠绕层次
 const vineConfigs = [
-  { amp: 0.28, freq: 3.0, phase: 0.0,  zAmp: 0.12 },   // 主藤1：宽幅慢摆
-  { amp: 0.32, freq: 3.0, phase: 3.14, zAmp: 0.10 },   // 主藤2：与1对称
-  { amp: 0.18, freq: 4.5, phase: 1.2,  zAmp: 0.08 },   // 细藤3：快摆
-  { amp: 0.22, freq: 4.5, phase: 4.3,  zAmp: 0.09 },   // 细藤4：与3对称
-  { amp: 0.38, freq: 2.0, phase: 0.8,  zAmp: 0.15 },   // 大藤5：最宽最慢
-  { amp: 0.35, freq: 2.0, phase: 3.9,  zAmp: 0.14 },   // 大藤6：与5对称
-  { amp: 0.14, freq: 6.0, phase: 2.5,  zAmp: 0.06 },   // 丝藤7：贴近脊柱快摆
-  { amp: 0.16, freq: 5.5, phase: 5.2,  zAmp: 0.07 },   // 丝藤8：与7对称
+  { amp: 0.45, freq: 2.5, phase: 0.0,  zAmp: 0.12 },   // 大藤1：宽幅慢摆
+  { amp: 0.50, freq: 2.5, phase: 3.14, zAmp: 0.10 },   // 大藤2：与1对称
+  { amp: 0.30, freq: 4.0, phase: 1.2,  zAmp: 0.08 },   // 主藤3：中幅
+  { amp: 0.35, freq: 4.0, phase: 4.3,  zAmp: 0.09 },   // 主藤4：与3对称
+  { amp: 0.60, freq: 1.8, phase: 0.8,  zAmp: 0.15 },   // 巨藤5：最宽最远
+  { amp: 0.55, freq: 1.8, phase: 3.9,  zAmp: 0.14 },   // 巨藤6：与5对称
+  { amp: 0.20, freq: 5.5, phase: 2.5,  zAmp: 0.06 },   // 细藤7：贴近快摆
+  { amp: 0.22, freq: 5.0, phase: 5.2,  zAmp: 0.07 },   // 细藤8：与7对称
 ];
 
 const vineCurves = vineConfigs.map(c => makeLongVine(c.amp, c.freq, c.phase, c.zAmp));
@@ -760,8 +760,8 @@ for (let v = 0; v < N_VINES; v++) {
   const curve = vineCurves[v];
   const pulsePhase = v * 0.4 + Math.random() * 0.5;  // 每根不同的脉冲相位
   const cfg = vineConfigs[v];
-  // 粗藤vs细藤的粒子宽度
-  const baseWidth = cfg.amp > 0.25 ? 0.025 : 0.018;
+  // 粗藤vs细藤的粒子宽度（加宽让藤蔓更实）
+  const baseWidth = cfg.amp > 0.25 ? 0.035 : 0.025;
 
   for (let p = 0; p < VINE_PPV; p++) {
     const idx = v * VINE_PPV + p;
@@ -780,8 +780,8 @@ for (let v = 0; v < N_VINES; v++) {
 
     vnVineT[idx]   = t;
     vnPhase[idx]   = pulsePhase;
-    vnSizes[idx]   = 0.025 + Math.random() * 0.015;
-    vnAlphas[idx]  = 0.22 + Math.random() * 0.15;
+    vnSizes[idx]   = 0.03 + Math.random() * 0.02;
+    vnAlphas[idx]  = 0.35 + Math.random() * 0.20;
 
     // 颜色分配
     const cRoll = Math.random();
@@ -827,8 +827,8 @@ const vineVertexShader = /* glsl */`
     // 两端渐隐（藤蔓头尾自然消失）
     float endFade = smoothstep(0.0, 0.05, aVineT) * smoothstep(1.0, 0.92, aVineT);
 
-    float alpha = aAlpha * visible * endFade * (0.3 + pulse * 0.7);
-    float sz    = aSize * (0.8 + pulse * 0.5);
+    float alpha = aAlpha * visible * endFade * (0.6 + pulse * 0.4);
+    float sz    = aSize * (0.9 + pulse * 0.4);
 
     vAlpha    = alpha;
     vColorVar = aColorVar + pulse * 0.3;
