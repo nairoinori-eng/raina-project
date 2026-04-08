@@ -702,10 +702,21 @@ const WAVE = 0.28;
 // ============================================================
 
 let time = 0;
+let fpsFrames = 0, fpsLast = performance.now();
+const debugFps = document.getElementById('debug-fps');
 
 function animate() {
   requestAnimationFrame(animate);
   time += 0.016;
+
+  // FPS 计算（每秒更新一次）
+  fpsFrames++;
+  const now = performance.now();
+  if (now - fpsLast >= 1000) {
+    if (debugFps) debugFps.textContent = fpsFrames;
+    fpsFrames = 0;
+    fpsLast = now;
+  }
 
   // 弹簧物理平滑 blend
   const springF = (targetBlend - smoothBlend) * 0.035;
