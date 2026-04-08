@@ -1,0 +1,18 @@
+{
+  "name": "spine-viz",
+  "version": "1.0.0",
+  "description": "raina-project Three.js 粒子脊柱前端",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "socket.io-client": "^4.7.5",
+    "three": "^0.167.0"
+  },
+  "devDependencies": {
+    "vite": "^5.4.0"
+  }
+}
