@@ -720,11 +720,14 @@ spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 //   叶片从藤蔓远离脊柱最远处向外展开
 //
 
-const N_VINES = 3;
-const VINE_PPV = 7000;     // 每根7000粒子，细腻质感
-// 分支藤蔓（从SVG提取的40段路径）
-const BRANCH_PPB = 300;   // 每段分支300粒子
-const SVG_BRANCH_PATHS = [
+// ============================================================
+// 9. vineGeo (Layer F — 藤蔓系统，从用户SVG提取路径)
+// ============================================================
+// 1.svg = 藤蔓1（主干+分支一体），2.svg = 藤蔓2
+// 每段路径500粒子，保持用户手绘走势
+
+const VINE_PPB = 500;   // 每段路径的粒子数
+const SVG_VINE_PATHS = [
 [[0.2991,2.124],[0.2632,1.9561],[0.1748,1.8077]],
 [[-0.1511,1.5776],[-0.1601,1.494],[-0.1606,1.4095],[-0.1245,1.3343]],
 [[0.0019,1.0574],[0.0512,1.0794],[0.0721,1.1275],[0.1152,1.1029]],
@@ -766,71 +769,20 @@ const SVG_BRANCH_PATHS = [
 [[0.1592,-2.1817],[0.1543,-2.093],[0.218,-2.1109],[0.2664,-2.0111]],
 [[0.1461,-2.1992],[0.1157,-2.2341],[0.1018,-2.2614],[0.1399,-2.2379]],
 ];
-const N_BRANCH_TOTAL = SVG_BRANCH_PATHS.length * BRANCH_PPB;
-const N_VINE_TOTAL = N_VINES * VINE_PPV + N_BRANCH_TOTAL;
+// SVG1前21段=藤蔓1, SVG2后19段=藤蔓2
+const SVG_VINE1_COUNT = 21;
+const N_VINE_TOTAL = SVG_VINE_PATHS.length * VINE_PPB;
 
-// ── 藤蔓路径：相对于脊柱的偏移函数 ──
-// 每根藤蔓定义为 spinePoint(t) + perpOffset(t)
-// perpOffset 沿切线法向（弯曲态跟随切线旋转，直立态水平）
+// 生长触发阈值
+const VINE_GROW_THRESHOLDS = [0.25, 0.50];  // 两根藤蔓
+const VINE_GROW_DURATION = 2.5;
 
-// 振幅包络：顶部中等→中部最大→底部收窄
-function vineEnvelope(t) {
-  // 模拟参考图：中段延伸最远，两端收拢
-  return 0.6 + 0.4 * Math.sin(t * Math.PI);  // 0.6→1.0→0.6
+// y坐标转脊柱参数t
+function yToSpineT(y) {
+  return Math.max(0, Math.min(1, (straightTopY - y) / (straightTopY - straightBotY)));
 }
 
-// 藤蔓A：主藤1 — 2个完整周期，振幅加大拉开间距
-function vineOffsetA(t) {
-  const env = vineEnvelope(t) * 0.58;
-  const wave = Math.sin(t * Math.PI * 4 + 0.3)
-             + 0.15 * Math.sin(t * Math.PI * 7.2 + 1.0);
-  return env * wave;
-}
-
-// 藤蔓B：主藤2 — 与A ~90°错位
-function vineOffsetB(t) {
-  const env = vineEnvelope(t) * 0.52;
-  const wave = Math.sin(t * Math.PI * 4 + 0.3 + 1.5)
-             + 0.18 * Math.sin(t * Math.PI * 6.8 + 2.8);
-  return env * wave;
-}
-
-// 藤蔓C：细藤 — 贴近脊柱，稍快频率
-function vineOffsetC(t) {
-  const env = vineEnvelope(t) * 0.30;
-  const wave = Math.sin(t * Math.PI * 5.2 + 1.8)
-             + 0.20 * Math.sin(t * Math.PI * 8.5 + 0.5);
-  return env * wave;
-}
-
-const vineOffsetFns = [vineOffsetA, vineOffsetB, vineOffsetC];
-
-// Z方向偏移 — 与横向偏移成90°相位差，形成真实缠绕
-// 横向用 sin(ωt+φ)，Z 用 cos(ωt+φ)，这样：
-//   横向=0（穿越脊柱）时 Z 最大或最小（前方或后方）
-//   横向=极值（远离脊柱）时 Z≈0（侧面）
-function vineZOffsetA(t) {
-  const env = vineEnvelope(t) * 0.22;
-  return env * Math.cos(t * Math.PI * 4 + 0.3);
-}
-function vineZOffsetB(t) {
-  const env = vineEnvelope(t) * 0.20;
-  return env * Math.cos(t * Math.PI * 4 + 0.3 + 1.5);
-}
-function vineZOffsetC(t) {
-  const env = vineEnvelope(t) * 0.12;
-  return env * Math.cos(t * Math.PI * 5.2 + 1.8);
-}
-const vineZFns = [vineZOffsetA, vineZOffsetB, vineZOffsetC];
-
-// 藤蔓粗细（粒子径向展宽，小值=更集中更实）
-const vineWidths = [0.022, 0.018, 0.012];
-
-// 生长触发阈值：blend 到达此值时触发该藤蔓的生长动画
-const VINE_GROW_THRESHOLDS = [0.25, 0.45, 0.65];
-const VINE_GROW_DURATION = 2.0;  // 生长动画持续秒数
-
-// ── 预计算每根藤蔓在 curved 和 straight 两态下的粒子位置 ──
+// ── 预计算藤蔓粒子位置 ──
 const vnCurvedPosX   = new Float32Array(N_VINE_TOTAL);
 const vnCurvedPosY   = new Float32Array(N_VINE_TOTAL);
 const vnStraightPosX = new Float32Array(N_VINE_TOTAL);
@@ -843,70 +795,14 @@ const vnAlphas       = new Float32Array(N_VINE_TOTAL);
 const vnColorVars    = new Float32Array(N_VINE_TOTAL);
 const vnPhase        = new Float32Array(N_VINE_TOTAL);
 
-for (let v = 0; v < N_VINES; v++) {
-  const offsetFn = vineOffsetFns[v];
-  const width = vineWidths[v];
-  const pulsePhase = v * 1.3 + 0.2;
+for (let si = 0; si < SVG_VINE_PATHS.length; si++) {
+  const pts = SVG_VINE_PATHS[si];
+  const vineId = si < SVG_VINE1_COUNT ? 0 : 1;
+  const baseIdx = si * VINE_PPB;
 
-  for (let p = 0; p < VINE_PPV; p++) {
-    const idx = v * VINE_PPV + p;
-    const t = p / (VINE_PPV - 1);
+  if (pts.length < 2) continue;
 
-    // 获取脊柱中心点（两态）
-    const cpCurved   = curveCurved.getPoint(t);
-    const cpStraight = curveStraight.getPoint(t);
-
-    // 获取切线（两态）
-    const tanCurved   = curveCurved.getTangent(t);
-    const tanStraight = curveStraight.getTangent(t);  // (0, -1, 0)
-
-    // 藤蔓横向偏移量
-    const offset = offsetFn(t);
-
-    // 粒子径向展宽（藤蔓粗细）
-    const spread = gaussRand() * width;
-    const totalOffset = offset + spread;
-
-    // 弯曲态：沿切线法向偏移
-    const perpCX = -tanCurved.y;
-    const perpCY =  tanCurved.x;
-    vnCurvedPosX[idx] = cpCurved.x + perpCX * totalOffset;
-    vnCurvedPosY[idx] = cpCurved.y + perpCY * totalOffset;
-
-    // 直立态：法向 = 水平
-    vnStraightPosX[idx] = cpStraight.x + totalOffset;
-    vnStraightPosY[idx] = cpStraight.y;
-
-    // Z深度：与横向偏移90°相位差，形成缠绕
-    vnZPos[idx] = vineZFns[v](t) + (Math.random() - 0.5) * 0.015;
-
-    vnParamT[idx]  = t;
-    vnVineId[idx]  = v;
-    vnPhase[idx]   = pulsePhase;
-    vnSizes[idx]   = (v < 2 ? 0.055 : 0.040) + Math.random() * 0.025;
-    vnAlphas[idx]  = (v < 2 ? 0.75 : 0.55) + Math.random() * 0.20;
-
-    // 颜色分配
-    const cRoll = Math.random();
-    if (cRoll < 0.08)      vnColorVars[idx] = -(0.25 + Math.random() * 0.25);
-    else if (cRoll < 0.15) vnColorVars[idx] = -(0.55 + Math.random() * 0.4);
-    else if (cRoll < 0.30) vnColorVars[idx] = 0.4 + Math.random() * 0.5;
-    else vnColorVars[idx] = (Math.random() - 0.5) * 0.15;
-  }
-}
-
-// ── 分支藤蔓粒子（从SVG路径生成）──
-// y坐标转脊柱参数t
-function yToSpineT(y) {
-  return Math.max(0, Math.min(1, (straightTopY - y) / (straightTopY - straightBotY)));
-}
-
-let brIdx = N_VINES * VINE_PPV;
-for (let bi = 0; bi < SVG_BRANCH_PATHS.length; bi++) {
-  const pts = SVG_BRANCH_PATHS[bi];
-  if (pts.length < 2) { brIdx += BRANCH_PPB; continue; }
-
-  // 直立态CatmullRom曲线
+  // 直立态曲线
   const ctrlS = pts.map(([x, y]) => new THREE.Vector3(x, y, 0));
   const curvS = new THREE.CatmullRomCurve3(ctrlS);
 
@@ -918,39 +814,44 @@ for (let bi = 0; bi < SVG_BRANCH_PATHS.length; bi++) {
   });
   const curvC = new THREE.CatmullRomCurve3(ctrlC);
 
-  // 分支属于哪根主藤（SVG1=前21段→vine0, SVG2=后19段→vine1）
-  const vineId = bi < 21 ? 0 : 1;
-  // 分支的大致脊柱t（用中间点的y）
   const midY = pts[Math.floor(pts.length / 2)][1];
-  const branchSpineT = yToSpineT(midY);
+  const segSpineT = yToSpineT(midY);
+  // Z深度：基于x偏移方向，远离脊柱=Z≈0，穿越脊柱=Z前后
+  const avgX = pts.reduce((s, p) => s + p[0], 0) / pts.length;
 
-  for (let bp = 0; bp < BRANCH_PPB; bp++) {
-    if (brIdx >= N_VINE_TOTAL) break;
-    const bt = bp / (BRANCH_PPB - 1);
+  for (let p = 0; p < VINE_PPB; p++) {
+    const idx = baseIdx + p;
+    if (idx >= N_VINE_TOTAL) break;
+    const bt = p / (VINE_PPB - 1);
+
     const ptC = curvC.getPoint(bt);
     const ptS = curvS.getPoint(bt);
     const tanS = curvS.getTangent(bt);
 
-    // 径向展宽（末端更细）
-    const taper = 1.0 - bt * 0.5;
-    const spread = gaussRand() * 0.016 * taper;
-    vnCurvedPosX[brIdx] = ptC.x + (-tanS.y) * spread;
-    vnCurvedPosY[brIdx] = ptC.y + tanS.x * spread;
-    vnStraightPosX[brIdx] = ptS.x + (-tanS.y) * spread;
-    vnStraightPosY[brIdx] = ptS.y + tanS.x * spread;
+    // 径向展宽
+    const spread = gaussRand() * 0.018;
+    vnCurvedPosX[idx] = ptC.x + (-tanS.y) * spread;
+    vnCurvedPosY[idx] = ptC.y + tanS.x * spread;
+    vnStraightPosX[idx] = ptS.x + (-tanS.y) * spread;
+    vnStraightPosY[idx] = ptS.y + tanS.x * spread;
 
-    // Z深度：继承主藤在该位置的Z
-    vnZPos[brIdx] = vineZFns[vineId](branchSpineT) + (Math.random() - 0.5) * 0.02;
+    // Z：根据x偏移模拟前后缠绕
+    const localX = ptS.x;
+    vnZPos[idx] = Math.sin(segSpineT * Math.PI * 4 + vineId * 1.5) * 0.12
+                + (Math.random() - 0.5) * 0.02;
 
-    vnParamT[brIdx] = branchSpineT;
-    vnVineId[brIdx] = vineId;
-    vnPhase[brIdx] = vineId * 1.3 + 0.2;
+    vnParamT[idx] = segSpineT;
+    vnVineId[idx] = vineId;
+    vnPhase[idx]  = vineId * 1.3 + 0.2;
 
-    vnSizes[brIdx] = (0.042 + Math.random() * 0.018) * taper;
-    vnAlphas[brIdx] = (0.50 + Math.random() * 0.18) * taper;
-    vnColorVars[brIdx] = 0.1 + Math.random() * 0.2;
+    vnSizes[idx]  = 0.048 + Math.random() * 0.022;
+    vnAlphas[idx] = 0.60 + Math.random() * 0.25;
 
-    brIdx++;
+    const cRoll = Math.random();
+    if (cRoll < 0.08)      vnColorVars[idx] = -(0.25 + Math.random() * 0.25);
+    else if (cRoll < 0.15) vnColorVars[idx] = -(0.55 + Math.random() * 0.4);
+    else if (cRoll < 0.25) vnColorVars[idx] = 0.4 + Math.random() * 0.5;
+    else vnColorVars[idx] = (Math.random() - 0.5) * 0.15;
   }
 }
 
@@ -999,7 +900,7 @@ const vineVertexShader = /* glsl */`
 
   uniform float uBlend;
   uniform float uTime;
-  uniform vec3 uVineGrowth;  // 每根藤蔓的生长进度 (0→1)
+  uniform vec2 uVineGrowth;  // 两根藤蔓的生长进度 (0→1)
 
   varying float vAlpha;
   varying float vColorVar;
@@ -1011,8 +912,7 @@ const vineVertexShader = /* glsl */`
     vec3 pos = vec3(pos2d.x, pos2d.y, aZPos);
 
     // 触发式生长：读取JS侧传入的生长进度
-    float myGrowth = aVineId < 0.5 ? uVineGrowth.x
-                   : (aVineId < 1.5 ? uVineGrowth.y : uVineGrowth.z);
+    float myGrowth = aVineId < 0.5 ? uVineGrowth.x : uVineGrowth.y;
     float growFront = myGrowth * 1.15;
     float visible = smoothstep(growFront + 0.01, growFront - 0.12, aParamT);
 
@@ -1053,7 +953,7 @@ const vineMat = new THREE.ShaderMaterial({
     uAccent2:   { value: VINE_AC2 },
     uBlend:      { value: 0.0 },
     uTime:       { value: 0.0 },
-    uVineGrowth: { value: new THREE.Vector3(0, 0, 0) },
+    uVineGrowth: { value: new THREE.Vector2(0, 0) },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -1064,9 +964,9 @@ vinePoints.frustumCulled = false;
 spineGroup.add(vinePoints);
 
 // 藤蔓生长状态（JS侧管理，触发式动画）
-const vineGrowTriggered = [false, false, false];
-const vineGrowStartTime = [0, 0, 0];
-const vineGrowProgress  = [0, 0, 0];
+const vineGrowTriggered = [false, false];
+const vineGrowStartTime = [0, 0];
+const vineGrowProgress  = [0, 0];
 
 
 // ============================================================
@@ -1199,7 +1099,7 @@ function animate() {
   diffuseMat.uniforms.uAccent1.value.copy(ac1Color);
   diffuseMat.uniforms.uAccent2.value.copy(ac2Color);
   // 藤蔓生长状态管理：触发式动画
-  for (let v = 0; v < 3; v++) {
+  for (let v = 0; v < 2; v++) {
     if (!vineGrowTriggered[v] && smoothBlend >= VINE_GROW_THRESHOLDS[v]) {
       vineGrowTriggered[v] = true;
       vineGrowStartTime[v] = time;
@@ -1217,7 +1117,7 @@ function animate() {
       vineGrowProgress[v] = Math.max(0.0, 1.0 - elapsed / VINE_GROW_DURATION);
     }
   }
-  vineMat.uniforms.uVineGrowth.value.set(vineGrowProgress[0], vineGrowProgress[1], vineGrowProgress[2]);
+  vineMat.uniforms.uVineGrowth.value.set(vineGrowProgress[0], vineGrowProgress[1]);
   vineMat.uniforms.uBlend.value = smoothBlend;
   vineMat.uniforms.uTime.value  = time;
 
