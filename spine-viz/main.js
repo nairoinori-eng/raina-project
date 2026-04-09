@@ -722,11 +722,7 @@ spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 
 const N_VINES = 3;
 const VINE_PPV = 7000;     // 每根7000粒子，细腻质感
-// 分支藤蔓：8根手工定义路径，每根500粒子
-const N_BRANCHES = 8;
-const BRANCH_PPV = 500;
-const N_BRANCH_TOTAL = N_BRANCHES * BRANCH_PPV;
-const N_VINE_TOTAL = N_VINES * VINE_PPV + N_BRANCH_TOTAL;
+const N_VINE_TOTAL = N_VINES * VINE_PPV;
 
 // ── 藤蔓路径：相对于脊柱的偏移函数 ──
 // 每根藤蔓定义为 spinePoint(t) + perpOffset(t)
@@ -854,107 +850,6 @@ for (let v = 0; v < N_VINES; v++) {
   }
 }
 
-// ── 分支藤蔓：绝对坐标定义，精确复刻参考图 ──
-// 直接用世界坐标(x,y)定义直立态路径，弯曲态通过脊柱偏移映射
-//
-// 主藤A波峰位置（直立态）：
-//   t≈0.125 → (≈+0.42, 1.77) 右  |  t≈0.375 → (≈-0.54, 0.59) 左
-//   t≈0.625 → (≈+0.54, -0.59) 右  |  t≈0.875 → (≈-0.42, -1.77) 左
-// 主藤B波峰位置：
-//   t≈0.006 → (≈+0.30, 2.33) 右  |  t≈0.256 → (≈-0.43, 1.15) 左
-//   t≈0.506 → (≈+0.50, -0.03) 右  |  t≈0.756 → (≈-0.43, -1.21) 左
-
-// 将y坐标转换为脊柱参数t
-function yToSpineT(y) {
-  return Math.max(0, Math.min(1, (straightTopY - y) / (straightTopY - straightBotY)));
-}
-
-// 8根分支，绝对坐标（直立态）
-const branchDefs = [
-  // 1. 从藤A右峰(0.42, 1.77)分出，向右上弯曲延伸
-  { vine: 0, points: [
-    [0.42, 1.77], [0.56, 1.95], [0.62, 2.15], [0.55, 2.35], [0.40, 2.45]
-  ]},
-  // 2. 从藤B左峰(-0.43, 1.15)分出，向左上弧
-  { vine: 1, points: [
-    [-0.43, 1.15], [-0.58, 1.30], [-0.65, 1.50], [-0.55, 1.65]
-  ]},
-  // 3. 从藤A左峰(-0.54, 0.59)分出，长S弧向左下（参考图箭头1）
-  { vine: 0, points: [
-    [-0.54, 0.59], [-0.70, 0.35], [-0.80, 0.05], [-0.78, -0.25], [-0.65, -0.50], [-0.48, -0.65]
-  ]},
-  // 4. 从藤B右峰(0.50, -0.03)分出，长S弧向右下（参考图箭头2）
-  { vine: 1, points: [
-    [0.50, -0.03], [0.68, -0.25], [0.78, -0.55], [0.75, -0.85], [0.60, -1.10], [0.45, -1.25]
-  ]},
-  // 5. 从藤A右峰(0.54, -0.59)分出，中等弧向右下
-  { vine: 0, points: [
-    [0.54, -0.59], [0.68, -0.78], [0.72, -1.00], [0.62, -1.20], [0.48, -1.30]
-  ]},
-  // 6. 从藤B左峰(-0.43, -1.21)分出，向左下弧
-  { vine: 1, points: [
-    [-0.43, -1.21], [-0.58, -1.38], [-0.65, -1.58], [-0.55, -1.75], [-0.42, -1.85]
-  ]},
-  // 7. 从藤A左峰(-0.42, -1.77)分出，长弧向左下（参考图箭头3）
-  { vine: 0, points: [
-    [-0.42, -1.77], [-0.58, -1.95], [-0.68, -2.15], [-0.62, -2.35], [-0.48, -2.48]
-  ]},
-  // 8. 底部从藤B右侧分出，短弧
-  { vine: 1, points: [
-    [0.35, -1.80], [0.48, -1.95], [0.52, -2.12], [0.42, -2.25]
-  ]},
-];
-
-let branchIdx = N_VINES * VINE_PPV;
-
-for (let bi = 0; bi < branchDefs.length; bi++) {
-  const def = branchDefs[bi];
-  const vIdx = def.vine;
-  const absPts = def.points;
-
-  // 直立态曲线（绝对坐标）
-  const ctrlS = absPts.map(([x, y]) => new THREE.Vector3(x, y, 0));
-  const curvS = new THREE.CatmullRomCurve3(ctrlS);
-
-  // 弯曲态曲线：每个控制点的x加上该y位置处脊柱的弯曲偏移
-  const ctrlC = absPts.map(([x, y]) => {
-    const t = yToSpineT(y);
-    const spineX = curveCurved.getPoint(t).x;  // 弯曲态脊柱在该高度的x偏移
-    return new THREE.Vector3(x + spineX, y, 0);
-  });
-  const curvC = new THREE.CatmullRomCurve3(ctrlC);
-
-  // 分支起点的脊柱t（用于生长动画和Z深度）
-  const startT = yToSpineT(absPts[0][1]);
-
-  for (let bp = 0; bp < BRANCH_PPV; bp++) {
-    if (branchIdx >= N_VINE_TOTAL) break;
-    const bt = bp / (BRANCH_PPV - 1);
-    const ptC = curvC.getPoint(bt);
-    const ptS = curvS.getPoint(bt);
-    const btanS = curvS.getTangent(bt);
-
-    // 径向展宽（末端更细）
-    const taper = 1.0 - bt * 0.65;
-    const spread = gaussRand() * 0.014 * taper;
-    vnCurvedPosX[branchIdx] = ptC.x + (-btanS.y) * spread;
-    vnCurvedPosY[branchIdx] = ptC.y + btanS.x * spread;
-    vnStraightPosX[branchIdx] = ptS.x + (-btanS.y) * spread;
-    vnStraightPosY[branchIdx] = ptS.y + btanS.x * spread;
-    vnZPos[branchIdx] = vineZFns[vIdx](startT) + (Math.random() - 0.5) * 0.02;
-
-    vnParamT[branchIdx] = startT;
-    vnVineId[branchIdx] = vIdx;
-    vnPhase[branchIdx]  = vIdx * 1.3 + 0.2;
-
-    vnSizes[branchIdx]  = (0.040 + Math.random() * 0.015) * taper;
-    vnAlphas[branchIdx] = (0.55 + Math.random() * 0.15) * taper;
-    vnColorVars[branchIdx] = 0.15 + Math.random() * 0.25;
-
-    branchIdx++;
-  }
-}
-
 // ── GPU attributes ──
 const vnPositions = new Float32Array(N_VINE_TOTAL * 3);
 // 初始位置设为弯曲态
@@ -1039,11 +934,11 @@ const vineVertexShader = /* glsl */`
   }
 `;
 
-// 藤蔓固定配色：低饱和灰绿，不跟随blend变化，安静衬托脊柱
-const VINE_COLOR = new THREE.Color(0x4a6858);   // 灰苔绿（基色）
-const VINE_HL    = new THREE.Color(0x8aac90);   // 亮灰绿（高光）
-const VINE_AC1   = new THREE.Color(0x7a8868);   // 橄榄绿（暖调）
-const VINE_AC2   = new THREE.Color(0x3a7878);   // 灰青（冷调）
+// 藤蔓固定配色：压暗，安静衬托脊柱
+const VINE_COLOR = new THREE.Color(0x2a3d30);   // 深苔绿（基色）
+const VINE_HL    = new THREE.Color(0x507050);   // 暗灰绿（高光）
+const VINE_AC1   = new THREE.Color(0x4a5838);   // 暗橄榄（暖调）
+const VINE_AC2   = new THREE.Color(0x1e4848);   // 深青（冷调）
 
 const vineMat = new THREE.ShaderMaterial({
   vertexShader: vineVertexShader, fragmentShader,
@@ -1177,8 +1072,8 @@ function animate() {
   const breathe       = breatheCurve(time);
   const breatheExpand = 1 + breathe * 0.20;   // 横向呼吸扩张 ±20%
 
-  // 脊柱缓慢摆动 ±20°，12秒一个周期
-  spineGroup.rotation.y = Math.sin(time * 0.52) * 0.35;
+  // 脊柱缓慢摆动 ±20°，12秒一个周期（编辑模式下暂停）
+  if (!branchEditMode) spineGroup.rotation.y = Math.sin(time * 0.52) * 0.35;
 
   // ── Layer A + B：GPU-driven (uniforms only) ──────────────
   spineMat.uniforms.uBlend.value         = smoothBlend;
@@ -1331,11 +1226,160 @@ function updateDebugUI() {
 // 15. 键盘快捷键
 // ============================================================
 
+// ============================================================
+// 15b. 分支藤蔓编辑器（按B进入）
+// ============================================================
+
+let branchEditMode = false;
+const branchEditorData = [];   // 所有已完成分支 [[x,y], ...]
+let currentBranchPts = [];     // 当前正在编辑的分支
+
+// 编辑器预览用的临时 Three.js 对象
+let branchPreviewLine = null;
+let branchPreviewDots = null;
+
+function screenToWorld(mx, my) {
+  const ndc = new THREE.Vector3(
+    (mx / window.innerWidth) * 2 - 1,
+    -(my / window.innerHeight) * 2 + 1,
+    0
+  );
+  ndc.unproject(camera);
+  // 投射到 z=0 平面
+  const dir = ndc.sub(camera.position).normalize();
+  const dist = -camera.position.z / dir.z;
+  const pt = camera.position.clone().add(dir.multiplyScalar(dist));
+  return [parseFloat(pt.x.toFixed(3)), parseFloat(pt.y.toFixed(3))];
+}
+
+function updateBranchPreview() {
+  // 清除旧预览
+  if (branchPreviewLine) { scene.remove(branchPreviewLine); branchPreviewLine.geometry.dispose(); }
+  if (branchPreviewDots) { scene.remove(branchPreviewDots); branchPreviewDots.geometry.dispose(); }
+
+  const allPts = [...branchEditorData, currentBranchPts].filter(b => b.length >= 2);
+
+  // 绘制所有分支曲线（白色线条）
+  const lineVerts = [];
+  for (const branch of allPts) {
+    const curve = new THREE.CatmullRomCurve3(branch.map(([x,y]) => new THREE.Vector3(x, y, 0.5)));
+    const pts = curve.getPoints(branch.length * 20);
+    for (let i = 0; i < pts.length - 1; i++) {
+      lineVerts.push(pts[i].x, pts[i].y, pts[i].z, pts[i+1].x, pts[i+1].y, pts[i+1].z);
+    }
+  }
+  if (lineVerts.length > 0) {
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(lineVerts, 3));
+    branchPreviewLine = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: 0x00ff88, linewidth: 1 }));
+    scene.add(branchPreviewLine);
+  }
+
+  // 绘制所有控制点（红色小圆点）
+  const dotVerts = [];
+  const dotSizes = [];
+  for (const branch of [...branchEditorData, [currentBranchPts]].flat()) {
+    if (!Array.isArray(branch)) continue;
+    for (const b of (Array.isArray(branch[0]) ? [branch] : [[branch]])) {
+      // skip
+    }
+  }
+  // 简化：直接画所有点
+  const allDots = [...branchEditorData.flat(), ...currentBranchPts];
+  if (allDots.length > 0) {
+    const dg = new THREE.BufferGeometry();
+    const dp = new Float32Array(allDots.length * 3);
+    const ds = new Float32Array(allDots.length);
+    for (let i = 0; i < allDots.length; i++) {
+      dp[i*3] = allDots[i][0]; dp[i*3+1] = allDots[i][1]; dp[i*3+2] = 0.5;
+      ds[i] = 8.0;
+    }
+    dg.setAttribute('position', new THREE.BufferAttribute(dp, 3));
+    dg.setAttribute('aSize', new THREE.BufferAttribute(ds, 1));
+    branchPreviewDots = new THREE.Points(dg, new THREE.PointsMaterial({ color: 0xff4444, size: 8, sizeAttenuation: false }));
+    scene.add(branchPreviewDots);
+  }
+}
+
+function enterBranchEdit() {
+  branchEditMode = true;
+  currentBranchPts = [];
+  // 暂停脊柱旋转，方便编辑
+  spineGroup.rotation.y = 0;
+  console.log('🌿 分支编辑模式 ON — 点击放置控制点 | 回车=确认当前分支 | Z=撤销 | X=导出 | B=退出');
+}
+
+function exitBranchEdit() {
+  branchEditMode = false;
+  if (currentBranchPts.length >= 2) {
+    branchEditorData.push([...currentBranchPts]);
+  }
+  currentBranchPts = [];
+  // 清除预览
+  if (branchPreviewLine) { scene.remove(branchPreviewLine); branchPreviewLine.geometry.dispose(); branchPreviewLine = null; }
+  if (branchPreviewDots) { scene.remove(branchPreviewDots); branchPreviewDots.geometry.dispose(); branchPreviewDots = null; }
+  console.log('🌿 分支编辑模式 OFF');
+}
+
+function exportBranches() {
+  // 把当前分支也加进去
+  const all = [...branchEditorData];
+  if (currentBranchPts.length >= 2) all.push([...currentBranchPts]);
+
+  console.log('===== 分支藤蔓坐标导出 =====');
+  console.log('共 ' + all.length + ' 根分支');
+  console.log('');
+  console.log('const branchPaths = [');
+  for (let i = 0; i < all.length; i++) {
+    const pts = all[i].map(([x,y]) => `[${x}, ${y}]`).join(', ');
+    console.log(`  [${pts}],  // 分支${i+1}`);
+  }
+  console.log('];');
+  console.log('');
+  console.log('===== 复制以上内容发给开发者 =====');
+}
+
+canvas.addEventListener('click', (e) => {
+  if (!branchEditMode) return;
+  // 不在调试面板区域才处理
+  if (e.target !== canvas) return;
+  const [wx, wy] = screenToWorld(e.clientX, e.clientY);
+  currentBranchPts.push([wx, wy]);
+  console.log(`  控制点 ${currentBranchPts.length}: [${wx}, ${wy}]`);
+  updateBranchPreview();
+});
+
 document.addEventListener('keydown', (e) => {
   if (e.key === 'd' || e.key === 'D') debugPanel.classList.toggle('hidden');
   if (e.key === 'f' || e.key === 'F') {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
     else document.exitFullscreen();
+  }
+  if (e.key === 'b' || e.key === 'B') {
+    if (branchEditMode) exitBranchEdit();
+    else enterBranchEdit();
+  }
+  if (branchEditMode) {
+    if (e.key === 'Enter') {
+      if (currentBranchPts.length >= 2) {
+        branchEditorData.push([...currentBranchPts]);
+        console.log(`✅ 分支 ${branchEditorData.length} 已保存（${currentBranchPts.length}个控制点）`);
+        currentBranchPts = [];
+        updateBranchPreview();
+      } else {
+        console.log('⚠️ 至少需要2个控制点');
+      }
+    }
+    if (e.key === 'z' || e.key === 'Z') {
+      if (currentBranchPts.length > 0) {
+        const removed = currentBranchPts.pop();
+        console.log(`↩ 撤销控制点 [${removed}]`);
+        updateBranchPreview();
+      }
+    }
+    if (e.key === 'x' || e.key === 'X') {
+      exportBranches();
+    }
   }
 });
 
