@@ -722,7 +722,11 @@ spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 
 const N_VINES = 3;
 const VINE_PPV = 7000;     // 每根7000粒子，细腻质感
-const N_VINE_TOTAL = N_VINES * VINE_PPV;
+// 枝条：每根主藤8条短枝，细藤4条，每条200粒子
+const N_TENDRILS_PER_VINE = [8, 8, 4];
+const TENDRIL_PARTICLES = 200;
+const N_TENDRIL_TOTAL = (8 + 8 + 4) * TENDRIL_PARTICLES;
+const N_VINE_TOTAL = N_VINES * VINE_PPV + N_TENDRIL_TOTAL;
 
 // ── 藤蔓路径：相对于脊柱的偏移函数 ──
 // 每根藤蔓定义为 spinePoint(t) + perpOffset(t)
@@ -781,9 +785,9 @@ const vineZFns = [vineZOffsetA, vineZOffsetB, vineZOffsetC];
 // 藤蔓粗细（粒子径向展宽，小值=更集中更实）
 const vineWidths = [0.022, 0.018, 0.012];
 
-// 生长 blend 区间：一根根长出来
-const vineGrowStart = [0.15, 0.38, 0.58];
-const vineGrowEnd   = [0.55, 0.75, 0.92];
+// 生长触发阈值：blend 到达此值时触发该藤蔓的生长动画
+const VINE_GROW_THRESHOLDS = [0.25, 0.45, 0.65];
+const VINE_GROW_DURATION = 2.0;  // 生长动画持续秒数
 
 // ── 预计算每根藤蔓在 curved 和 straight 两态下的粒子位置 ──
 const vnCurvedPosX   = new Float32Array(N_VINE_TOTAL);
@@ -850,6 +854,85 @@ for (let v = 0; v < N_VINES; v++) {
   }
 }
 
+// ── 枝条粒子：在藤蔓波峰/波谷处向外延伸短枝 ──
+let tendrilIdx = N_VINES * VINE_PPV;
+
+for (let v = 0; v < N_VINES; v++) {
+  const offsetFn = vineOffsetFns[v];
+  const nTendrils = N_TENDRILS_PER_VINE[v];
+
+  for (let ti = 0; ti < nTendrils; ti++) {
+    // 沿藤蔓均匀分布枝条，避开首尾
+    const branchT = 0.08 + (ti / (nTendrils - 1)) * 0.84;
+    const offset = offsetFn(branchT);
+    const side = offset > 0 ? 1 : -1;
+    const absOff = Math.abs(offset);
+
+    // 只在偏离较大处（波峰/波谷）生成枝条
+    const branchScale = smoothstep(0.10, 0.30, absOff);
+    if (branchScale < 0.15) {
+      // 跳过但仍需填充粒子位置（设为不可见）
+      for (let bp = 0; bp < TENDRIL_PARTICLES; bp++) {
+        if (tendrilIdx < N_VINE_TOTAL) {
+          vnCurvedPosX[tendrilIdx] = 0; vnCurvedPosY[tendrilIdx] = 0;
+          vnStraightPosX[tendrilIdx] = 0; vnStraightPosY[tendrilIdx] = 0;
+          vnZPos[tendrilIdx] = 0; vnParamT[tendrilIdx] = branchT;
+          vnVineId[tendrilIdx] = v; vnPhase[tendrilIdx] = 0;
+          vnSizes[tendrilIdx] = 0; vnAlphas[tendrilIdx] = 0;
+          vnColorVars[tendrilIdx] = 0;
+          tendrilIdx++;
+        }
+      }
+      continue;
+    }
+
+    const cpC = curveCurved.getPoint(branchT);
+    const cpS = curveStraight.getPoint(branchT);
+    const tanC = curveCurved.getTangent(branchT);
+    const perpCX = -tanC.y, perpCY = tanC.x;
+
+    // 枝条方向：向外+微微向上或向下弯曲
+    const branchAngle = (Math.random() - 0.4) * 0.8;  // 微偏上
+    const branchLen = (0.10 + Math.random() * 0.08) * branchScale;
+
+    for (let bp = 0; bp < TENDRIL_PARTICLES; bp++) {
+      if (tendrilIdx >= N_VINE_TOTAL) break;
+
+      // 沿枝条长度分布（越远越稀疏）
+      const along = Math.pow(Math.random(), 0.7) * branchLen;
+      const across = gaussRand() * 0.008;  // 很窄
+
+      // 枝条弯曲：沿外侧方向 + 弯曲角度
+      const dirCX = perpCX * side * along + tanC.x * (along * branchAngle + across);
+      const dirCY = perpCY * side * along + tanC.y * (along * branchAngle + across);
+      const dirSX = side * along + across * 0;
+      const dirSY = along * branchAngle + across;
+
+      // 基点：藤蔓表面位置
+      const baseCX = perpCX * offset;
+      const baseCY = perpCY * offset;
+
+      vnCurvedPosX[tendrilIdx] = cpC.x + baseCX + dirCX;
+      vnCurvedPosY[tendrilIdx] = cpC.y + baseCY + dirCY;
+      vnStraightPosX[tendrilIdx] = cpS.x + offset + dirSX;
+      vnStraightPosY[tendrilIdx] = cpS.y + dirSY;
+      vnZPos[tendrilIdx] = vineZFns[v](branchT) + (Math.random() - 0.5) * 0.02;
+
+      vnParamT[tendrilIdx] = branchT;
+      vnVineId[tendrilIdx] = v;
+      vnPhase[tendrilIdx]  = v * 1.3 + 0.2;
+
+      // 越远越小越淡
+      const distRatio = along / branchLen;
+      vnSizes[tendrilIdx]  = (0.035 + Math.random() * 0.015) * (1.0 - distRatio * 0.5);
+      vnAlphas[tendrilIdx] = (0.45 + Math.random() * 0.15) * (1.0 - distRatio * 0.6) * branchScale;
+      vnColorVars[tendrilIdx] = 0.2 + Math.random() * 0.3;  // 偏高光
+
+      tendrilIdx++;
+    }
+  }
+}
+
 // ── GPU attributes ──
 const vnPositions = new Float32Array(N_VINE_TOTAL * 3);
 // 初始位置设为弯曲态
@@ -881,7 +964,7 @@ vineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(vnParamT, 1));
 vineGeo.setAttribute('aVineId',      new THREE.BufferAttribute(vnVineId, 1));
 vineGeo.setAttribute('aVinePhase',   new THREE.BufferAttribute(vnPhase, 1));
 
-// 藤蔓 vertex shader：GPU双态插值 + 一根根生长 + 能量脉冲
+// 藤蔓 vertex shader：GPU双态插值 + 触发式生长 + 能量脉冲
 const vineVertexShader = /* glsl */`
   attribute vec2 aCurvedPos;
   attribute vec2 aStraightPos;
@@ -895,6 +978,7 @@ const vineVertexShader = /* glsl */`
 
   uniform float uBlend;
   uniform float uTime;
+  uniform vec3 uVineGrowth;  // 每根藤蔓的生长进度 (0→1)
 
   varying float vAlpha;
   varying float vColorVar;
@@ -905,13 +989,10 @@ const vineVertexShader = /* glsl */`
     vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
     vec3 pos = vec3(pos2d.x, pos2d.y, aZPos);
 
-    // 一根根生长：每根藤蔓有不同的 blend 区间
-    // vineId 0: 0.15→0.55, vineId 1: 0.38→0.75, vineId 2: 0.58→0.92
-    float growStart = 0.15 + aVineId * 0.215;
-    float growEnd   = growStart + 0.40;
-    float growProgress = clamp((uBlend - growStart) / (growEnd - growStart), 0.0, 1.0);
-    // 从上到下生长（aParamT=0 先出现）
-    float growFront = growProgress * 1.15;  // 略超1.0确保尾部完全显现
+    // 触发式生长：读取JS侧传入的生长进度
+    float myGrowth = aVineId < 0.5 ? uVineGrowth.x
+                   : (aVineId < 1.5 ? uVineGrowth.y : uVineGrowth.z);
+    float growFront = myGrowth * 1.15;
     float visible = smoothstep(growFront + 0.01, growFront - 0.12, aParamT);
 
     // 能量脉冲：高斯光团从上往下流动
@@ -921,8 +1002,8 @@ const vineVertexShader = /* glsl */`
     // 两端渐隐
     float endFade = smoothstep(0.0, 0.04, aParamT) * smoothstep(1.0, 0.93, aParamT);
 
-    // 前后遮挡：Z<0 的粒子在骨骼后面，大幅降低亮度模拟遮挡
-    float depthFade = smoothstep(-0.12, 0.02, aZPos);  // Z<0→暗, Z>0→亮
+    // 前后遮挡：Z<0 的粒子在骨骼后面，变暗但不完全消失
+    float depthFade = 0.35 + 0.65 * smoothstep(-0.15, 0.02, aZPos);
 
     float alpha = aAlpha * visible * endFade * depthFade * (0.8 + pulse * 0.2);
     float sz    = aSize * (1.0 + pulse * 0.3);
@@ -949,8 +1030,9 @@ const vineMat = new THREE.ShaderMaterial({
     uHighlight: { value: VINE_HL },
     uAccent1:   { value: VINE_AC1 },
     uAccent2:   { value: VINE_AC2 },
-    uBlend:     { value: 0.0 },
-    uTime:      { value: 0.0 },
+    uBlend:      { value: 0.0 },
+    uTime:       { value: 0.0 },
+    uVineGrowth: { value: new THREE.Vector3(0, 0, 0) },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -959,6 +1041,11 @@ const vineMat = new THREE.ShaderMaterial({
 const vinePoints = new THREE.Points(vineGeo, vineMat);
 vinePoints.frustumCulled = false;
 spineGroup.add(vinePoints);
+
+// 藤蔓生长状态（JS侧管理，触发式动画）
+const vineGrowTriggered = [false, false, false];
+const vineGrowStartTime = [0, 0, 0];
+const vineGrowProgress  = [0, 0, 0];
 
 
 // ============================================================
@@ -1090,7 +1177,26 @@ function animate() {
   diffuseMat.uniforms.uHighlight.value.copy(hlColor);
   diffuseMat.uniforms.uAccent1.value.copy(ac1Color);
   diffuseMat.uniforms.uAccent2.value.copy(ac2Color);
-  // 藤蔓动画（颜色固定，不跟随blend）
+  // 藤蔓生长状态管理：触发式动画
+  for (let v = 0; v < 3; v++) {
+    if (!vineGrowTriggered[v] && smoothBlend >= VINE_GROW_THRESHOLDS[v]) {
+      vineGrowTriggered[v] = true;
+      vineGrowStartTime[v] = time;
+    }
+    if (vineGrowTriggered[v] && smoothBlend < VINE_GROW_THRESHOLDS[v] - 0.05) {
+      // blend 回落，触发收回动画
+      vineGrowTriggered[v] = false;
+      vineGrowStartTime[v] = time - (1.0 - vineGrowProgress[v]) * VINE_GROW_DURATION;
+    }
+    if (vineGrowTriggered[v]) {
+      vineGrowProgress[v] = Math.min(1.0, (time - vineGrowStartTime[v]) / VINE_GROW_DURATION);
+    } else {
+      // 收回：从当前进度反向
+      const elapsed = time - vineGrowStartTime[v];
+      vineGrowProgress[v] = Math.max(0.0, 1.0 - elapsed / VINE_GROW_DURATION);
+    }
+  }
+  vineMat.uniforms.uVineGrowth.value.set(vineGrowProgress[0], vineGrowProgress[1], vineGrowProgress[2]);
   vineMat.uniforms.uBlend.value = smoothBlend;
   vineMat.uniforms.uTime.value  = time;
 
