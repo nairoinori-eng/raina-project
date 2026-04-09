@@ -722,11 +722,11 @@ spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 
 const N_VINES = 3;
 const VINE_PPV = 7000;     // 每根7000粒子，细腻质感
-// 枝条：每根主藤8条短枝，细藤4条，每条200粒子
-const N_TENDRILS_PER_VINE = [8, 8, 4];
-const TENDRIL_PARTICLES = 200;
-const N_TENDRIL_TOTAL = (8 + 8 + 4) * TENDRIL_PARTICLES;
-const N_VINE_TOTAL = N_VINES * VINE_PPV + N_TENDRIL_TOTAL;
+// 分支藤蔓：8根手工定义路径，每根500粒子
+const N_BRANCHES = 8;
+const BRANCH_PPV = 500;
+const N_BRANCH_TOTAL = N_BRANCHES * BRANCH_PPV;
+const N_VINE_TOTAL = N_VINES * VINE_PPV + N_BRANCH_TOTAL;
 
 // ── 藤蔓路径：相对于脊柱的偏移函数 ──
 // 每根藤蔓定义为 spinePoint(t) + perpOffset(t)
@@ -854,108 +854,96 @@ for (let v = 0; v < N_VINES; v++) {
   }
 }
 
-// ── 分支藤蔓：从主藤蔓分叉出的长弧形副藤 ──
-// 参考图中的分支是长弧线，从主藤波峰处向外弯曲延伸
-let tendrilIdx = N_VINES * VINE_PPV;
+// ── 分支藤蔓：8根手工定义路径，精确复刻参考图 ──
+// 每根分支定义为：从哪根主藤(vine)的哪个位置(t)分出，
+// 控制点用 [outward, along] 定义（outward=远离脊柱方向，along=沿脊柱向下）
+// 会自动根据该位置主藤在左/右侧确定方向，并跟随脊柱弯曲变形
 
-for (let v = 0; v < N_VINES; v++) {
-  const offsetFn = vineOffsetFns[v];
-  const nTendrils = N_TENDRILS_PER_VINE[v];
+const branchDefs = [
+  // 1. 顶部左上：从主藤A顶部分出，向外上方弯曲，末端微回卷
+  { vine: 0, t: 0.06, pts: [[0.12, 0.15], [0.32, 0.25], [0.52, 0.18], [0.55, -0.05]] },
+  // 2. 上部右侧：从主藤B分出，较短，向右微上弯
+  { vine: 1, t: 0.14, pts: [[0.12, 0.06], [0.25, 0.02], [0.30, -0.10]] },
+  // 3. 左侧长S弧（参考图箭头1）：从主藤A ~24%处，向外下方长弧线
+  { vine: 0, t: 0.24, pts: [[0.15, -0.06], [0.38, -0.20], [0.58, -0.42], [0.50, -0.62], [0.35, -0.72]] },
+  // 4. 右侧长S弧（参考图箭头2）：从主藤B ~44%处，长弧线向下
+  { vine: 1, t: 0.44, pts: [[0.18, -0.08], [0.42, -0.25], [0.56, -0.48], [0.45, -0.65], [0.30, -0.75]] },
+  // 5. 中部左侧：中等长度弧
+  { vine: 0, t: 0.56, pts: [[0.14, -0.06], [0.30, -0.20], [0.35, -0.38], [0.25, -0.48]] },
+  // 6. 右侧中等弧
+  { vine: 1, t: 0.66, pts: [[0.16, -0.08], [0.32, -0.22], [0.38, -0.40], [0.28, -0.50]] },
+  // 7. 左下长弧（参考图箭头3）：从主藤A ~78%处，长弧线向下
+  { vine: 0, t: 0.78, pts: [[0.16, -0.12], [0.40, -0.30], [0.55, -0.52], [0.42, -0.68], [0.28, -0.75]] },
+  // 8. 底部右侧：较短
+  { vine: 1, t: 0.86, pts: [[0.13, -0.06], [0.24, -0.18], [0.22, -0.32]] },
+];
 
-  for (let ti = 0; ti < nTendrils; ti++) {
-    const branchT = 0.08 + (ti / (nTendrils - 1)) * 0.84;
-    const offset = offsetFn(branchT);
-    const side = offset > 0 ? 1 : -1;
-    const absOff = Math.abs(offset);
+let branchIdx = N_VINES * VINE_PPV;
 
-    // 只在偏离较大处生成分支
-    const branchScale = smoothstep(0.10, 0.30, absOff);
-    if (branchScale < 0.15) {
-      for (let bp = 0; bp < TENDRIL_PARTICLES; bp++) {
-        if (tendrilIdx < N_VINE_TOTAL) {
-          vnCurvedPosX[tendrilIdx] = 0; vnCurvedPosY[tendrilIdx] = 0;
-          vnStraightPosX[tendrilIdx] = 0; vnStraightPosY[tendrilIdx] = 0;
-          vnZPos[tendrilIdx] = 0; vnParamT[tendrilIdx] = branchT;
-          vnVineId[tendrilIdx] = v; vnPhase[tendrilIdx] = 0;
-          vnSizes[tendrilIdx] = 0; vnAlphas[tendrilIdx] = 0;
-          vnColorVars[tendrilIdx] = 0;
-          tendrilIdx++;
-        }
-      }
-      continue;
-    }
+for (let bi = 0; bi < branchDefs.length; bi++) {
+  const def = branchDefs[bi];
+  const { vine: vIdx, t: startT, pts } = def;
+  const offsetFn = vineOffsetFns[vIdx];
+  const vineOff = offsetFn(startT);
+  const outSign = vineOff > 0 ? 1 : -1;  // 主藤在脊柱左侧or右侧
 
-    // 分支起点：主藤蔓表面
-    const cpC = curveCurved.getPoint(branchT);
-    const cpS = curveStraight.getPoint(branchT);
-    const tanC = curveCurved.getTangent(branchT);
-    const perpCX = -tanC.y, perpCY = tanC.x;
+  // 脊柱在 startT 处的位置和方向（两态）
+  const cpC = curveCurved.getPoint(startT);
+  const cpS = curveStraight.getPoint(startT);
+  const tanC = curveCurved.getTangent(startT);
+  const perpCX = -tanC.y, perpCY = tanC.x;  // 弯曲态法向
 
-    // 构建弧形分支曲线（4个控制点）
-    // 从主藤表面出发，先向外延伸，然后弯曲向上或向下
-    const branchLen = (0.25 + Math.random() * 0.20) * branchScale;
-    const curlDir = (Math.random() < 0.5 ? 1 : -1);  // 上弯或下弯
-    const curlAmount = 0.3 + Math.random() * 0.4;  // 弯曲程度
+  // 分支起点 = 主藤蔓表面
+  const startCX = cpC.x + perpCX * vineOff;
+  const startCY = cpC.y + perpCY * vineOff;
+  const startSX = cpS.x + vineOff;
+  const startSY = cpS.y;
 
-    // 弯曲态的4个控制点（相对于脊柱曲线坐标系）
-    const p0cx = cpC.x + perpCX * offset;
-    const p0cy = cpC.y + perpCY * offset;
-    const p1cx = p0cx + perpCX * side * branchLen * 0.35;
-    const p1cy = p0cy + perpCY * side * branchLen * 0.35 + tanC.y * curlDir * branchLen * 0.1;
-    const p2cx = p0cx + perpCX * side * branchLen * 0.7 + tanC.x * curlDir * branchLen * curlAmount * 0.4;
-    const p2cy = p0cy + perpCY * side * branchLen * 0.7 + tanC.y * curlDir * branchLen * curlAmount * 0.4;
-    const p3cx = p0cx + perpCX * side * branchLen * 0.85 + tanC.x * curlDir * branchLen * curlAmount;
-    const p3cy = p0cy + perpCY * side * branchLen * 0.85 + tanC.y * curlDir * branchLen * curlAmount;
+  // 构建控制点（两态）
+  // outward 方向：弯曲态沿法向 * outSign，直立态沿 x * outSign
+  // along 方向：弯曲态沿切线（向下=负切线方向），直立态沿 -y
+  const ctrlC = [new THREE.Vector3(startCX, startCY, 0)];
+  const ctrlS = [new THREE.Vector3(startSX, startSY, 0)];
 
-    // 直立态的4个控制点
-    const p0sx = cpS.x + offset;
-    const p0sy = cpS.y;
-    const p1sx = p0sx + side * branchLen * 0.35;
-    const p1sy = p0sy + curlDir * branchLen * 0.1;
-    const p2sx = p0sx + side * branchLen * 0.7;
-    const p2sy = p0sy + curlDir * branchLen * curlAmount * 0.4;
-    const p3sx = p0sx + side * branchLen * 0.85;
-    const p3sy = p0sy + curlDir * branchLen * curlAmount;
+  for (const [outward, along] of pts) {
+    // 弯曲态
+    const cx = startCX + perpCX * outSign * outward + tanC.x * (-along);
+    const cy = startCY + perpCY * outSign * outward + tanC.y * (-along);
+    ctrlC.push(new THREE.Vector3(cx, cy, 0));
+    // 直立态
+    const sx = startSX + outSign * outward;
+    const sy = startSY + (-along);  // along正=向下=y减小
+    ctrlS.push(new THREE.Vector3(sx, sy, 0));
+  }
 
-    // 用 CatmullRom 生成弧形路径
-    const branchCurveC = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(p0cx, p0cy, 0), new THREE.Vector3(p1cx, p1cy, 0),
-      new THREE.Vector3(p2cx, p2cy, 0), new THREE.Vector3(p3cx, p3cy, 0),
-    ]);
-    const branchCurveS = new THREE.CatmullRomCurve3([
-      new THREE.Vector3(p0sx, p0sy, 0), new THREE.Vector3(p1sx, p1sy, 0),
-      new THREE.Vector3(p2sx, p2sy, 0), new THREE.Vector3(p3sx, p3sy, 0),
-    ]);
+  const curvC = new THREE.CatmullRomCurve3(ctrlC);
+  const curvS = new THREE.CatmullRomCurve3(ctrlS);
 
-    for (let bp = 0; bp < TENDRIL_PARTICLES; bp++) {
-      if (tendrilIdx >= N_VINE_TOTAL) break;
+  for (let bp = 0; bp < BRANCH_PPV; bp++) {
+    if (branchIdx >= N_VINE_TOTAL) break;
+    const bt = bp / (BRANCH_PPV - 1);
+    const ptC = curvC.getPoint(bt);
+    const ptS = curvS.getPoint(bt);
+    const btanC = curvC.getTangent(bt);
 
-      // 沿弧形路径分布
-      const bt = bp / (TENDRIL_PARTICLES - 1);
-      const ptC = branchCurveC.getPoint(bt);
-      const ptS = branchCurveS.getPoint(bt);
-      const btanC = branchCurveC.getTangent(bt);
+    // 径向展宽（末端更细）
+    const taper = 1.0 - bt * 0.6;
+    const spread = gaussRand() * 0.014 * taper;
+    vnCurvedPosX[branchIdx] = ptC.x + (-btanC.y) * spread;
+    vnCurvedPosY[branchIdx] = ptC.y + btanC.x * spread;
+    vnStraightPosX[branchIdx] = ptS.x + spread;
+    vnStraightPosY[branchIdx] = ptS.y;
+    vnZPos[branchIdx] = vineZFns[vIdx](startT) + (Math.random() - 0.5) * 0.02;
 
-      // 细微径向展宽
-      const spread = gaussRand() * 0.012 * (1.0 - bt * 0.5);  // 末端更细
-      vnCurvedPosX[tendrilIdx] = ptC.x + (-btanC.y) * spread;
-      vnCurvedPosY[tendrilIdx] = ptC.y + btanC.x * spread;
-      vnStraightPosX[tendrilIdx] = ptS.x + spread;
-      vnStraightPosY[tendrilIdx] = ptS.y;
-      vnZPos[tendrilIdx] = vineZFns[v](branchT) + (Math.random() - 0.5) * 0.02;
+    vnParamT[branchIdx] = startT;
+    vnVineId[branchIdx] = vIdx;
+    vnPhase[branchIdx]  = vIdx * 1.3 + 0.2;
 
-      vnParamT[tendrilIdx] = branchT;
-      vnVineId[tendrilIdx] = v;
-      vnPhase[tendrilIdx]  = v * 1.3 + 0.2;
+    vnSizes[branchIdx]  = (0.040 + Math.random() * 0.015) * taper;
+    vnAlphas[branchIdx] = (0.55 + Math.random() * 0.15) * taper;
+    vnColorVars[branchIdx] = 0.15 + Math.random() * 0.25;
 
-      // 越远越小越淡（自然渐隐）
-      const taper = 1.0 - bt * 0.7;
-      vnSizes[tendrilIdx]  = (0.040 + Math.random() * 0.015) * taper * branchScale;
-      vnAlphas[tendrilIdx] = (0.50 + Math.random() * 0.15) * taper * branchScale;
-      vnColorVars[tendrilIdx] = 0.15 + Math.random() * 0.25;
-
-      tendrilIdx++;
-    }
+    branchIdx++;
   }
 }
 
