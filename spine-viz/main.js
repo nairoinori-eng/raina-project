@@ -722,7 +722,52 @@ spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 
 const N_VINES = 3;
 const VINE_PPV = 7000;     // 每根7000粒子，细腻质感
-const N_VINE_TOTAL = N_VINES * VINE_PPV;
+// 分支藤蔓（从SVG提取的40段路径）
+const BRANCH_PPB = 300;   // 每段分支300粒子
+const SVG_BRANCH_PATHS = [
+[[0.2991,2.124],[0.2632,1.9561],[0.1748,1.8077]],
+[[-0.1511,1.5776],[-0.1601,1.494],[-0.1606,1.4095],[-0.1245,1.3343]],
+[[0.0019,1.0574],[0.0512,1.0794],[0.0721,1.1275],[0.1152,1.1029]],
+[[-0.2473,0.747],[-0.2602,0.8115],[-0.2941,0.9444],[-0.2738,0.8117],[-0.2732,0.6707],[-0.2851,0.6138],[-0.2844,0.4743],[-0.241,0.4486],[-0.254,0.5869],[-0.2211,0.7237],[-0.1633,0.8523],[-0.0629,0.9427],[-0.0928,0.9522],[-0.0243,1.0054],[-0.1126,0.9732],[-0.1961,0.8596],[-0.2375,0.7612],[-0.1572,0.8775],[-0.1205,0.9306]],
+[[0.0019,0.9831],[0.0311,0.9829],[0.0274,0.9709],[0.0001,0.9638]],
+[[0.0019,-0.1578],[0.0706,-0.0639],[0.0606,-0.0049],[0.0887,-0.1157]],
+[[0.0019,-0.2103],[0.1425,-0.1589],[0.2548,-0.0837],[0.2205,-0.1487],[0.3615,-0.0986]],
+[[0.3734,-0.0835],[0.3966,-0.0813],[0.4152,-0.0888],[0.4383,-0.0917]],
+[[0.4608,-0.0791],[0.532,-0.0841],[0.6066,-0.0966],[0.5752,-0.0859]],
+[[-0.3872,-1.1151],[-0.3847,-0.9729],[-0.3509,-0.8366],[-0.3051,-0.7037],[-0.2762,-0.5645],[-0.1842,-0.481],[-0.163,-0.4377],[-0.104,-0.3141]],
+[[0.2117,-0.984],[0.2264,-1.1009],[0.2722,-1.2277],[0.306,-1.3664]],
+[[-0.3872,-1.1151],[-0.3849,-1.0908],[-0.3809,-1.111],[-0.3791,-1.1347]],
+[[-0.3916,-1.1413],[-0.4385,-1.2326],[-0.4128,-1.272],[-0.4328,-1.3058]],
+[[0.2554,-1.3337],[0.2558,-1.3699],[0.2524,-1.4063],[0.2472,-1.4407]],
+[[-0.2298,-1.7402],[-0.2382,-1.832],[-0.2522,-1.9982],[-0.2087,-2.134],[-0.1528,-2.247],[-0.0374,-2.3389],[-0.1459,-2.2116],[-0.0998,-2.0818],[-0.0277,-2.0037],[-0.1693,-2.0928],[-0.2227,-1.9799],[-0.1671,-1.824],[-0.0448,-1.7114],[-0.1083,-1.7104],[-0.2151,-1.8199],[-0.1676,-1.6591],[-0.0958,-1.5072],[-0.0243,-1.3555],[-0.0773,-1.4255],[-0.1263,-1.4933],[-0.0972,-1.3539],[-0.1513,-1.5128],[-0.2113,-1.6697],[-0.1887,-1.6543],[-0.1533,-1.574],[-0.0903,-1.6282],[-0.0803,-1.7207],[-0.135,-1.8107],[-0.234,-1.9465],[-0.2429,-1.9587]],
+[[0.0019,-1.6265],[0.0892,-1.5748],[0.1663,-1.5105],[0.2432,-1.4471]],
+[[0.1068,-1.5916],[0.1338,-1.5646],[0.1623,-1.5391],[0.1913,-1.5142]],
+[[0.0019,-1.985],[0.0835,-1.948],[0.1562,-1.8947],[0.2163,-1.8278]],
+[[-0.2429,-1.9587],[-0.2386,-1.9371],[-0.2353,-1.9153],[-0.2338,-1.8933]],
+[[0.0019,-2.0199],[0.0863,-2.0018],[0.1023,-2.0111],[0.0191,-2.0339]],
+[[-0.2167,-2.0462],[-0.2205,-2.0182],[-0.2211,-1.99],[-0.2186,-1.9619]],
+[[-0.0025,2.2245],[0.0498,2.2624],[0.0513,2.2129],[0.1464,2.2548]],
+[[-0.1686,2.0496],[-0.1255,2.2044],[-0.1517,2.1073],[-0.1246,2.0506]],
+[[-0.3959,1.9273],[-0.4302,2.0321],[-0.4894,2.1259],[-0.5591,2.2125]],
+[[-0.3894,1.9491],[-0.4016,1.913],[-0.4033,1.9322],[-0.3735,1.7804],[-0.3523,1.6272],[-0.3392,1.5867]],
+[[-0.2298,1.9447],[-0.2714,1.8242],[-0.291,1.7097],[-0.312,1.5838]],
+[[-0.3304,1.6781],[-0.3392,1.5107],[-0.3186,1.3445],[-0.2587,1.2035]],
+[[-0.326,1.5164],[-0.32,1.5223],[-0.3204,1.4917],[-0.3186,1.4611]],
+[[-0.291,1.3197],[-0.305,1.3641],[-0.3181,1.4087],[-0.3333,1.4496]],
+[[-0.2735,1.2104],[-0.2312,1.1624],[-0.184,1.1196],[-0.138,1.0917]],
+[[0.0019,0.6727],[0.0692,0.7329],[0.0757,0.7],[0.0104,0.6375]],
+[[-0.2211,0.4629],[-0.1123,0.5669],[-0.084,0.5931],[-0.1505,0.4583],[-0.1757,0.3204],[-0.207,0.3246]],
+[[-0.2211,0.4629],[-0.1847,0.4575],[-0.2118,0.3106]],
+[[-0.2342,0.4367],[-0.2404,0.3817],[-0.2312,0.327],[-0.227,0.2805]],
+[[0.2292,-0.3939],[0.2176,-0.3737],[0.2073,-0.3528],[0.205,-0.3327]],
+[[0.2947,-0.5206],[0.2704,-0.4531],[0.2601,-0.5827],[0.2249,-0.6999]],
+[[-0.2298,-1.0976],[-0.2527,-1.1731],[-0.2604,-1.2515],[-0.2706,-1.319]],
+[[-0.1948,-1.4954],[-0.26,-1.6271],[-0.2827,-1.7732],[-0.2605,-1.9132]],
+[[0.1592,-2.1817],[0.1543,-2.093],[0.218,-2.1109],[0.2664,-2.0111]],
+[[0.1461,-2.1992],[0.1157,-2.2341],[0.1018,-2.2614],[0.1399,-2.2379]],
+];
+const N_BRANCH_TOTAL = SVG_BRANCH_PATHS.length * BRANCH_PPB;
+const N_VINE_TOTAL = N_VINES * VINE_PPV + N_BRANCH_TOTAL;
 
 // ── 藤蔓路径：相对于脊柱的偏移函数 ──
 // 每根藤蔓定义为 spinePoint(t) + perpOffset(t)
@@ -847,6 +892,65 @@ for (let v = 0; v < N_VINES; v++) {
     else if (cRoll < 0.15) vnColorVars[idx] = -(0.55 + Math.random() * 0.4);
     else if (cRoll < 0.30) vnColorVars[idx] = 0.4 + Math.random() * 0.5;
     else vnColorVars[idx] = (Math.random() - 0.5) * 0.15;
+  }
+}
+
+// ── 分支藤蔓粒子（从SVG路径生成）──
+// y坐标转脊柱参数t
+function yToSpineT(y) {
+  return Math.max(0, Math.min(1, (straightTopY - y) / (straightTopY - straightBotY)));
+}
+
+let brIdx = N_VINES * VINE_PPV;
+for (let bi = 0; bi < SVG_BRANCH_PATHS.length; bi++) {
+  const pts = SVG_BRANCH_PATHS[bi];
+  if (pts.length < 2) { brIdx += BRANCH_PPB; continue; }
+
+  // 直立态CatmullRom曲线
+  const ctrlS = pts.map(([x, y]) => new THREE.Vector3(x, y, 0));
+  const curvS = new THREE.CatmullRomCurve3(ctrlS);
+
+  // 弯曲态：每个控制点按y高度加脊柱x偏移
+  const ctrlC = pts.map(([x, y]) => {
+    const t = yToSpineT(y);
+    const spineX = curveCurved.getPoint(t).x;
+    return new THREE.Vector3(x + spineX, y, 0);
+  });
+  const curvC = new THREE.CatmullRomCurve3(ctrlC);
+
+  // 分支属于哪根主藤（SVG1=前21段→vine0, SVG2=后19段→vine1）
+  const vineId = bi < 21 ? 0 : 1;
+  // 分支的大致脊柱t（用中间点的y）
+  const midY = pts[Math.floor(pts.length / 2)][1];
+  const branchSpineT = yToSpineT(midY);
+
+  for (let bp = 0; bp < BRANCH_PPB; bp++) {
+    if (brIdx >= N_VINE_TOTAL) break;
+    const bt = bp / (BRANCH_PPB - 1);
+    const ptC = curvC.getPoint(bt);
+    const ptS = curvS.getPoint(bt);
+    const tanS = curvS.getTangent(bt);
+
+    // 径向展宽（末端更细）
+    const taper = 1.0 - bt * 0.5;
+    const spread = gaussRand() * 0.016 * taper;
+    vnCurvedPosX[brIdx] = ptC.x + (-tanS.y) * spread;
+    vnCurvedPosY[brIdx] = ptC.y + tanS.x * spread;
+    vnStraightPosX[brIdx] = ptS.x + (-tanS.y) * spread;
+    vnStraightPosY[brIdx] = ptS.y + tanS.x * spread;
+
+    // Z深度：继承主藤在该位置的Z
+    vnZPos[brIdx] = vineZFns[vineId](branchSpineT) + (Math.random() - 0.5) * 0.02;
+
+    vnParamT[brIdx] = branchSpineT;
+    vnVineId[brIdx] = vineId;
+    vnPhase[brIdx] = vineId * 1.3 + 0.2;
+
+    vnSizes[brIdx] = (0.042 + Math.random() * 0.018) * taper;
+    vnAlphas[brIdx] = (0.50 + Math.random() * 0.18) * taper;
+    vnColorVars[brIdx] = 0.1 + Math.random() * 0.2;
+
+    brIdx++;
   }
 }
 
@@ -1072,8 +1176,8 @@ function animate() {
   const breathe       = breatheCurve(time);
   const breatheExpand = 1 + breathe * 0.20;   // 横向呼吸扩张 ±20%
 
-  // 脊柱缓慢摆动 ±20°，12秒一个周期（编辑模式下暂停）
-  if (!branchEditMode) spineGroup.rotation.y = Math.sin(time * 0.52) * 0.35;
+  // 脊柱缓慢摆动 ±20°，12秒一个周期
+  spineGroup.rotation.y = Math.sin(time * 0.52) * 0.35;
 
   // ── Layer A + B：GPU-driven (uniforms only) ──────────────
   spineMat.uniforms.uBlend.value         = smoothBlend;
@@ -1226,160 +1330,11 @@ function updateDebugUI() {
 // 15. 键盘快捷键
 // ============================================================
 
-// ============================================================
-// 15b. 分支藤蔓编辑器（按B进入）
-// ============================================================
-
-let branchEditMode = false;
-const branchEditorData = [];   // 所有已完成分支 [[x,y], ...]
-let currentBranchPts = [];     // 当前正在编辑的分支
-
-// 编辑器预览用的临时 Three.js 对象
-let branchPreviewLine = null;
-let branchPreviewDots = null;
-
-function screenToWorld(mx, my) {
-  const ndc = new THREE.Vector3(
-    (mx / window.innerWidth) * 2 - 1,
-    -(my / window.innerHeight) * 2 + 1,
-    0
-  );
-  ndc.unproject(camera);
-  // 投射到 z=0 平面
-  const dir = ndc.sub(camera.position).normalize();
-  const dist = -camera.position.z / dir.z;
-  const pt = camera.position.clone().add(dir.multiplyScalar(dist));
-  return [parseFloat(pt.x.toFixed(3)), parseFloat(pt.y.toFixed(3))];
-}
-
-function updateBranchPreview() {
-  // 清除旧预览
-  if (branchPreviewLine) { scene.remove(branchPreviewLine); branchPreviewLine.geometry.dispose(); }
-  if (branchPreviewDots) { scene.remove(branchPreviewDots); branchPreviewDots.geometry.dispose(); }
-
-  const allPts = [...branchEditorData, currentBranchPts].filter(b => b.length >= 2);
-
-  // 绘制所有分支曲线（白色线条）
-  const lineVerts = [];
-  for (const branch of allPts) {
-    const curve = new THREE.CatmullRomCurve3(branch.map(([x,y]) => new THREE.Vector3(x, y, 0.5)));
-    const pts = curve.getPoints(branch.length * 20);
-    for (let i = 0; i < pts.length - 1; i++) {
-      lineVerts.push(pts[i].x, pts[i].y, pts[i].z, pts[i+1].x, pts[i+1].y, pts[i+1].z);
-    }
-  }
-  if (lineVerts.length > 0) {
-    const lineGeo = new THREE.BufferGeometry();
-    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(lineVerts, 3));
-    branchPreviewLine = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: 0x00ff88, linewidth: 1 }));
-    scene.add(branchPreviewLine);
-  }
-
-  // 绘制所有控制点（红色小圆点）
-  const dotVerts = [];
-  const dotSizes = [];
-  for (const branch of [...branchEditorData, [currentBranchPts]].flat()) {
-    if (!Array.isArray(branch)) continue;
-    for (const b of (Array.isArray(branch[0]) ? [branch] : [[branch]])) {
-      // skip
-    }
-  }
-  // 简化：直接画所有点
-  const allDots = [...branchEditorData.flat(), ...currentBranchPts];
-  if (allDots.length > 0) {
-    const dg = new THREE.BufferGeometry();
-    const dp = new Float32Array(allDots.length * 3);
-    const ds = new Float32Array(allDots.length);
-    for (let i = 0; i < allDots.length; i++) {
-      dp[i*3] = allDots[i][0]; dp[i*3+1] = allDots[i][1]; dp[i*3+2] = 0.5;
-      ds[i] = 8.0;
-    }
-    dg.setAttribute('position', new THREE.BufferAttribute(dp, 3));
-    dg.setAttribute('aSize', new THREE.BufferAttribute(ds, 1));
-    branchPreviewDots = new THREE.Points(dg, new THREE.PointsMaterial({ color: 0xff4444, size: 8, sizeAttenuation: false }));
-    scene.add(branchPreviewDots);
-  }
-}
-
-function enterBranchEdit() {
-  branchEditMode = true;
-  currentBranchPts = [];
-  // 暂停脊柱旋转，方便编辑
-  spineGroup.rotation.y = 0;
-  console.log('🌿 分支编辑模式 ON — 点击放置控制点 | 回车=确认当前分支 | Z=撤销 | X=导出 | B=退出');
-}
-
-function exitBranchEdit() {
-  branchEditMode = false;
-  if (currentBranchPts.length >= 2) {
-    branchEditorData.push([...currentBranchPts]);
-  }
-  currentBranchPts = [];
-  // 清除预览
-  if (branchPreviewLine) { scene.remove(branchPreviewLine); branchPreviewLine.geometry.dispose(); branchPreviewLine = null; }
-  if (branchPreviewDots) { scene.remove(branchPreviewDots); branchPreviewDots.geometry.dispose(); branchPreviewDots = null; }
-  console.log('🌿 分支编辑模式 OFF');
-}
-
-function exportBranches() {
-  // 把当前分支也加进去
-  const all = [...branchEditorData];
-  if (currentBranchPts.length >= 2) all.push([...currentBranchPts]);
-
-  console.log('===== 分支藤蔓坐标导出 =====');
-  console.log('共 ' + all.length + ' 根分支');
-  console.log('');
-  console.log('const branchPaths = [');
-  for (let i = 0; i < all.length; i++) {
-    const pts = all[i].map(([x,y]) => `[${x}, ${y}]`).join(', ');
-    console.log(`  [${pts}],  // 分支${i+1}`);
-  }
-  console.log('];');
-  console.log('');
-  console.log('===== 复制以上内容发给开发者 =====');
-}
-
-canvas.addEventListener('click', (e) => {
-  if (!branchEditMode) return;
-  // 不在调试面板区域才处理
-  if (e.target !== canvas) return;
-  const [wx, wy] = screenToWorld(e.clientX, e.clientY);
-  currentBranchPts.push([wx, wy]);
-  console.log(`  控制点 ${currentBranchPts.length}: [${wx}, ${wy}]`);
-  updateBranchPreview();
-});
-
 document.addEventListener('keydown', (e) => {
   if (e.key === 'd' || e.key === 'D') debugPanel.classList.toggle('hidden');
   if (e.key === 'f' || e.key === 'F') {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
     else document.exitFullscreen();
-  }
-  if (e.key === 'b' || e.key === 'B') {
-    if (branchEditMode) exitBranchEdit();
-    else enterBranchEdit();
-  }
-  if (branchEditMode) {
-    if (e.key === 'Enter') {
-      if (currentBranchPts.length >= 2) {
-        branchEditorData.push([...currentBranchPts]);
-        console.log(`✅ 分支 ${branchEditorData.length} 已保存（${currentBranchPts.length}个控制点）`);
-        currentBranchPts = [];
-        updateBranchPreview();
-      } else {
-        console.log('⚠️ 至少需要2个控制点');
-      }
-    }
-    if (e.key === 'z' || e.key === 'Z') {
-      if (currentBranchPts.length > 0) {
-        const removed = currentBranchPts.pop();
-        console.log(`↩ 撤销控制点 [${removed}]`);
-        updateBranchPreview();
-      }
-    }
-    if (e.key === 'x' || e.key === 'X') {
-      exportBranches();
-    }
   }
 });
 
