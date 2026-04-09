@@ -771,8 +771,8 @@ function vineZOffset(t, vineIdx) {
        + Math.cos(t * Math.PI * 2.8 + phases[vineIdx] * 1.5) * 0.05;
 }
 
-// 藤蔓粗细（粒子径向展宽）
-const vineWidths = [0.038, 0.032, 0.020];
+// 藤蔓粗细（粒子径向展宽，小值=更集中更实）
+const vineWidths = [0.022, 0.018, 0.012];
 
 // 生长 blend 区间：一根根长出来
 const vineGrowStart = [0.15, 0.38, 0.58];
@@ -831,8 +831,8 @@ for (let v = 0; v < N_VINES; v++) {
     vnParamT[idx]  = t;
     vnVineId[idx]  = v;
     vnPhase[idx]   = pulsePhase;
-    vnSizes[idx]   = (v < 2 ? 0.028 : 0.022) + Math.random() * 0.015;
-    vnAlphas[idx]  = (v < 2 ? 0.40 : 0.30) + Math.random() * 0.15;
+    vnSizes[idx]   = (v < 2 ? 0.055 : 0.040) + Math.random() * 0.025;
+    vnAlphas[idx]  = (v < 2 ? 0.75 : 0.55) + Math.random() * 0.20;
 
     // 颜色分配
     const cRoll = Math.random();
@@ -896,8 +896,8 @@ for (let v = 0; v < N_VINES; v++) {
       vnParamT[leafIdx] = leafT;
       vnVineId[leafIdx] = v;
       vnPhase[leafIdx]  = v * 1.3 + 0.2;
-      vnSizes[leafIdx]  = 0.020 + Math.random() * 0.015;
-      vnAlphas[leafIdx] = (0.25 + Math.random() * 0.20) * leafScale;
+      vnSizes[leafIdx]  = 0.040 + Math.random() * 0.025;
+      vnAlphas[leafIdx] = (0.55 + Math.random() * 0.25) * leafScale;
       vnColorVars[leafIdx] = 0.3 + Math.random() * 0.4;  // 叶片偏高光
 
       leafIdx++;
@@ -976,8 +976,8 @@ const vineVertexShader = /* glsl */`
     // 两端渐隐
     float endFade = smoothstep(0.0, 0.04, aParamT) * smoothstep(1.0, 0.93, aParamT);
 
-    float alpha = aAlpha * visible * endFade * (0.6 + pulse * 0.4);
-    float sz    = aSize * (0.9 + pulse * 0.4);
+    float alpha = aAlpha * visible * endFade * (0.8 + pulse * 0.2);
+    float sz    = aSize * (1.0 + pulse * 0.3);
 
     vAlpha    = alpha;
     vColorVar = aColorVar + pulse * 0.3;
