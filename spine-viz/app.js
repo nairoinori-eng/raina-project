@@ -854,7 +854,8 @@ for (let v = 0; v < N_VINES; v++) {
   }
 }
 
-// ── 枝条粒子：在藤蔓波峰/波谷处向外延伸短枝 ──
+// ── 分支藤蔓：从主藤蔓分叉出的长弧形副藤 ──
+// 参考图中的分支是长弧线，从主藤波峰处向外弯曲延伸
 let tendrilIdx = N_VINES * VINE_PPV;
 
 for (let v = 0; v < N_VINES; v++) {
@@ -862,16 +863,14 @@ for (let v = 0; v < N_VINES; v++) {
   const nTendrils = N_TENDRILS_PER_VINE[v];
 
   for (let ti = 0; ti < nTendrils; ti++) {
-    // 沿藤蔓均匀分布枝条，避开首尾
     const branchT = 0.08 + (ti / (nTendrils - 1)) * 0.84;
     const offset = offsetFn(branchT);
     const side = offset > 0 ? 1 : -1;
     const absOff = Math.abs(offset);
 
-    // 只在偏离较大处（波峰/波谷）生成枝条
+    // 只在偏离较大处生成分支
     const branchScale = smoothstep(0.10, 0.30, absOff);
     if (branchScale < 0.15) {
-      // 跳过但仍需填充粒子位置（设为不可见）
       for (let bp = 0; bp < TENDRIL_PARTICLES; bp++) {
         if (tendrilIdx < N_VINE_TOTAL) {
           vnCurvedPosX[tendrilIdx] = 0; vnCurvedPosY[tendrilIdx] = 0;
@@ -886,47 +885,74 @@ for (let v = 0; v < N_VINES; v++) {
       continue;
     }
 
+    // 分支起点：主藤蔓表面
     const cpC = curveCurved.getPoint(branchT);
     const cpS = curveStraight.getPoint(branchT);
     const tanC = curveCurved.getTangent(branchT);
     const perpCX = -tanC.y, perpCY = tanC.x;
 
-    // 枝条方向：向外+微微向上或向下弯曲
-    const branchAngle = (Math.random() - 0.4) * 0.8;  // 微偏上
-    const branchLen = (0.10 + Math.random() * 0.08) * branchScale;
+    // 构建弧形分支曲线（4个控制点）
+    // 从主藤表面出发，先向外延伸，然后弯曲向上或向下
+    const branchLen = (0.25 + Math.random() * 0.20) * branchScale;
+    const curlDir = (Math.random() < 0.5 ? 1 : -1);  // 上弯或下弯
+    const curlAmount = 0.3 + Math.random() * 0.4;  // 弯曲程度
+
+    // 弯曲态的4个控制点（相对于脊柱曲线坐标系）
+    const p0cx = cpC.x + perpCX * offset;
+    const p0cy = cpC.y + perpCY * offset;
+    const p1cx = p0cx + perpCX * side * branchLen * 0.35;
+    const p1cy = p0cy + perpCY * side * branchLen * 0.35 + tanC.y * curlDir * branchLen * 0.1;
+    const p2cx = p0cx + perpCX * side * branchLen * 0.7 + tanC.x * curlDir * branchLen * curlAmount * 0.4;
+    const p2cy = p0cy + perpCY * side * branchLen * 0.7 + tanC.y * curlDir * branchLen * curlAmount * 0.4;
+    const p3cx = p0cx + perpCX * side * branchLen * 0.85 + tanC.x * curlDir * branchLen * curlAmount;
+    const p3cy = p0cy + perpCY * side * branchLen * 0.85 + tanC.y * curlDir * branchLen * curlAmount;
+
+    // 直立态的4个控制点
+    const p0sx = cpS.x + offset;
+    const p0sy = cpS.y;
+    const p1sx = p0sx + side * branchLen * 0.35;
+    const p1sy = p0sy + curlDir * branchLen * 0.1;
+    const p2sx = p0sx + side * branchLen * 0.7;
+    const p2sy = p0sy + curlDir * branchLen * curlAmount * 0.4;
+    const p3sx = p0sx + side * branchLen * 0.85;
+    const p3sy = p0sy + curlDir * branchLen * curlAmount;
+
+    // 用 CatmullRom 生成弧形路径
+    const branchCurveC = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(p0cx, p0cy, 0), new THREE.Vector3(p1cx, p1cy, 0),
+      new THREE.Vector3(p2cx, p2cy, 0), new THREE.Vector3(p3cx, p3cy, 0),
+    ]);
+    const branchCurveS = new THREE.CatmullRomCurve3([
+      new THREE.Vector3(p0sx, p0sy, 0), new THREE.Vector3(p1sx, p1sy, 0),
+      new THREE.Vector3(p2sx, p2sy, 0), new THREE.Vector3(p3sx, p3sy, 0),
+    ]);
 
     for (let bp = 0; bp < TENDRIL_PARTICLES; bp++) {
       if (tendrilIdx >= N_VINE_TOTAL) break;
 
-      // 沿枝条长度分布（越远越稀疏）
-      const along = Math.pow(Math.random(), 0.7) * branchLen;
-      const across = gaussRand() * 0.008;  // 很窄
+      // 沿弧形路径分布
+      const bt = bp / (TENDRIL_PARTICLES - 1);
+      const ptC = branchCurveC.getPoint(bt);
+      const ptS = branchCurveS.getPoint(bt);
+      const btanC = branchCurveC.getTangent(bt);
 
-      // 枝条弯曲：沿外侧方向 + 弯曲角度
-      const dirCX = perpCX * side * along + tanC.x * (along * branchAngle + across);
-      const dirCY = perpCY * side * along + tanC.y * (along * branchAngle + across);
-      const dirSX = side * along + across * 0;
-      const dirSY = along * branchAngle + across;
-
-      // 基点：藤蔓表面位置
-      const baseCX = perpCX * offset;
-      const baseCY = perpCY * offset;
-
-      vnCurvedPosX[tendrilIdx] = cpC.x + baseCX + dirCX;
-      vnCurvedPosY[tendrilIdx] = cpC.y + baseCY + dirCY;
-      vnStraightPosX[tendrilIdx] = cpS.x + offset + dirSX;
-      vnStraightPosY[tendrilIdx] = cpS.y + dirSY;
+      // 细微径向展宽
+      const spread = gaussRand() * 0.012 * (1.0 - bt * 0.5);  // 末端更细
+      vnCurvedPosX[tendrilIdx] = ptC.x + (-btanC.y) * spread;
+      vnCurvedPosY[tendrilIdx] = ptC.y + btanC.x * spread;
+      vnStraightPosX[tendrilIdx] = ptS.x + spread;
+      vnStraightPosY[tendrilIdx] = ptS.y;
       vnZPos[tendrilIdx] = vineZFns[v](branchT) + (Math.random() - 0.5) * 0.02;
 
       vnParamT[tendrilIdx] = branchT;
       vnVineId[tendrilIdx] = v;
       vnPhase[tendrilIdx]  = v * 1.3 + 0.2;
 
-      // 越远越小越淡
-      const distRatio = along / branchLen;
-      vnSizes[tendrilIdx]  = (0.035 + Math.random() * 0.015) * (1.0 - distRatio * 0.5);
-      vnAlphas[tendrilIdx] = (0.45 + Math.random() * 0.15) * (1.0 - distRatio * 0.6) * branchScale;
-      vnColorVars[tendrilIdx] = 0.2 + Math.random() * 0.3;  // 偏高光
+      // 越远越小越淡（自然渐隐）
+      const taper = 1.0 - bt * 0.7;
+      vnSizes[tendrilIdx]  = (0.040 + Math.random() * 0.015) * taper * branchScale;
+      vnAlphas[tendrilIdx] = (0.50 + Math.random() * 0.15) * taper * branchScale;
+      vnColorVars[tendrilIdx] = 0.15 + Math.random() * 0.25;
 
       tendrilIdx++;
     }
@@ -1002,8 +1028,8 @@ const vineVertexShader = /* glsl */`
     // 两端渐隐
     float endFade = smoothstep(0.0, 0.04, aParamT) * smoothstep(1.0, 0.93, aParamT);
 
-    // 前后遮挡：Z<0 的粒子在骨骼后面，变暗但不完全消失
-    float depthFade = 0.35 + 0.65 * smoothstep(-0.15, 0.02, aZPos);
+    // 前后遮挡：Z<0 的粒子在骨骼后面，明显变暗
+    float depthFade = 0.15 + 0.85 * smoothstep(-0.15, 0.02, aZPos);
 
     float alpha = aAlpha * visible * endFade * depthFade * (0.8 + pulse * 0.2);
     float sz    = aSize * (1.0 + pulse * 0.3);
