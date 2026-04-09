@@ -854,85 +854,93 @@ for (let v = 0; v < N_VINES; v++) {
   }
 }
 
-// ── 分支藤蔓：8根手工定义路径，精确复刻参考图 ──
-// 每根分支定义为：从哪根主藤(vine)的哪个位置(t)分出，
-// 控制点用 [outward, along] 定义（outward=远离脊柱方向，along=沿脊柱向下）
-// 会自动根据该位置主藤在左/右侧确定方向，并跟随脊柱弯曲变形
+// ── 分支藤蔓：绝对坐标定义，精确复刻参考图 ──
+// 直接用世界坐标(x,y)定义直立态路径，弯曲态通过脊柱偏移映射
+//
+// 主藤A波峰位置（直立态）：
+//   t≈0.125 → (≈+0.42, 1.77) 右  |  t≈0.375 → (≈-0.54, 0.59) 左
+//   t≈0.625 → (≈+0.54, -0.59) 右  |  t≈0.875 → (≈-0.42, -1.77) 左
+// 主藤B波峰位置：
+//   t≈0.006 → (≈+0.30, 2.33) 右  |  t≈0.256 → (≈-0.43, 1.15) 左
+//   t≈0.506 → (≈+0.50, -0.03) 右  |  t≈0.756 → (≈-0.43, -1.21) 左
 
+// 将y坐标转换为脊柱参数t
+function yToSpineT(y) {
+  return Math.max(0, Math.min(1, (straightTopY - y) / (straightTopY - straightBotY)));
+}
+
+// 8根分支，绝对坐标（直立态）
 const branchDefs = [
-  // 1. 顶部左上：从主藤A顶部分出，向外上方弯曲，末端微回卷
-  { vine: 0, t: 0.06, pts: [[0.12, 0.15], [0.32, 0.25], [0.52, 0.18], [0.55, -0.05]] },
-  // 2. 上部右侧：从主藤B分出，较短，向右微上弯
-  { vine: 1, t: 0.14, pts: [[0.12, 0.06], [0.25, 0.02], [0.30, -0.10]] },
-  // 3. 左侧长S弧（参考图箭头1）：从主藤A ~24%处，向外下方长弧线
-  { vine: 0, t: 0.24, pts: [[0.15, -0.06], [0.38, -0.20], [0.58, -0.42], [0.50, -0.62], [0.35, -0.72]] },
-  // 4. 右侧长S弧（参考图箭头2）：从主藤B ~44%处，长弧线向下
-  { vine: 1, t: 0.44, pts: [[0.18, -0.08], [0.42, -0.25], [0.56, -0.48], [0.45, -0.65], [0.30, -0.75]] },
-  // 5. 中部左侧：中等长度弧
-  { vine: 0, t: 0.56, pts: [[0.14, -0.06], [0.30, -0.20], [0.35, -0.38], [0.25, -0.48]] },
-  // 6. 右侧中等弧
-  { vine: 1, t: 0.66, pts: [[0.16, -0.08], [0.32, -0.22], [0.38, -0.40], [0.28, -0.50]] },
-  // 7. 左下长弧（参考图箭头3）：从主藤A ~78%处，长弧线向下
-  { vine: 0, t: 0.78, pts: [[0.16, -0.12], [0.40, -0.30], [0.55, -0.52], [0.42, -0.68], [0.28, -0.75]] },
-  // 8. 底部右侧：较短
-  { vine: 1, t: 0.86, pts: [[0.13, -0.06], [0.24, -0.18], [0.22, -0.32]] },
+  // 1. 从藤A右峰(0.42, 1.77)分出，向右上弯曲延伸
+  { vine: 0, points: [
+    [0.42, 1.77], [0.56, 1.95], [0.62, 2.15], [0.55, 2.35], [0.40, 2.45]
+  ]},
+  // 2. 从藤B左峰(-0.43, 1.15)分出，向左上弧
+  { vine: 1, points: [
+    [-0.43, 1.15], [-0.58, 1.30], [-0.65, 1.50], [-0.55, 1.65]
+  ]},
+  // 3. 从藤A左峰(-0.54, 0.59)分出，长S弧向左下（参考图箭头1）
+  { vine: 0, points: [
+    [-0.54, 0.59], [-0.70, 0.35], [-0.80, 0.05], [-0.78, -0.25], [-0.65, -0.50], [-0.48, -0.65]
+  ]},
+  // 4. 从藤B右峰(0.50, -0.03)分出，长S弧向右下（参考图箭头2）
+  { vine: 1, points: [
+    [0.50, -0.03], [0.68, -0.25], [0.78, -0.55], [0.75, -0.85], [0.60, -1.10], [0.45, -1.25]
+  ]},
+  // 5. 从藤A右峰(0.54, -0.59)分出，中等弧向右下
+  { vine: 0, points: [
+    [0.54, -0.59], [0.68, -0.78], [0.72, -1.00], [0.62, -1.20], [0.48, -1.30]
+  ]},
+  // 6. 从藤B左峰(-0.43, -1.21)分出，向左下弧
+  { vine: 1, points: [
+    [-0.43, -1.21], [-0.58, -1.38], [-0.65, -1.58], [-0.55, -1.75], [-0.42, -1.85]
+  ]},
+  // 7. 从藤A左峰(-0.42, -1.77)分出，长弧向左下（参考图箭头3）
+  { vine: 0, points: [
+    [-0.42, -1.77], [-0.58, -1.95], [-0.68, -2.15], [-0.62, -2.35], [-0.48, -2.48]
+  ]},
+  // 8. 底部从藤B右侧分出，短弧
+  { vine: 1, points: [
+    [0.35, -1.80], [0.48, -1.95], [0.52, -2.12], [0.42, -2.25]
+  ]},
 ];
 
 let branchIdx = N_VINES * VINE_PPV;
 
 for (let bi = 0; bi < branchDefs.length; bi++) {
   const def = branchDefs[bi];
-  const { vine: vIdx, t: startT, pts } = def;
-  const offsetFn = vineOffsetFns[vIdx];
-  const vineOff = offsetFn(startT);
-  const outSign = vineOff > 0 ? 1 : -1;  // 主藤在脊柱左侧or右侧
+  const vIdx = def.vine;
+  const absPts = def.points;
 
-  // 脊柱在 startT 处的位置和方向（两态）
-  const cpC = curveCurved.getPoint(startT);
-  const cpS = curveStraight.getPoint(startT);
-  const tanC = curveCurved.getTangent(startT);
-  const perpCX = -tanC.y, perpCY = tanC.x;  // 弯曲态法向
-
-  // 分支起点 = 主藤蔓表面
-  const startCX = cpC.x + perpCX * vineOff;
-  const startCY = cpC.y + perpCY * vineOff;
-  const startSX = cpS.x + vineOff;
-  const startSY = cpS.y;
-
-  // 构建控制点（两态）
-  // outward 方向：弯曲态沿法向 * outSign，直立态沿 x * outSign
-  // along 方向：弯曲态沿切线（向下=负切线方向），直立态沿 -y
-  const ctrlC = [new THREE.Vector3(startCX, startCY, 0)];
-  const ctrlS = [new THREE.Vector3(startSX, startSY, 0)];
-
-  for (const [outward, along] of pts) {
-    // 弯曲态
-    const cx = startCX + perpCX * outSign * outward + tanC.x * (-along);
-    const cy = startCY + perpCY * outSign * outward + tanC.y * (-along);
-    ctrlC.push(new THREE.Vector3(cx, cy, 0));
-    // 直立态
-    const sx = startSX + outSign * outward;
-    const sy = startSY + (-along);  // along正=向下=y减小
-    ctrlS.push(new THREE.Vector3(sx, sy, 0));
-  }
-
-  const curvC = new THREE.CatmullRomCurve3(ctrlC);
+  // 直立态曲线（绝对坐标）
+  const ctrlS = absPts.map(([x, y]) => new THREE.Vector3(x, y, 0));
   const curvS = new THREE.CatmullRomCurve3(ctrlS);
+
+  // 弯曲态曲线：每个控制点的x加上该y位置处脊柱的弯曲偏移
+  const ctrlC = absPts.map(([x, y]) => {
+    const t = yToSpineT(y);
+    const spineX = curveCurved.getPoint(t).x;  // 弯曲态脊柱在该高度的x偏移
+    return new THREE.Vector3(x + spineX, y, 0);
+  });
+  const curvC = new THREE.CatmullRomCurve3(ctrlC);
+
+  // 分支起点的脊柱t（用于生长动画和Z深度）
+  const startT = yToSpineT(absPts[0][1]);
 
   for (let bp = 0; bp < BRANCH_PPV; bp++) {
     if (branchIdx >= N_VINE_TOTAL) break;
     const bt = bp / (BRANCH_PPV - 1);
     const ptC = curvC.getPoint(bt);
     const ptS = curvS.getPoint(bt);
-    const btanC = curvC.getTangent(bt);
+    const btanS = curvS.getTangent(bt);
 
     // 径向展宽（末端更细）
-    const taper = 1.0 - bt * 0.6;
+    const taper = 1.0 - bt * 0.65;
     const spread = gaussRand() * 0.014 * taper;
-    vnCurvedPosX[branchIdx] = ptC.x + (-btanC.y) * spread;
-    vnCurvedPosY[branchIdx] = ptC.y + btanC.x * spread;
-    vnStraightPosX[branchIdx] = ptS.x + spread;
-    vnStraightPosY[branchIdx] = ptS.y;
+    vnCurvedPosX[branchIdx] = ptC.x + (-btanS.y) * spread;
+    vnCurvedPosY[branchIdx] = ptC.y + btanS.x * spread;
+    vnStraightPosX[branchIdx] = ptS.x + (-btanS.y) * spread;
+    vnStraightPosY[branchIdx] = ptS.y + btanS.x * spread;
     vnZPos[branchIdx] = vineZFns[vIdx](startT) + (Math.random() - 0.5) * 0.02;
 
     vnParamT[branchIdx] = startT;
