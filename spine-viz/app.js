@@ -764,12 +764,23 @@ function vineOffsetC(t) {
 
 const vineOffsetFns = [vineOffsetA, vineOffsetB, vineOffsetC];
 
-// Z方向偏移（深度感，让藤蔓有前后穿插）
-function vineZOffset(t, vineIdx) {
-  const phases = [0.0, 1.2, 2.8];
-  return Math.sin(t * Math.PI * 4.5 + phases[vineIdx]) * 0.10
-       + Math.cos(t * Math.PI * 2.8 + phases[vineIdx] * 1.5) * 0.05;
+// Z方向偏移 — 与横向偏移成90°相位差，形成真实缠绕
+// 横向用 sin(ωt+φ)，Z 用 cos(ωt+φ)，这样：
+//   横向=0（穿越脊柱）时 Z 最大或最小（前方或后方）
+//   横向=极值（远离脊柱）时 Z≈0（侧面）
+function vineZOffsetA(t) {
+  const env = vineEnvelope(t) * 0.18;
+  return env * Math.cos(t * Math.PI * 4 + 0.3);  // 与 vineOffsetA 同频同相位
 }
+function vineZOffsetB(t) {
+  const env = vineEnvelope(t) * 0.16;
+  return env * Math.cos(t * Math.PI * 4 + 0.3 + 0.45);  // 与 vineOffsetB 同频同相位
+}
+function vineZOffsetC(t) {
+  const env = vineEnvelope(t) * 0.10;
+  return env * Math.cos(t * Math.PI * 5.2 + 1.8);  // 与 vineOffsetC 同频同相位
+}
+const vineZFns = [vineZOffsetA, vineZOffsetB, vineZOffsetC];
 
 // 藤蔓粗细（粒子径向展宽，小值=更集中更实）
 const vineWidths = [0.022, 0.018, 0.012];
@@ -825,8 +836,8 @@ for (let v = 0; v < N_VINES; v++) {
     vnStraightPosX[idx] = cpStraight.x + totalOffset;
     vnStraightPosY[idx] = cpStraight.y;
 
-    // Z深度
-    vnZPos[idx] = vineZOffset(t, v) + (Math.random() - 0.5) * 0.015;
+    // Z深度：与横向偏移90°相位差，形成缠绕
+    vnZPos[idx] = vineZFns[v](t) + (Math.random() - 0.5) * 0.015;
 
     vnParamT[idx]  = t;
     vnVineId[idx]  = v;
@@ -891,7 +902,7 @@ for (let v = 0; v < N_VINES; v++) {
       vnCurvedPosY[leafIdx] = cpC.y + baseOffCY + leafDirCY;
       vnStraightPosX[leafIdx] = cpS.x + baseOffSX + leafDirSX;
       vnStraightPosY[leafIdx] = cpS.y + baseOffSY + leafDirSY;
-      vnZPos[leafIdx] = vineZOffset(leafT, v) + (Math.random() - 0.5) * 0.03;
+      vnZPos[leafIdx] = vineZFns[v](leafT) + (Math.random() - 0.5) * 0.03;
 
       vnParamT[leafIdx] = leafT;
       vnVineId[leafIdx] = v;
@@ -976,7 +987,10 @@ const vineVertexShader = /* glsl */`
     // 两端渐隐
     float endFade = smoothstep(0.0, 0.04, aParamT) * smoothstep(1.0, 0.93, aParamT);
 
-    float alpha = aAlpha * visible * endFade * (0.8 + pulse * 0.2);
+    // 前后遮挡：Z<0 的粒子在骨骼后面，大幅降低亮度模拟遮挡
+    float depthFade = smoothstep(-0.12, 0.02, aZPos);  // Z<0→暗, Z>0→亮
+
+    float alpha = aAlpha * visible * endFade * depthFade * (0.8 + pulse * 0.2);
     float sz    = aSize * (1.0 + pulse * 0.3);
 
     vAlpha    = alpha;
