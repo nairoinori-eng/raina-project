@@ -722,10 +722,7 @@ spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 
 const N_VINES = 3;
 const VINE_PPV = 7000;     // 每根7000粒子，细腻质感
-const N_LEAF_PER_VINE = [18, 16, 10];  // 每根藤蔓的叶片数
-const LEAF_PARTICLES = 120;  // 每片叶子的粒子数
-const N_LEAF_TOTAL = (18 + 16 + 10) * LEAF_PARTICLES;  // 叶片总粒子
-const N_VINE_TOTAL = N_VINES * VINE_PPV + N_LEAF_TOTAL;
+const N_VINE_TOTAL = N_VINES * VINE_PPV;
 
 // ── 藤蔓路径：相对于脊柱的偏移函数 ──
 // 每根藤蔓定义为 spinePoint(t) + perpOffset(t)
@@ -737,28 +734,27 @@ function vineEnvelope(t) {
   return 0.6 + 0.4 * Math.sin(t * Math.PI);  // 0.6→1.0→0.6
 }
 
-// 藤蔓A：主藤1 — 左起，2个完整周期
+// 藤蔓A：主藤1 — 左起，~1.5个完整周期（更疏朗）
 function vineOffsetA(t) {
   const env = vineEnvelope(t) * 0.42;
-  // 主频 + 谐波，制造不完全均匀的曲线美感
-  const wave = Math.sin(t * Math.PI * 4 + 0.3)
-             + 0.15 * Math.sin(t * Math.PI * 7.2 + 1.0);
+  const wave = Math.sin(t * Math.PI * 3.0 + 0.3)
+             + 0.15 * Math.sin(t * Math.PI * 5.5 + 1.0);
   return env * wave;
 }
 
-// 藤蔓B：主藤2 — 与A小相位差，形成并行绳索感
+// 藤蔓B：主藤2 — 与A更大的相位差（~90°），明显错位
 function vineOffsetB(t) {
   const env = vineEnvelope(t) * 0.38;
-  const wave = Math.sin(t * Math.PI * 4 + 0.3 + 0.45)  // 相位差~26°
-             + 0.18 * Math.sin(t * Math.PI * 6.8 + 2.1);
+  const wave = Math.sin(t * Math.PI * 3.0 + 0.3 + 1.5)  // 相位差~86°
+             + 0.18 * Math.sin(t * Math.PI * 5.2 + 2.8);
   return env * wave;
 }
 
 // 藤蔓C：细藤 — 更贴近脊柱，稍快频率
 function vineOffsetC(t) {
   const env = vineEnvelope(t) * 0.22;
-  const wave = Math.sin(t * Math.PI * 5.2 + 1.8)
-             + 0.20 * Math.sin(t * Math.PI * 8.5 + 0.5);
+  const wave = Math.sin(t * Math.PI * 4.0 + 1.8)
+             + 0.20 * Math.sin(t * Math.PI * 7.0 + 0.5);
   return env * wave;
 }
 
@@ -770,15 +766,15 @@ const vineOffsetFns = [vineOffsetA, vineOffsetB, vineOffsetC];
 //   横向=极值（远离脊柱）时 Z≈0（侧面）
 function vineZOffsetA(t) {
   const env = vineEnvelope(t) * 0.18;
-  return env * Math.cos(t * Math.PI * 4 + 0.3);  // 与 vineOffsetA 同频同相位
+  return env * Math.cos(t * Math.PI * 3.0 + 0.3);
 }
 function vineZOffsetB(t) {
   const env = vineEnvelope(t) * 0.16;
-  return env * Math.cos(t * Math.PI * 4 + 0.3 + 0.45);  // 与 vineOffsetB 同频同相位
+  return env * Math.cos(t * Math.PI * 3.0 + 0.3 + 1.5);
 }
 function vineZOffsetC(t) {
   const env = vineEnvelope(t) * 0.10;
-  return env * Math.cos(t * Math.PI * 5.2 + 1.8);  // 与 vineOffsetC 同频同相位
+  return env * Math.cos(t * Math.PI * 4.0 + 1.8);
 }
 const vineZFns = [vineZOffsetA, vineZOffsetB, vineZOffsetC];
 
@@ -851,68 +847,6 @@ for (let v = 0; v < N_VINES; v++) {
     else if (cRoll < 0.15) vnColorVars[idx] = -(0.55 + Math.random() * 0.4);
     else if (cRoll < 0.30) vnColorVars[idx] = 0.4 + Math.random() * 0.5;
     else vnColorVars[idx] = (Math.random() - 0.5) * 0.15;
-  }
-}
-
-// ── 叶片粒子：在藤蔓远离脊柱最远点处生成 ──
-let leafIdx = N_VINES * VINE_PPV;  // 叶片粒子起始索引
-
-for (let v = 0; v < N_VINES; v++) {
-  const offsetFn = vineOffsetFns[v];
-  const nLeaves = N_LEAF_PER_VINE[v];
-
-  // 找到藤蔓波峰/波谷位置（远离脊柱的极值点）
-  for (let li = 0; li < nLeaves; li++) {
-    // 沿藤蔓均匀分布叶片，避开首尾
-    const leafT = 0.06 + (li / (nLeaves - 1)) * 0.88;
-    const offset = offsetFn(leafT);
-    const side = offset > 0 ? 1 : -1;
-    const absOff = Math.abs(offset);
-
-    // 只在偏离较大处生成叶片（远离脊柱 = 叶片多）
-    const leafScale = smoothstep(0.08, 0.25, absOff);
-    if (leafScale < 0.1) { leafIdx += LEAF_PARTICLES; continue; }
-
-    const cpC = curveCurved.getPoint(leafT);
-    const cpS = curveStraight.getPoint(leafT);
-    const tanC = curveCurved.getTangent(leafT);
-
-    // 叶片方向：从藤蔓位置向外延伸
-    const perpCX = -tanC.y, perpCY = tanC.x;
-    // 叶片基点（藤蔓表面）
-    const baseOffCX = perpCX * offset;
-    const baseOffCY = perpCY * offset;
-    const baseOffSX = offset;
-    const baseOffSY = 0;
-
-    for (let lp = 0; lp < LEAF_PARTICLES; lp++) {
-      if (leafIdx >= N_VINE_TOTAL) break;
-
-      // 叶片形状：椭圆分布，沿外侧方向伸展
-      const along = (Math.random() * 0.8 + 0.2) * 0.12 * leafScale;  // 沿外侧方向
-      const across = gaussRand() * 0.025 * leafScale;  // 横向窄
-
-      // 叶片偏移（相对于藤蔓基点）
-      const leafDirCX = perpCX * side * along + tanC.x * across;
-      const leafDirCY = perpCY * side * along + tanC.y * across;
-      const leafDirSX = side * along;
-      const leafDirSY = across;
-
-      vnCurvedPosX[leafIdx] = cpC.x + baseOffCX + leafDirCX;
-      vnCurvedPosY[leafIdx] = cpC.y + baseOffCY + leafDirCY;
-      vnStraightPosX[leafIdx] = cpS.x + baseOffSX + leafDirSX;
-      vnStraightPosY[leafIdx] = cpS.y + baseOffSY + leafDirSY;
-      vnZPos[leafIdx] = vineZFns[v](leafT) + (Math.random() - 0.5) * 0.03;
-
-      vnParamT[leafIdx] = leafT;
-      vnVineId[leafIdx] = v;
-      vnPhase[leafIdx]  = v * 1.3 + 0.2;
-      vnSizes[leafIdx]  = 0.040 + Math.random() * 0.025;
-      vnAlphas[leafIdx] = (0.55 + Math.random() * 0.25) * leafScale;
-      vnColorVars[leafIdx] = 0.3 + Math.random() * 0.4;  // 叶片偏高光
-
-      leafIdx++;
-    }
   }
 }
 
@@ -1002,13 +936,19 @@ const vineVertexShader = /* glsl */`
   }
 `;
 
+// 藤蔓固定配色：低饱和灰绿，不跟随blend变化，安静衬托脊柱
+const VINE_COLOR = new THREE.Color(0x4a6858);   // 灰苔绿（基色）
+const VINE_HL    = new THREE.Color(0x8aac90);   // 亮灰绿（高光）
+const VINE_AC1   = new THREE.Color(0x7a8868);   // 橄榄绿（暖调）
+const VINE_AC2   = new THREE.Color(0x3a7878);   // 灰青（冷调）
+
 const vineMat = new THREE.ShaderMaterial({
   vertexShader: vineVertexShader, fragmentShader,
   uniforms: {
-    uColor:     { value: COLOR_DARK.clone() },
-    uHighlight: { value: HL_DARK.clone() },
-    uAccent1:   { value: AC1_DARK.clone() },
-    uAccent2:   { value: AC2_DARK.clone() },
+    uColor:     { value: VINE_COLOR },
+    uHighlight: { value: VINE_HL },
+    uAccent1:   { value: VINE_AC1 },
+    uAccent2:   { value: VINE_AC2 },
     uBlend:     { value: 0.0 },
     uTime:      { value: 0.0 },
   },
@@ -1150,11 +1090,7 @@ function animate() {
   diffuseMat.uniforms.uHighlight.value.copy(hlColor);
   diffuseMat.uniforms.uAccent1.value.copy(ac1Color);
   diffuseMat.uniforms.uAccent2.value.copy(ac2Color);
-  // 藤蔓颜色 + 动画
-  vineMat.uniforms.uColor.value.copy(blendColor);
-  vineMat.uniforms.uHighlight.value.copy(hlColor);
-  vineMat.uniforms.uAccent1.value.copy(ac1Color);
-  vineMat.uniforms.uAccent2.value.copy(ac2Color);
+  // 藤蔓动画（颜色固定，不跟随blend）
   vineMat.uniforms.uBlend.value = smoothBlend;
   vineMat.uniforms.uTime.value  = time;
 
