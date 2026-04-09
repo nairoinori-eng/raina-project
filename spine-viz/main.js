@@ -734,27 +734,27 @@ function vineEnvelope(t) {
   return 0.6 + 0.4 * Math.sin(t * Math.PI);  // 0.6→1.0→0.6
 }
 
-// 藤蔓A：主藤1 — 左起，~1.5个完整周期（更疏朗）
+// 藤蔓A：主藤1 — 2个完整周期，振幅加大拉开间距
 function vineOffsetA(t) {
-  const env = vineEnvelope(t) * 0.42;
-  const wave = Math.sin(t * Math.PI * 3.0 + 0.3)
-             + 0.15 * Math.sin(t * Math.PI * 5.5 + 1.0);
+  const env = vineEnvelope(t) * 0.58;
+  const wave = Math.sin(t * Math.PI * 4 + 0.3)
+             + 0.15 * Math.sin(t * Math.PI * 7.2 + 1.0);
   return env * wave;
 }
 
-// 藤蔓B：主藤2 — 与A更大的相位差（~90°），明显错位
+// 藤蔓B：主藤2 — 与A ~90°错位
 function vineOffsetB(t) {
-  const env = vineEnvelope(t) * 0.38;
-  const wave = Math.sin(t * Math.PI * 3.0 + 0.3 + 1.5)  // 相位差~86°
-             + 0.18 * Math.sin(t * Math.PI * 5.2 + 2.8);
+  const env = vineEnvelope(t) * 0.52;
+  const wave = Math.sin(t * Math.PI * 4 + 0.3 + 1.5)
+             + 0.18 * Math.sin(t * Math.PI * 6.8 + 2.8);
   return env * wave;
 }
 
-// 藤蔓C：细藤 — 更贴近脊柱，稍快频率
+// 藤蔓C：细藤 — 贴近脊柱，稍快频率
 function vineOffsetC(t) {
-  const env = vineEnvelope(t) * 0.22;
-  const wave = Math.sin(t * Math.PI * 4.0 + 1.8)
-             + 0.20 * Math.sin(t * Math.PI * 7.0 + 0.5);
+  const env = vineEnvelope(t) * 0.30;
+  const wave = Math.sin(t * Math.PI * 5.2 + 1.8)
+             + 0.20 * Math.sin(t * Math.PI * 8.5 + 0.5);
   return env * wave;
 }
 
@@ -765,16 +765,16 @@ const vineOffsetFns = [vineOffsetA, vineOffsetB, vineOffsetC];
 //   横向=0（穿越脊柱）时 Z 最大或最小（前方或后方）
 //   横向=极值（远离脊柱）时 Z≈0（侧面）
 function vineZOffsetA(t) {
-  const env = vineEnvelope(t) * 0.18;
-  return env * Math.cos(t * Math.PI * 3.0 + 0.3);
+  const env = vineEnvelope(t) * 0.22;
+  return env * Math.cos(t * Math.PI * 4 + 0.3);
 }
 function vineZOffsetB(t) {
-  const env = vineEnvelope(t) * 0.16;
-  return env * Math.cos(t * Math.PI * 3.0 + 0.3 + 1.5);
+  const env = vineEnvelope(t) * 0.20;
+  return env * Math.cos(t * Math.PI * 4 + 0.3 + 1.5);
 }
 function vineZOffsetC(t) {
-  const env = vineEnvelope(t) * 0.10;
-  return env * Math.cos(t * Math.PI * 4.0 + 1.8);
+  const env = vineEnvelope(t) * 0.12;
+  return env * Math.cos(t * Math.PI * 5.2 + 1.8);
 }
 const vineZFns = [vineZOffsetA, vineZOffsetB, vineZOffsetC];
 
