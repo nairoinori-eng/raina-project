@@ -727,7 +727,7 @@ const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 // ── 分支尖端弥散粒子 ──
 // 从3个分支尖端弥散（位置从实际曲线计算，不硬编码）
 const DRIFT_SEG_INDICES = [7, 9, 12]; // VINE1中弥散的3个分支段
-const DRIFT_PPV = 500; // 每个发射点粒子数
+const DRIFT_PPV = 2000; // 每个发射点粒子数
 const DRIFT_TOTAL = DRIFT_SEG_INDICES.length * DRIFT_PPV;
 
 // ── 藤蔓拓扑分析（自动检测主干/分支/末梢）──
@@ -1011,8 +1011,8 @@ for (const em of driftEmitters) {
     vnParamT[particleIdx]    = pDirY;
     vnVineId[particleIdx]    = 10;
     vnPhase[particleIdx]     = Math.random();
-    vnAlphas[particleIdx]    = 0.85;
-    vnSizes[particleIdx]     = 0.038 + Math.random() * 0.010;
+    vnAlphas[particleIdx]    = 1.0;
+    vnSizes[particleIdx]     = 0.060 + Math.random() * 0.015;
     vnColorVars[particleIdx] = 0.15 + Math.random() * 0.20;
 
     particleIdx++;
@@ -1088,10 +1088,10 @@ const vineVertexShader = /* glsl */`
       float mainGrowth = uVineGrowth.x;
       float driftVisible = smoothstep(0.0, 0.3, mainGrowth);
 
-      // 前70%保持紧凑可见，后30%快速消失
-      float fadeOut = 1.0 - smoothstep(0.6, 1.0, life);
+      // 前80%保持可见，最后才淡出
+      float fadeOut = 1.0 - smoothstep(0.75, 1.0, life);
       alpha = aAlpha * driftVisible * fadeOut;
-      sz = aSize * (1.0 - life * 0.4);
+      sz = aSize * (1.0 - life * 0.3);
 
       vAlpha = alpha;
       vColorVar = aColorVar;
