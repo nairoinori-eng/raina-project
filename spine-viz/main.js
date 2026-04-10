@@ -773,7 +773,7 @@ function getSpineXAtY(y) {
 // ── 预计算曲线和弧长 ──
 const VINE_X_SCALE = 1.5;  // 藤蔓横向扩展，拉开与脊柱的距离
 const VINE_Y_SCALE = 1.35; // 藤蔓纵向拉伸，覆盖到脊柱尖端
-const VINE_WIDTHS = [0.018, 0.012, 0.007];
+const VINE_WIDTHS = [0.018, 0.007, 0.004];
 const VINE_GROW_THRESHOLDS = [0.20, 0.40, 0.60];
 const VINE_GROW_DURATION = 2.0;
 
@@ -897,11 +897,12 @@ for (let vi = 0; vi < vineData.length; vi++) {
       vnSizes[particleIdx] = baseSize + Math.random() * 0.015;
       vnAlphas[particleIdx] = (depth === 0 ? 0.90 : 0.75) + Math.random() * 0.10;
 
-      // 颜色：Z 深度驱动立体感（前暖后冷）
+      // 颜色渐变：顶部暖亮 → 底部深冷 + Z深度立体
+      const yNormColor = (vineYMax - sy) / vineYRange;
+      const gradient = 0.4 - yNormColor * 0.9; // +0.4(顶/高光) → -0.5(底/冷调)
       const z = vnZPos[particleIdx];
-      if (z > 0.05)       vnColorVars[particleIdx] = 0.3 + Math.random() * 0.4;
-      else if (z < -0.05) vnColorVars[particleIdx] = -(0.4 + Math.random() * 0.4);
-      else                vnColorVars[particleIdx] = (Math.random() - 0.5) * 0.2;
+      const zBias = z > 0.03 ? 0.15 : z < -0.03 ? -0.15 : 0.0;
+      vnColorVars[particleIdx] = gradient + zBias + (Math.random() - 0.5) * 0.12;
 
       particleIdx++;
     }
@@ -1011,11 +1012,13 @@ const vineVertexShader = /* glsl */`
     float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
 
-    // 随风摇曳：顶部摆幅大，底部小
-    float swayAmt = 0.06 * (1.0 - aParamT * 0.5);
-    float sway = sin(uTime * 0.5 + aParamT * 3.0 + aVinePhase) * swayAmt
-               + sin(uTime * 0.9 + aParamT * 1.8) * swayAmt * 0.5;
-    pos2d.x += sway;
+    // 随风摇曳：明显的慢摆 + 快颤
+    float swayAmt = 0.10 * (1.0 - aParamT * 0.4);
+    float swayX = sin(uTime * 0.4 + aParamT * 2.5 + aVinePhase) * swayAmt
+                + sin(uTime * 1.1 + aParamT * 5.0) * swayAmt * 0.25;
+    float swayY = cos(uTime * 0.3 + aParamT * 2.0) * swayAmt * 0.15;
+    pos2d.x += swayX;
+    pos2d.y += swayY;
 
     vec3 pos = vec3(pos2d.x, pos2d.y, aZPos);
 
@@ -1026,11 +1029,11 @@ const vineVertexShader = /* glsl */`
     float growFront = myGrowth * 1.15;
     float visible = smoothstep(growFront + 0.01, growFront - 0.12, aParamT);
 
-    // 光流脉冲（慢速、长间隔）
-    float pulsePos = mod(uTime * 0.07 + aVinePhase, 2.0) - 0.15;
+    // 光流脉冲
+    float pulsePos = mod(uTime * 0.13 + aVinePhase, 1.6) - 0.15;
     float pulse = exp(-pow((aParamT - pulsePos) * 5.0, 2.0));
     // 第二道微光
-    float pulsePos2 = mod(uTime * 0.12 + aVinePhase + 0.7, 2.5) - 0.1;
+    float pulsePos2 = mod(uTime * 0.20 + aVinePhase + 0.7, 1.8) - 0.1;
     float pulse2 = exp(-pow((aParamT - pulsePos2) * 7.0, 2.0)) * 0.4;
     float totalPulse = pulse + pulse2;
 
