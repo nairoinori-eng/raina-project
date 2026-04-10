@@ -718,9 +718,9 @@ const N_VINES = 2; // vineId 0=主藤蔓, 1=点缀藤蔓（共享生长）
 
 // ── 点缀藤蔓配置（薄、细、装饰性）──
 const ACCENT_VINES = [
-  { amp: 0.22, freq: 3.2, phase: Math.PI * 0.8, ppv: 9000, width: 0.012, alpha: 0.80 },
-  { amp: 0.15, freq: 4.8, phase: Math.PI * 0.2, ppv: 7000, width: 0.009, alpha: 0.70 },
-  { amp: 0.10, freq: 6.0, phase: Math.PI * 1.4, ppv: 5000, width: 0.007, alpha: 0.60 },
+  { amp: 0.22, freq: 3.2, phase: Math.PI * 0.8, ppv: 10000, width: 0.016, alpha: 0.85 },
+  { amp: 0.15, freq: 4.8, phase: Math.PI * 0.2, ppv: 8000,  width: 0.014, alpha: 0.80 },
+  { amp: 0.10, freq: 6.0, phase: Math.PI * 1.4, ppv: 6000,  width: 0.012, alpha: 0.75 },
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
@@ -947,7 +947,7 @@ for (const accent of ACCENT_VINES) {
     vnParamT[particleIdx]  = yNorm;
     vnVineId[particleIdx]  = 1; // 点缀组
     vnPhase[particleIdx]   = accent.phase;
-    vnSizes[particleIdx]   = 0.035 + Math.random() * 0.010;
+    vnSizes[particleIdx]   = 0.055 + Math.random() * 0.015;
     vnAlphas[particleIdx]  = accent.alpha + Math.random() * 0.10;
     vnColorVars[particleIdx] = (Math.random() - 0.5) * 0.15;
 
