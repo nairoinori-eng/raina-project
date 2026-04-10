@@ -1408,8 +1408,8 @@ function updateIdle(t) {
   vineMat.uniforms.uFormation.value   = 0.0;
   vineMat.uniforms.uTime.value        = t;
 
-  // 缓慢摆动
-  if (!branchEditMode) spineGroup.rotation.y = Math.sin(t * 0.52) * 0.35;
+  // IDLE 不旋转，粒子纯漂浮
+  spineGroup.rotation.y = 0;
 
   // 颜色：固定在暗蓝紫
   spineMat.uniforms.uColor.value.copy(COLOR_DARK);
