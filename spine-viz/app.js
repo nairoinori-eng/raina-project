@@ -763,7 +763,7 @@ function getSpineXAtY(y) {
 }
 
 // ── 预计算曲线和弧长 ──
-const VINE_X_SCALE = 2.8;  // 藤蔓横向扩展，拉开与脊柱的距离
+const VINE_X_SCALE = 2.0;  // 藤蔓横向扩展，拉开与脊柱的距离
 const VINE_Y_SCALE = 1.35; // 藤蔓纵向拉伸，覆盖到脊柱尖端
 const VINE_WIDTHS = [0.025, 0.016, 0.008];
 const VINE_GROW_THRESHOLDS = [0.25, 0.55];
