@@ -713,8 +713,16 @@ spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
 // 9. vineGeo (Layer F — Figma路径藤蔓系统)
 // ============================================================
 
-const VINE_ALL_SEGMENTS = [VINE1_SEGMENTS, VINE2_SEGMENTS];
-const N_VINES = 2;
+const VINE_ALL_SEGMENTS = [VINE1_SEGMENTS]; // 只保留主藤蔓
+const N_VINES = 2; // vineId 0=主藤蔓, 1=点缀藤蔓（共享生长）
+
+// ── 点缀藤蔓配置（薄、细、装饰性）──
+const ACCENT_VINES = [
+  { amp: 0.22, freq: 3.2, phase: Math.PI * 0.8, ppv: 4000, width: 0.010, alpha: 0.65 },
+  { amp: 0.15, freq: 4.8, phase: Math.PI * 0.2, ppv: 3000, width: 0.007, alpha: 0.50 },
+  { amp: 0.10, freq: 6.0, phase: Math.PI * 1.4, ppv: 2000, width: 0.005, alpha: 0.40 },
+];
+const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
 // ── 藤蔓拓扑分析（自动检测主干/分支/末梢）──
 function vineKey(pt) {
@@ -766,7 +774,7 @@ function getSpineXAtY(y) {
 const VINE_X_SCALE = 1.5;  // 藤蔓横向扩展，拉开与脊柱的距离
 const VINE_Y_SCALE = 1.35; // 藤蔓纵向拉伸，覆盖到脊柱尖端
 const VINE_WIDTHS = [0.018, 0.012, 0.007];
-const VINE_GROW_THRESHOLDS = [0.25, 0.55];
+const VINE_GROW_THRESHOLDS = [0.25, 0.40];
 const VINE_GROW_DURATION = 2.0;
 
 const VINE_BRANCH_EXTEND = 1.6; // 分支从junction向外延伸倍率
@@ -805,7 +813,7 @@ vineData.forEach(vd => {
 });
 
 const N_VINE_TOTAL = vineData.reduce((sum, vd) =>
-  sum + vd.ppvs.reduce((a, b) => a + b, 0), 0);
+  sum + vd.ppvs.reduce((a, b) => a + b, 0), 0) + ACCENT_TOTAL;
 
 // 全局 y 范围
 let vineYMax = -Infinity, vineYMin = Infinity;
@@ -897,6 +905,53 @@ for (let vi = 0; vi < N_VINES; vi++) {
 
       particleIdx++;
     }
+  }
+}
+
+// ── 点缀藤蔓（薄、细、装饰性正弦曲线）──
+function vineEnvelope(t) {
+  return 0.5 + 0.5 * Math.sin(t * Math.PI);
+}
+for (const accent of ACCENT_VINES) {
+  for (let p = 0; p < accent.ppv; p++) {
+    const t = p / (accent.ppv - 1);
+    const cpS = curveStraight.getPoint(t);
+    const cpC = curveCurved.getPoint(t);
+    const tanC = curveCurved.getTangent(t);
+
+    const env = vineEnvelope(t);
+    const offset = accent.amp * Math.sin(t * Math.PI * accent.freq + accent.phase) * env;
+    const spread = gaussRand() * accent.width;
+    const totalOff = offset + spread;
+
+    // straight: 正弦偏移
+    const sx = totalOff;
+    const sy = cpS.y;
+
+    // curved: 沿脊柱切线法向偏移
+    const perpCX = -tanC.y;
+    const perpCY =  tanC.x;
+    const cx = cpC.x + perpCX * totalOff;
+    const cy = cpC.y + perpCY * totalOff;
+
+    vnStraightX[particleIdx] = sx;
+    vnStraightY[particleIdx] = sy;
+    vnCurvedX[particleIdx]   = cx;
+    vnCurvedY[particleIdx]   = cy;
+
+    // Z: 正弦偏移的余弦分量 → 缠绕
+    const wrapZ = Math.cos(t * Math.PI * accent.freq + accent.phase) * 0.06 * env;
+    vnZPos[particleIdx] = wrapZ + gaussRand() * 0.005;
+
+    const yNorm = (vineYMax - sy) / vineYRange;
+    vnParamT[particleIdx]  = yNorm;
+    vnVineId[particleIdx]  = 1; // 点缀组
+    vnPhase[particleIdx]   = accent.phase;
+    vnSizes[particleIdx]   = 0.035 + Math.random() * 0.010;
+    vnAlphas[particleIdx]  = accent.alpha + Math.random() * 0.10;
+    vnColorVars[particleIdx] = (Math.random() - 0.5) * 0.15;
+
+    particleIdx++;
   }
 }
 
