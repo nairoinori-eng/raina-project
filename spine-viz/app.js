@@ -63,7 +63,7 @@ const N_DIFF  = 0;                     // Layer C（暂时关闭弥散粒子）
 const N_GLOW  = 0;                     // Layer D（暂时关闭辉光线）
 const N_DFULL = N_DIFF + N_GLOW;       // diffuseGeo 总量
 
-const N_AMB   = 6000;                  // Layer E（星辰感背景）
+const N_AMB   = 300;                   // Layer E
 
 
 // ============================================================
@@ -1256,13 +1256,8 @@ for (let i = 0; i < N_AMB; i++) {
   ambPos[i*3]   = ambBase[i*3];
   ambPos[i*3+1] = ambBase[i*3+1];
   ambPos[i*3+2] = ambBase[i*3+2];
-  const starRoll = Math.random();
-  ambSizes[i]    = starRoll < 0.12
-    ? 0.08 + Math.random() * 0.06       // 12% 亮星
-    : 0.025 + Math.random() * 0.035;    // 88% 星尘
-  ambAlphas[i]   = starRoll < 0.12
-    ? 0.35 + Math.random() * 0.25       // 亮星
-    : 0.15 + Math.random() * 0.18;      // 星尘
+  ambSizes[i]    = 0.010 + Math.random() * 0.015;
+  ambAlphas[i]   = 0.05  + Math.random() * 0.08;
   ambOrbitR[i]   = 0.03  + Math.random() * 0.15;
   ambOrbitSpd[i] = 0.03  + Math.random() * 0.10;
   ambOrbitPh[i]  = Math.random() * Math.PI * 2;
@@ -1278,10 +1273,10 @@ ambGeo.setAttribute('aColorVar', new THREE.BufferAttribute(ambCVars, 1));
 const ambMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
   uniforms: {
-    uColor:     { value: COLOR_DARK.clone() },
-    uHighlight: { value: HL_DARK.clone() },
-    uAccent1:   { value: AC1_DARK.clone() },
-    uAccent2:   { value: AC2_DARK.clone() },
+    uColor:     { value: new THREE.Color(0x18102e) },
+    uHighlight: { value: new THREE.Color(0x18102e) },
+    uAccent1:   { value: new THREE.Color(0x18102e) },
+    uAccent2:   { value: new THREE.Color(0x18102e) },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
