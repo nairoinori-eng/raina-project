@@ -872,6 +872,8 @@ for (let vi = 0; vi < vineData.length; vi++) {
   const pulsePhase = vi * 1.3 + 0.2;
 
   for (let si = 0; si < vd.curves.length; si++) {
+    // 弥散分支由专门的弥散系统处理，跳过
+    if (vi === 0 && DRIFT_SEG_INDICES.includes(si)) continue;
     const curve = vd.curves[si];
     const ppv = vd.ppvs[si];
     const { depth, rootAtStart } = vd.topo[si];
@@ -1010,11 +1012,21 @@ for (const si of DRIFT_SEG_INDICES) {
       px = pt.x; py = pt.y;
       tanX = tan.x * outSign; tanY = tan.y * outSign;
     } else {
-      // 超出尖端：沿切线延伸
-      const beyond = (rawT - 1.0) * 0.6;
-      px = tipPt.x + tipTan.x * outSign * beyond;
-      py = tipPt.y + tipTan.y * outSign * beyond;
-      tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
+      // 超出尖端：沿切线延伸 + 正弦蜿蜒
+      const beyond = (rawT - 1.0) * 0.7;
+      const baseX = tipPt.x + tipTan.x * outSign * beyond;
+      const baseY = tipPt.y + tipTan.y * outSign * beyond;
+      // 垂直于前进方向的蜿蜒（振幅随距离增大）
+      const perpDx = -tipTan.y * outSign;
+      const perpDy =  tipTan.x * outSign;
+      const waveAmp = 0.08 + beyond * 0.12;
+      const wave = Math.sin(beyond * 5.0 + si * 2.0);
+      px = baseX + perpDx * wave * waveAmp;
+      py = baseY + perpDy * wave * waveAmp;
+      // 切线也随蜿蜒偏转
+      const waveDeriv = Math.cos(beyond * 5.0 + si * 2.0) * waveAmp * 5.0;
+      tanX = tipTan.x * outSign + perpDx * waveDeriv * 0.3;
+      tanY = tipTan.y * outSign + perpDy * waveDeriv * 0.3;
     }
 
     // 散布：根部紧凑 → 尖端散开 → 远处很散
