@@ -63,7 +63,7 @@ const N_DIFF  = 0;                     // Layer C（暂时关闭弥散粒子）
 const N_GLOW  = 0;                     // Layer D（暂时关闭辉光线）
 const N_DFULL = N_DIFF + N_GLOW;       // diffuseGeo 总量
 
-const N_AMB   = 2000;                  // Layer E（星辰感背景）
+const N_AMB   = 6000;                  // Layer E（星辰感背景）
 
 
 // ============================================================
@@ -1256,14 +1256,13 @@ for (let i = 0; i < N_AMB; i++) {
   ambPos[i*3]   = ambBase[i*3];
   ambPos[i*3+1] = ambBase[i*3+1];
   ambPos[i*3+2] = ambBase[i*3+2];
-  // 大小差异：大部分小粒子 + 少数亮星
   const starRoll = Math.random();
-  ambSizes[i]    = starRoll < 0.10
-    ? 0.06 + Math.random() * 0.05       // 10% 亮星（较大）
-    : 0.020 + Math.random() * 0.025;    // 90% 普通星尘
-  ambAlphas[i]   = starRoll < 0.10
-    ? 0.25 + Math.random() * 0.20       // 亮星更亮
-    : 0.10 + Math.random() * 0.12;      // 普通星尘
+  ambSizes[i]    = starRoll < 0.12
+    ? 0.08 + Math.random() * 0.06       // 12% 亮星
+    : 0.025 + Math.random() * 0.035;    // 88% 星尘
+  ambAlphas[i]   = starRoll < 0.12
+    ? 0.35 + Math.random() * 0.25       // 亮星
+    : 0.15 + Math.random() * 0.18;      // 星尘
   ambOrbitR[i]   = 0.03  + Math.random() * 0.15;
   ambOrbitSpd[i] = 0.03  + Math.random() * 0.10;
   ambOrbitPh[i]  = Math.random() * Math.PI * 2;
