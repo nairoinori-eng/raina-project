@@ -885,9 +885,9 @@ for (let vi = 0; vi < N_VINES; vi++) {
       vnVineId[particleIdx] = vi;
       vnPhase[particleIdx]  = pulsePhase;
 
-      const baseSize = depth === 0 ? 0.040 : depth === 1 ? 0.032 : 0.025;
-      vnSizes[particleIdx] = baseSize + Math.random() * 0.012;
-      vnAlphas[particleIdx] = (depth === 0 ? 0.75 : 0.60) + Math.random() * 0.20;
+      const baseSize = depth === 0 ? 0.060 : depth === 1 ? 0.048 : 0.038;
+      vnSizes[particleIdx] = baseSize + Math.random() * 0.015;
+      vnAlphas[particleIdx] = (depth === 0 ? 0.90 : 0.75) + Math.random() * 0.10;
 
       // 颜色：Z 深度驱动立体感（前暖后冷）
       const z = vnZPos[particleIdx];
@@ -976,10 +976,10 @@ const vineVertexShader = /* glsl */`
 `;
 
 // 藤蔓固定配色（绿色系立体感）
-const VINE_COLOR = new THREE.Color(0x182818);
-const VINE_HL    = new THREE.Color(0x304030);
-const VINE_AC1   = new THREE.Color(0x2a3520);
-const VINE_AC2   = new THREE.Color(0x122828);
+const VINE_COLOR = new THREE.Color(0x1e3020);
+const VINE_HL    = new THREE.Color(0x3a4a38);
+const VINE_AC1   = new THREE.Color(0x354528);
+const VINE_AC2   = new THREE.Color(0x183030);
 
 const vineMat = new THREE.ShaderMaterial({
   vertexShader: vineVertexShader, fragmentShader,
