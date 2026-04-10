@@ -998,8 +998,8 @@ for (const si of DRIFT_SEG_INDICES) {
   const outSign = rootAtStart ? 1 : -1;
 
   for (let p = 0; p < DRIFT_PPV; p++) {
-    // rawT: 0=分支根部, 1=尖端, 1~3=超出尖端飘散
-    const rawT = (p / (DRIFT_PPV - 1)) * 3.0;
+    // rawT: 0=分支根部, 1=尖端, 1~5=超出尖端飘散到屏幕边缘
+    const rawT = (p / (DRIFT_PPV - 1)) * 5.0;
 
     // 计算沿曲线位置 + 超出尖端的延伸
     let px, py, tanX, tanY;
@@ -1015,26 +1015,26 @@ for (const si of DRIFT_SEG_INDICES) {
       px = curvePt.x; py = curvePt.y;
       tanX = curveTan.x * outSign; tanY = curveTan.y * outSign;
     } else {
-      // 0.95~1.0平滑过渡，1.0+延伸 + 蜿蜒
-      const beyond = Math.max(0, rawT - 0.95) * 0.7;
+      // 0.95+延伸到屏幕边缘 + 大幅蜿蜒
+      const beyond = Math.max(0, rawT - 0.95) * 1.5;
       const baseX = tipPt.x + tipTan.x * outSign * beyond;
       const baseY = tipPt.y + tipTan.y * outSign * beyond;
-      // 蜿蜒
+      // 大幅蜿蜒S曲线
       const perpDx = -tipTan.y * outSign;
       const perpDy =  tipTan.x * outSign;
-      const waveAmp = beyond * 0.15;
-      const wave = Math.sin(beyond * 5.0 + si * 2.0);
+      const waveAmp = 0.03 + beyond * 0.20;
+      const wave = Math.sin(beyond * 3.0 + si * 2.5);
       px = baseX + perpDx * wave * waveAmp;
       py = baseY + perpDy * wave * waveAmp;
       tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
     }
 
-    // 散布：始终保持线条形状，只是逐渐变宽
+    // 散布：根部实线 → 尖端微宽 → 远处渐散但仍成线
     const spreadWidth = rawT < 0.5
-      ? 0.003 + rawT * 0.010      // 根部：紧凑实线
+      ? 0.003 + rawT * 0.010
       : rawT < 1.0
-        ? 0.008 + (rawT - 0.5) * 0.014  // 尖端：微微变宽
-        : 0.015 + (rawT - 1.0) * 0.010; // 远处：仍是可见的线
+        ? 0.008 + (rawT - 0.5) * 0.012
+        : 0.014 + (rawT - 1.0) * 0.008; // 远处max≈0.046，仍可见
     const perpX = -tanY, perpY = tanX;
     const spread = gaussRand() * spreadWidth;
 
@@ -1053,9 +1053,9 @@ for (const si of DRIFT_SEG_INDICES) {
     vnVineId[particleIdx]    = 0;
     vnPhase[particleIdx]     = Math.random() * 3.0;
 
-    // 根部实 → 缓慢变淡 → 远处消失
-    const fadeAlpha = rawT < 1.0 ? 0.75 - rawT * 0.15
-                    : Math.max(0.0, 0.60 * (1.0 - (rawT - 1.0) / 2.0));
+    // 根部实 → 缓慢变淡 → 屏幕边缘消失
+    const fadeAlpha = rawT < 1.0 ? 0.75 - rawT * 0.10
+                    : Math.max(0.0, 0.65 * (1.0 - (rawT - 1.0) / 4.0));
     vnAlphas[particleIdx]    = fadeAlpha;
     vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
     vnColorVars[particleIdx] = 0.1 + Math.random() * 0.2;
