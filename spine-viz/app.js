@@ -241,15 +241,18 @@ const spineVertexShader = /* glsl */`
     float ry = fract(sin(seed * 78.233 + 0.5) * 43758.5453) * 2.0 - 1.0;
     float rz = fract(sin(seed * 45.164 + 1.0) * 43758.5453) * 2.0 - 1.0;
     vec3 scatterPos = vec3(rx * 4.5, ry * 3.2, rz * 1.2);
-    // Slow drift in scattered state
-    scatterPos.x += sin(uTime * 0.15 + seed * 6.28) * 0.35;
-    scatterPos.y += cos(uTime * 0.12 + seed * 4.0) * 0.22;
+    // Per-particle drift speed for organic floating
+    float driftSpd = 0.06 + fract(seed * 1.23) * 0.14;
+    scatterPos.x += sin(uTime * driftSpd + seed * 6.28) * 0.55;
+    scatterPos.y += cos(uTime * driftSpd * 0.75 + seed * 4.0) * 0.38;
+    scatterPos.x += sin(uTime * 0.05 + seed * 2.0) * 0.18;
 
     // ── Blend between scatter and formed ──
     vec3 pos = mix(scatterPos, formedPos, uFormation);
 
-    // ── Size: visible dust in IDLE, normal when formed ──
-    float idleSize = 0.030 + fract(seed * 3.14) * 0.035;
+    // ── Size: varied dust in IDLE (small + large mix), normal when formed ──
+    float sizeRand = fract(seed * 3.14);
+    float idleSize = 0.015 + sizeRand * sizeRand * 0.09;
     float formedSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
     float size = mix(idleSize, formedSize, uFormation);
 

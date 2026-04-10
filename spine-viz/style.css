@@ -185,8 +185,16 @@ body {
   0%, 100% { opacity: 0.6; }
   50%      { opacity: 0.8; }
 }
+.intro-title-en {
+  margin-top: 0.6rem;
+  font-size: clamp(0.9rem, 1.5vw, 1.3rem);
+  font-weight: 300; font-style: italic;
+  letter-spacing: 0.2em;
+  color: rgba(200, 190, 240, 0.45);
+  font-family: 'Georgia', 'Times New Roman', serif;
+}
 .intro-hint {
-  margin-top: 1.5rem; font-size: 0.9rem; font-weight: 300;
+  margin-top: 1.8rem; font-size: 0.9rem; font-weight: 300;
   color: rgba(180, 170, 220, 0.35); letter-spacing: 0.1em;
 }
 

@@ -36,7 +36,8 @@ export class IntroOverlays {
     this.$idle = document.createElement('div');
     this.$idle.id = 'intro-idle';
     this.$idle.innerHTML = `
-      <h1 class="intro-title">与脊柱的对话</h1>
+      <h1 class="intro-title">脊时呼吸</h1>
+      <p class="intro-title-en">Breathe With Your Spine</p>
       <p class="intro-hint">按下空格键开始体验</p>
     `;
     document.body.appendChild(this.$idle);
