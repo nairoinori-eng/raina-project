@@ -719,8 +719,8 @@ const N_VINES = 3; // vineId 0=主藤蔓, 1/2=点缀藤蔓（依次生长）
 // ── 点缀藤蔓配置（薄、细、装饰性）──
 // 螺旋缠绕：x=R*sin(θ), z=R*cos(θ)，永远在骨骼外圈
 const ACCENT_VINES = [
-  { radius: 0.32, freq: 2.5, phase: 0,              ppv: 15000, width: 0.016, alpha: 0.85 },
-  { radius: 0.26, freq: 4.0, phase: Math.PI * 0.7,  ppv: 12000, width: 0.014, alpha: 0.80 },
+  { radius: 0.34, freq: 2.5, phase: Math.PI * 0.35, ppv: 15000, width: 0.016, alpha: 0.85 },
+  { radius: 0.26, freq: 3.5, phase: Math.PI * 1.30, ppv: 12000, width: 0.014, alpha: 0.80 },
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
@@ -1105,10 +1105,11 @@ const vineVertexShader = /* glsl */`
       float growFront = myGrowth * 1.15;
       float visible = smoothstep(growFront + 0.01, growFront - 0.12, aParamT);
 
-      // 光流脉冲
-      float pulsePos = mod(uTime * 0.13 + aVinePhase, 1.6) - 0.15;
+      // 光流脉冲（每根藤蔓节奏错开）
+      float pulseOff = aVineId < 0.5 ? 0.0 : aVineId < 1.5 ? 0.55 : 1.10;
+      float pulsePos = mod(uTime * 0.13 + pulseOff, 1.6) - 0.15;
       float pulse = exp(-pow((aParamT - pulsePos) * 5.0, 2.0));
-      float pulsePos2 = mod(uTime * 0.20 + aVinePhase + 0.7, 1.8) - 0.1;
+      float pulsePos2 = mod(uTime * 0.20 + pulseOff + 0.7, 1.8) - 0.1;
       float pulse2 = exp(-pow((aParamT - pulsePos2) * 7.0, 2.0)) * 0.4;
       float totalPulse = pulse + pulse2;
 
