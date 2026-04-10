@@ -763,6 +763,7 @@ function getSpineXAtY(y) {
 }
 
 // ── 预计算曲线和弧长 ──
+const VINE_X_SCALE = 2.0;  // 藤蔓横向扩展，拉开与脊柱的距离
 const VINE_WIDTHS = [0.025, 0.016, 0.008];
 const VINE_GROW_THRESHOLDS = [0.25, 0.55];
 const VINE_GROW_DURATION = 2.0;
@@ -834,10 +835,10 @@ for (let vi = 0; vi < N_VINES; vi++) {
       const pt = curve.getPointAt(t);
       const tangent = curve.getTangentAt(t);
 
-      const sx = pt.x;
+      const sx = pt.x * VINE_X_SCALE;
       const sy = pt.y;
 
-      // curved: Figma坐标 + 脊柱弯曲偏移
+      // curved: 扩展后的坐标 + 脊柱弯曲偏移
       const spineX = getSpineXAtY(sy);
       const cx = sx + spineX;
       const cy = sy;
