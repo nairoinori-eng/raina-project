@@ -719,8 +719,8 @@ const N_VINES = 3; // vineId 0=主藤蔓, 1/2=点缀藤蔓（依次生长）
 // ── 点缀藤蔓配置（薄、细、装饰性）──
 // 螺旋缠绕：x=R*sin(θ), z=R*cos(θ)，永远在骨骼外圈
 const ACCENT_VINES = [
-  { radius: 0.32, freq: 2.5, phase: 0,              ppv: 10000, width: 0.016, alpha: 0.85 },
-  { radius: 0.26, freq: 4.0, phase: Math.PI * 0.7,  ppv: 8000,  width: 0.014, alpha: 0.80 },
+  { radius: 0.32, freq: 2.5, phase: 0,              ppv: 15000, width: 0.016, alpha: 0.85 },
+  { radius: 0.26, freq: 4.0, phase: Math.PI * 0.7,  ppv: 12000, width: 0.014, alpha: 0.80 },
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
@@ -800,7 +800,7 @@ const vineData = VINE_ALL_SEGMENTS.map((segments) => {
 });
 
 // 按弧长比例分配粒子（目标 >= 21000）
-const VINE_TARGET_TOTAL = 50000;
+const VINE_TARGET_TOTAL = 80000;
 const totalArcLen = vineData.reduce((s, vd) =>
   s + vd.lengths.reduce((a, b) => a + b, 0), 0);
 
