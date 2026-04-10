@@ -727,7 +727,7 @@ const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 // ── 分支尖端弥散粒子 ──
 // 从3个分支尖端弥散（位置从实际曲线计算，不硬编码）
 const DRIFT_SEG_INDICES = [7, 9, 12]; // VINE1中弥散的3个分支段
-const DRIFT_PPV = 2000; // 每个发射点粒子数
+const DRIFT_PPV = 3000; // 每个分支弥散粒子数
 const DRIFT_TOTAL = DRIFT_SEG_INDICES.length * DRIFT_PPV;
 
 // ── 藤蔓拓扑分析（自动检测主干/分支/末梢）──
@@ -1029,10 +1029,12 @@ for (const si of DRIFT_SEG_INDICES) {
       tanY = tipTan.y * outSign + perpDy * waveDeriv * 0.3;
     }
 
-    // 散布：根部紧凑 → 尖端散开 → 远处很散
-    const spreadWidth = rawT < 0.4
-      ? 0.003 + rawT * 0.008
-      : 0.006 + (rawT - 0.4) * (rawT - 0.4) * 0.06;
+    // 散布：始终保持线条形状，只是逐渐变宽
+    const spreadWidth = rawT < 0.5
+      ? 0.003 + rawT * 0.010      // 根部：紧凑实线
+      : rawT < 1.0
+        ? 0.008 + (rawT - 0.5) * 0.014  // 尖端：微微变宽
+        : 0.015 + (rawT - 1.0) * 0.010; // 远处：仍是可见的线
     const perpX = -tanY, perpY = tanX;
     const spread = gaussRand() * spreadWidth;
 
@@ -1051,10 +1053,9 @@ for (const si of DRIFT_SEG_INDICES) {
     vnVineId[particleIdx]    = 0;
     vnPhase[particleIdx]     = Math.random() * 3.0;
 
-    // 根部不透明 → 尖端半透明 → 远处消失
-    const fadeAlpha = rawT < 0.7 ? 0.70
-                    : rawT < 1.0 ? 0.70 * (1.0 - (rawT - 0.7) * 1.2)
-                    : Math.max(0.0, 0.35 * (1.0 - (rawT - 1.0) / 2.0));
+    // 根部实 → 缓慢变淡 → 远处消失
+    const fadeAlpha = rawT < 1.0 ? 0.75 - rawT * 0.15
+                    : Math.max(0.0, 0.60 * (1.0 - (rawT - 1.0) / 2.0));
     vnAlphas[particleIdx]    = fadeAlpha;
     vnSizes[particleIdx]     = 0.038 + Math.random() * 0.010;
     vnColorVars[particleIdx] = 0.1 + Math.random() * 0.2;
