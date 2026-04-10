@@ -1018,17 +1018,18 @@ for (const si of DRIFT_SEG_INDICES) {
       px = curvePt.x; py = curvePt.y;
       tanX = curveTan.x * outSign; tanY = curveTan.y * outSign;
     } else {
-      // 0.95+延伸：主方向=切线，横向偏移=往左/右飘 + 蜿蜒
+      // 0.95+延伸：一出尖端就往左/右弯，带蜿蜒
       const beyond = Math.max(0, rawT - 0.95) * 1.2;
-      // 沿切线前进 + 横向偏移（左边→左飘，右边→右飘）
-      const lateralDrift = beyond * beyond * 0.25 * sideBias; // 二次方加速往外飘
-      const baseX = tipPt.x + tipTan.x * outSign * beyond + lateralDrift;
-      const baseY = tipPt.y + tipTan.y * outSign * beyond;
-      // 蜿蜒（垂直于飘散方向）
-      const waveAmp = 0.02 + beyond * 0.10;
-      const wave = Math.sin(beyond * 4.0 + si * 2.5);
+      // 沿切线少量前进，主要是横向飘
+      const forwardDrift = beyond * 0.3;
+      const lateralDrift = (beyond * 0.25 + beyond * beyond * 0.08) * sideBias;
+      const baseX = tipPt.x + tipTan.x * outSign * forwardDrift + lateralDrift;
+      const baseY = tipPt.y + tipTan.y * outSign * forwardDrift;
+      // 蜿蜒S曲线
+      const waveAmp = 0.03 + beyond * 0.08;
+      const wave = Math.sin(beyond * 2.5 + si * 2.5);
       px = baseX;
-      py = baseY + wave * waveAmp; // Y方向蜿蜒
+      py = baseY + wave * waveAmp;
       tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
     }
 
