@@ -774,7 +774,7 @@ function getSpineXAtY(y) {
 const VINE_X_SCALE = 1.5;  // 藤蔓横向扩展，拉开与脊柱的距离
 const VINE_Y_SCALE = 1.35; // 藤蔓纵向拉伸，覆盖到脊柱尖端
 const VINE_WIDTHS = [0.018, 0.007, 0.004];
-const VINE_GROW_THRESHOLDS = [0.20, 0.40, 0.60];
+const VINE_GROW_THRESHOLDS = [0.05, 0.10, 0.15];
 const VINE_GROW_DURATION = 2.0;
 
 const VINE_BRANCH_EXTEND = 1.6; // 分支从junction向外延伸倍率
@@ -1012,11 +1012,11 @@ const vineVertexShader = /* glsl */`
     float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
 
-    // 随风摇曳：明显的慢摆 + 快颤
-    float swayAmt = 0.10 * (1.0 - aParamT * 0.4);
-    float swayX = sin(uTime * 0.4 + aParamT * 2.5 + aVinePhase) * swayAmt
-                + sin(uTime * 1.1 + aParamT * 5.0) * swayAmt * 0.25;
-    float swayY = cos(uTime * 0.3 + aParamT * 2.0) * swayAmt * 0.15;
+    // 随风摇曳：大幅慢摆 + 快颤，沿藤蔓传播
+    float swayAmt = 0.22 * (1.0 - aParamT * 0.3);
+    float swayX = sin(uTime * 0.35 + aParamT * 6.0 + aVinePhase * 2.0) * swayAmt
+                + sin(uTime * 0.8 + aParamT * 10.0) * swayAmt * 0.2;
+    float swayY = cos(uTime * 0.25 + aParamT * 4.0) * swayAmt * 0.12;
     pos2d.x += swayX;
     pos2d.y += swayY;
 
