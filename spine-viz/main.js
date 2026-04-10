@@ -1012,11 +1012,12 @@ const vineVertexShader = /* glsl */`
     float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
 
-    // 随风摇曳：大幅慢摆 + 快颤，沿藤蔓传播
-    float swayAmt = 0.22 * (1.0 - aParamT * 0.3);
-    float swayX = sin(uTime * 0.35 + aParamT * 6.0 + aVinePhase * 2.0) * swayAmt
-                + sin(uTime * 0.8 + aParamT * 10.0) * swayAmt * 0.2;
-    float swayY = cos(uTime * 0.25 + aParamT * 4.0) * swayAmt * 0.12;
+    // 随风摇曳：X轻微水平摆，Y分支上下颤动
+    float swayBase = 1.0 - aParamT * 0.3;
+    float swayX = sin(uTime * 0.35 + aParamT * 3.0 + aVinePhase) * 0.03 * swayBase;
+    // 上下摆（分支被风吹动的感觉），沿藤蔓波浪传播
+    float swayY = sin(uTime * 0.6 + aParamT * 8.0 + aVinePhase * 2.0) * 0.06 * swayBase
+                + sin(uTime * 1.2 + aParamT * 14.0) * 0.02 * swayBase;
     pos2d.x += swayX;
     pos2d.y += swayY;
 
@@ -1040,8 +1041,10 @@ const vineVertexShader = /* glsl */`
     float endFade = smoothstep(0.0, 0.04, aParamT) * smoothstep(1.0, 0.93, aParamT);
     float depthFade = 0.25 + 0.75 * smoothstep(-0.06, 0.01, aZPos);
 
-    float alpha = aAlpha * visible * endFade * depthFade * (0.65 + totalPulse * 0.45);
-    float sz    = aSize * (1.0 + totalPulse * 0.5);
+    // 脉冲受depthFade约束：后面的粒子脉冲也暗
+    float effectivePulse = totalPulse * depthFade;
+    float alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * 0.45);
+    float sz    = aSize * (1.0 + effectivePulse * 0.5);
 
     vAlpha    = alpha;
     vColorVar = aColorVar + totalPulse * 0.5;
