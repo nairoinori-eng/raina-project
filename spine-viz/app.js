@@ -725,13 +725,10 @@ const ACCENT_VINES = [
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
 // ── 分支尖端弥散粒子 ──
-// 从3个分支尖端持续发射，shader驱动飘散
-const DRIFT_EMITTERS = [
-  { tipX: -0.85, tipY: 3.00, dirX: -0.6, dirY: 0.4, len: 1.2, count: 250 },
-  { tipX:  0.43, tipY:-0.15, dirX:  0.7, dirY: 0.2, len: 1.0, count: 250 },
-  { tipX: -0.33, tipY:-1.30, dirX: -0.5, dirY:-0.5, len: 1.0, count: 250 },
-];
-const DRIFT_TOTAL = DRIFT_EMITTERS.reduce((s, e) => s + e.count, 0);
+// 从3个分支尖端弥散（位置从实际曲线计算，不硬编码）
+const DRIFT_SEG_INDICES = [7, 9, 12]; // VINE1中弥散的3个分支段
+const DRIFT_PPV = 250; // 每个发射点粒子数
+const DRIFT_TOTAL = DRIFT_SEG_INDICES.length * DRIFT_PPV;
 
 // ── 藤蔓拓扑分析（自动检测主干/分支/末梢）──
 function vineKey(pt) {
@@ -819,6 +816,26 @@ vineData.forEach(vd => {
   vd.ppvs = vd.lengths.map(len =>
     Math.max(30, Math.round(vineTarget * len / vineLen))
   );
+});
+
+// ── 从曲线计算弥散发射点（精确位于分支尖端）──
+const driftEmitters = DRIFT_SEG_INDICES.map(si => {
+  const curve = vineData[0].curves[si];
+  const { rootAtStart } = vineData[0].topo[si];
+  const tipT = rootAtStart ? 0.998 : 0.002; // 接近端点避免边界问题
+  const tipPt = curve.getPointAt(tipT);
+  const tipTan = curve.getTangentAt(tipT);
+  // 方向：从root指向tip（向外）
+  const sign = rootAtStart ? 1 : -1;
+  const rawDx = tipTan.x * sign * VINE_X_SCALE;
+  const rawDy = tipTan.y * sign * VINE_Y_SCALE;
+  const dLen = Math.sqrt(rawDx * rawDx + rawDy * rawDy) || 1;
+  return {
+    sx: tipPt.x * VINE_X_SCALE,
+    sy: tipPt.y * VINE_Y_SCALE,
+    dx: rawDx / dLen,
+    dy: rawDy / dLen,
+  };
 });
 
 const N_VINE_TOTAL = vineData.reduce((sum, vd) =>
@@ -969,43 +986,37 @@ ACCENT_VINES.forEach((accent, accentIdx) => {
   }
 });
 
-// ── 分支尖端弥散粒子（shader驱动连续发射）──
-// aCurvedPos=起点(尖端), aStraightPos=终点(远方)
-// vineId=10 → shader识别为弥散粒子，用uTime动画
-for (const em of DRIFT_EMITTERS) {
-  const dLen = Math.sqrt(em.dirX * em.dirX + em.dirY * em.dirY);
-  const ndx = em.dirX / dLen, ndy = em.dirY / dLen;
+// ── 分支尖端弥散粒子（从曲线尖端自然化开）──
+// 位置精确对齐分支尖端，方向沿切线，粒子大小与藤蔓一致
+const DRIFT_LEN = 1.0; // 弥散距离
+for (const em of driftEmitters) {
+  const tipSpineX = getSpineXAtY(em.sy);
 
-  const tipSpineX = getSpineXAtY(em.tipY);
-  // 终点（尖端 + 方向 * 距离）
-  const farX = em.tipX + ndx * em.len;
-  const farY = em.tipY + ndy * em.len;
-  const farSpineX = getSpineXAtY(farY);
-
-  for (let p = 0; p < em.count; p++) {
-    // 每颗粒子轻微不同的方向（近端紧凑，远端散开）
-    const spreadAngle = gaussRand() * 0.25; // 微小角度偏移
+  for (let p = 0; p < DRIFT_PPV; p++) {
+    // 微小角度偏移（近端紧凑如线，远端散开）
+    const spreadAngle = gaussRand() * 0.20;
     const cA = Math.cos(spreadAngle), sA = Math.sin(spreadAngle);
-    const pDirX = ndx * cA - ndy * sA;
-    const pDirY = ndx * sA + ndy * cA;
-    const pFarX = em.tipX + pDirX * em.len;
-    const pFarY = em.tipY + pDirY * em.len;
-    const pFarSpineX = getSpineXAtY(pFarY);
+    const pDirX = em.dx * cA - em.dy * sA;
+    const pDirY = em.dx * sA + em.dy * cA;
+    const farX = em.sx + pDirX * DRIFT_LEN;
+    const farY = em.sy + pDirY * DRIFT_LEN;
+    const farSpineX = getSpineXAtY(farY);
 
-    // curvedPos = 起点（尖端弯曲态）
-    vnCurvedX[particleIdx]   = em.tipX + tipSpineX;
-    vnCurvedY[particleIdx]   = em.tipY;
-    // straightPos = 终点（远方，借用此attribute做终点）
-    vnStraightX[particleIdx] = pFarX + pFarSpineX;
-    vnStraightY[particleIdx] = pFarY;
+    // curvedPos = 起点（分支尖端，精确对齐）
+    vnCurvedX[particleIdx]   = em.sx + tipSpineX;
+    vnCurvedY[particleIdx]   = em.sy;
+    // straightPos = 终点（借用此attribute）
+    vnStraightX[particleIdx] = farX + farSpineX;
+    vnStraightY[particleIdx] = farY;
 
-    vnZPos[particleIdx]      = gaussRand() * 0.02;
-    vnParamT[particleIdx]    = 0.5; // 不影响生长动画
-    vnVineId[particleIdx]    = 10;  // shader特殊处理
-    vnPhase[particleIdx]     = Math.random(); // 0~1 随机相位
-    vnAlphas[particleIdx]    = 0.70;
-    vnSizes[particleIdx]     = 0.035 + Math.random() * 0.010;
-    vnColorVars[particleIdx] = 0.2 + Math.random() * 0.3;
+    vnZPos[particleIdx]      = gaussRand() * 0.015;
+    vnParamT[particleIdx]    = 0.5;
+    vnVineId[particleIdx]    = 10;
+    vnPhase[particleIdx]     = Math.random();
+    vnAlphas[particleIdx]    = 0.75;
+    // 粒子大小与藤蔓分支一致
+    vnSizes[particleIdx]     = 0.030 + Math.random() * 0.010;
+    vnColorVars[particleIdx] = 0.15 + Math.random() * 0.25;
 
     particleIdx++;
   }
