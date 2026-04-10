@@ -717,10 +717,11 @@ const VINE_ALL_SEGMENTS = [VINE1_SEGMENTS]; // 只保留主藤蔓
 const N_VINES = 2; // vineId 0=主藤蔓, 1=点缀藤蔓（共享生长）
 
 // ── 点缀藤蔓配置（薄、细、装饰性）──
+// 螺旋缠绕：x=R*sin(θ), z=R*cos(θ)，永远在骨骼外圈
 const ACCENT_VINES = [
-  { amp: 0.22, freq: 3.2, phase: Math.PI * 0.8, ppv: 10000, width: 0.016, alpha: 0.85 },
-  { amp: 0.15, freq: 4.8, phase: Math.PI * 0.2, ppv: 8000,  width: 0.014, alpha: 0.80 },
-  { amp: 0.10, freq: 6.0, phase: Math.PI * 1.4, ppv: 6000,  width: 0.012, alpha: 0.75 },
+  { radius: 0.32, freq: 2.5, phase: 0,              ppv: 10000, width: 0.016, alpha: 0.85 },
+  { radius: 0.28, freq: 3.5, phase: Math.PI * 0.7,  ppv: 8000,  width: 0.014, alpha: 0.80 },
+  { radius: 0.24, freq: 5.0, phase: Math.PI * 1.3,  ppv: 6000,  width: 0.012, alpha: 0.75 },
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
@@ -908,9 +909,9 @@ for (let vi = 0; vi < vineData.length; vi++) {
   }
 }
 
-// ── 点缀藤蔓（薄、细、装饰性正弦曲线）──
+// ── 点缀藤蔓（螺旋缠绕，永远在骨骼外圈）──
 function vineEnvelope(t) {
-  return 0.5 + 0.5 * Math.sin(t * Math.PI);
+  return 0.6 + 0.4 * Math.sin(t * Math.PI);
 }
 for (const accent of ACCENT_VINES) {
   for (let p = 0; p < accent.ppv; p++) {
@@ -919,30 +920,33 @@ for (const accent of ACCENT_VINES) {
     const cpC = curveCurved.getPoint(t);
     const tanC = curveCurved.getTangent(t);
 
+    // 螺旋角度
+    const theta = t * Math.PI * accent.freq * 2 + accent.phase;
     const env = vineEnvelope(t);
-    const offset = accent.amp * Math.sin(t * Math.PI * accent.freq + accent.phase) * env;
-    const spread = gaussRand() * accent.width;
-    const totalOff = offset + spread;
+    const r = accent.radius * env;
 
-    // straight: 正弦偏移
-    const sx = totalOff;
+    // x = R*sin(θ), z = R*cos(θ) → 圆形缠绕，永不穿过骨骼
+    const helixX = r * Math.sin(theta);
+    const helixZ = r * Math.cos(theta);
+    const spread = gaussRand() * accent.width;
+
+    // straight: 螺旋偏移
+    const sx = helixX + spread;
     const sy = cpS.y;
 
     // curved: 沿脊柱切线法向偏移
     const perpCX = -tanC.y;
     const perpCY =  tanC.x;
-    const cx = cpC.x + perpCX * totalOff;
-    const cy = cpC.y + perpCY * totalOff;
+    const cx = cpC.x + perpCX * (helixX + spread);
+    const cy = cpC.y + perpCY * (helixX + spread);
 
     vnStraightX[particleIdx] = sx;
     vnStraightY[particleIdx] = sy;
     vnCurvedX[particleIdx]   = cx;
     vnCurvedY[particleIdx]   = cy;
 
-    // Z: 用切线方向（cos）决定前后，穿越脊柱时交替
-    // cos>0(往右摆)=前面, cos<0(往左摆)=后面
-    const tangentDir = Math.cos(t * Math.PI * accent.freq + accent.phase);
-    vnZPos[particleIdx] = tangentDir * 0.10 + gaussRand() * 0.005;
+    // Z: cos分量 → 前面(z>0)亮, 后面(z<0)暗
+    vnZPos[particleIdx] = helixZ + gaussRand() * 0.005;
 
     const yNorm = (vineYMax - sy) / vineYRange;
     vnParamT[particleIdx]  = yNorm;
