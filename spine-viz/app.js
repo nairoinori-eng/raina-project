@@ -763,9 +763,9 @@ function getSpineXAtY(y) {
 }
 
 // ── 预计算曲线和弧长 ──
-const VINE_X_SCALE = 2.0;  // 藤蔓横向扩展，拉开与脊柱的距离
+const VINE_X_SCALE = 1.5;  // 藤蔓横向扩展，拉开与脊柱的距离
 const VINE_Y_SCALE = 1.35; // 藤蔓纵向拉伸，覆盖到脊柱尖端
-const VINE_WIDTHS = [0.012, 0.008, 0.005];
+const VINE_WIDTHS = [0.018, 0.012, 0.007];
 const VINE_GROW_THRESHOLDS = [0.25, 0.55];
 const VINE_GROW_DURATION = 2.0;
 
@@ -792,7 +792,7 @@ const vineData = VINE_ALL_SEGMENTS.map((segments) => {
 });
 
 // 按弧长比例分配粒子（目标 >= 21000）
-const VINE_TARGET_TOTAL = 21000;
+const VINE_TARGET_TOTAL = 35000;
 const totalArcLen = vineData.reduce((s, vd) =>
   s + vd.lengths.reduce((a, b) => a + b, 0), 0);
 
