@@ -718,9 +718,9 @@ const N_VINES = 2; // vineId 0=主藤蔓, 1=点缀藤蔓（共享生长）
 
 // ── 点缀藤蔓配置（薄、细、装饰性）──
 const ACCENT_VINES = [
-  { amp: 0.22, freq: 3.2, phase: Math.PI * 0.8, ppv: 4000, width: 0.010, alpha: 0.65 },
-  { amp: 0.15, freq: 4.8, phase: Math.PI * 0.2, ppv: 3000, width: 0.007, alpha: 0.50 },
-  { amp: 0.10, freq: 6.0, phase: Math.PI * 1.4, ppv: 2000, width: 0.005, alpha: 0.40 },
+  { amp: 0.22, freq: 3.2, phase: Math.PI * 0.8, ppv: 9000, width: 0.012, alpha: 0.80 },
+  { amp: 0.15, freq: 4.8, phase: Math.PI * 0.2, ppv: 7000, width: 0.009, alpha: 0.70 },
+  { amp: 0.10, freq: 6.0, phase: Math.PI * 1.4, ppv: 5000, width: 0.007, alpha: 0.60 },
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
