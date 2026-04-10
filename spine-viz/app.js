@@ -1258,12 +1258,12 @@ for (let i = 0; i < N_AMB; i++) {
   ambPos[i*3+2] = ambBase[i*3+2];
   // 大小差异：大部分小粒子 + 少数亮星
   const starRoll = Math.random();
-  ambSizes[i]    = starRoll < 0.08
-    ? 0.04 + Math.random() * 0.03       // 8% 亮星（较大）
-    : 0.012 + Math.random() * 0.018;    // 92% 普通星尘
-  ambAlphas[i]   = starRoll < 0.08
-    ? 0.18 + Math.random() * 0.15       // 亮星更亮
-    : 0.06 + Math.random() * 0.10;      // 普通星尘
+  ambSizes[i]    = starRoll < 0.10
+    ? 0.06 + Math.random() * 0.05       // 10% 亮星（较大）
+    : 0.020 + Math.random() * 0.025;    // 90% 普通星尘
+  ambAlphas[i]   = starRoll < 0.10
+    ? 0.25 + Math.random() * 0.20       // 亮星更亮
+    : 0.10 + Math.random() * 0.12;      // 普通星尘
   ambOrbitR[i]   = 0.03  + Math.random() * 0.15;
   ambOrbitSpd[i] = 0.03  + Math.random() * 0.10;
   ambOrbitPh[i]  = Math.random() * Math.PI * 2;
@@ -1279,10 +1279,10 @@ ambGeo.setAttribute('aColorVar', new THREE.BufferAttribute(ambCVars, 1));
 const ambMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
   uniforms: {
-    uColor:     { value: new THREE.Color(0x18102e) },
-    uHighlight: { value: new THREE.Color(0x18102e) },
-    uAccent1:   { value: new THREE.Color(0x18102e) },
-    uAccent2:   { value: new THREE.Color(0x18102e) },
+    uColor:     { value: new THREE.Color(0x6055a0) },
+    uHighlight: { value: new THREE.Color(0x9088cc) },
+    uAccent1:   { value: new THREE.Color(0x8070b8) },
+    uAccent2:   { value: new THREE.Color(0x5568aa) },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
