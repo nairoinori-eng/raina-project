@@ -725,11 +725,11 @@ const ACCENT_VINES = [
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
 // ── 分支尖端弥散粒子 ──
-// 从3个分支尖端向外弥散，轨迹相似不乱飞
+// 从3个分支尖端持续发射，shader驱动飘散
 const DRIFT_EMITTERS = [
-  { tipX: -0.85, tipY: 3.00, dirX: -0.6, dirY: 0.4, len: 0.60, count: 800 },
-  { tipX:  0.43, tipY:-0.15, dirX:  0.7, dirY: 0.2, len: 0.55, count: 800 },
-  { tipX: -0.33, tipY:-1.30, dirX: -0.5, dirY:-0.5, len: 0.55, count: 800 },
+  { tipX: -0.85, tipY: 3.00, dirX: -0.6, dirY: 0.4, len: 1.2, count: 250 },
+  { tipX:  0.43, tipY:-0.15, dirX:  0.7, dirY: 0.2, len: 1.0, count: 250 },
+  { tipX: -0.33, tipY:-1.30, dirX: -0.5, dirY:-0.5, len: 1.0, count: 250 },
 ];
 const DRIFT_TOTAL = DRIFT_EMITTERS.reduce((s, e) => s + e.count, 0);
 
@@ -969,36 +969,43 @@ ACCENT_VINES.forEach((accent, accentIdx) => {
   }
 });
 
-// ── 分支尖端弥散粒子 ──
+// ── 分支尖端弥散粒子（shader驱动连续发射）──
+// aCurvedPos=起点(尖端), aStraightPos=终点(远方)
+// vineId=10 → shader识别为弥散粒子，用uTime动画
 for (const em of DRIFT_EMITTERS) {
-  // 归一化方向
   const dLen = Math.sqrt(em.dirX * em.dirX + em.dirY * em.dirY);
   const ndx = em.dirX / dLen, ndy = em.dirY / dLen;
-  // 垂直方向（做弧线）
-  const pdx = -ndy, pdy = ndx;
+
+  const tipSpineX = getSpineXAtY(em.tipY);
+  // 终点（尖端 + 方向 * 距离）
+  const farX = em.tipX + ndx * em.len;
+  const farY = em.tipY + ndy * em.len;
+  const farSpineX = getSpineXAtY(farY);
 
   for (let p = 0; p < em.count; p++) {
-    const t = p / (em.count - 1); // 0=尖端, 1=远端
-    const drift = t * em.len;
-    // 轻微弧线 + 微小随机
-    const arc = Math.sin(t * Math.PI) * 0.06;
-    const sx = em.tipX + ndx * drift + pdx * arc + gaussRand() * 0.012 * (0.5 + t);
-    const sy = em.tipY + ndy * drift + pdy * arc + gaussRand() * 0.012 * (0.5 + t);
+    // 每颗粒子轻微不同的方向（近端紧凑，远端散开）
+    const spreadAngle = gaussRand() * 0.25; // 微小角度偏移
+    const cA = Math.cos(spreadAngle), sA = Math.sin(spreadAngle);
+    const pDirX = ndx * cA - ndy * sA;
+    const pDirY = ndx * sA + ndy * cA;
+    const pFarX = em.tipX + pDirX * em.len;
+    const pFarY = em.tipY + pDirY * em.len;
+    const pFarSpineX = getSpineXAtY(pFarY);
 
-    const spineX = getSpineXAtY(sy);
-    vnStraightX[particleIdx] = sx;
-    vnStraightY[particleIdx] = sy;
-    vnCurvedX[particleIdx]   = sx + spineX;
-    vnCurvedY[particleIdx]   = sy;
-    vnZPos[particleIdx]      = gaussRand() * 0.025;
+    // curvedPos = 起点（尖端弯曲态）
+    vnCurvedX[particleIdx]   = em.tipX + tipSpineX;
+    vnCurvedY[particleIdx]   = em.tipY;
+    // straightPos = 终点（远方，借用此attribute做终点）
+    vnStraightX[particleIdx] = pFarX + pFarSpineX;
+    vnStraightY[particleIdx] = pFarY;
 
-    const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
-    vnParamT[particleIdx]    = yNorm;
-    vnVineId[particleIdx]    = 0; // 跟主藤蔓一起生长
-    vnPhase[particleIdx]     = Math.random() * 4.0;
-    vnAlphas[particleIdx]    = 0.80 * (1 - t * t); // 向远端衰减
-    vnSizes[particleIdx]     = (0.050 - t * 0.030) + Math.random() * 0.012;
-    vnColorVars[particleIdx] = 0.15 + Math.random() * 0.25; // 偏高光，有光感
+    vnZPos[particleIdx]      = gaussRand() * 0.02;
+    vnParamT[particleIdx]    = 0.5; // 不影响生长动画
+    vnVineId[particleIdx]    = 10;  // shader特殊处理
+    vnPhase[particleIdx]     = Math.random(); // 0~1 随机相位
+    vnAlphas[particleIdx]    = 0.70;
+    vnSizes[particleIdx]     = 0.035 + Math.random() * 0.010;
+    vnColorVars[particleIdx] = 0.2 + Math.random() * 0.3;
 
     particleIdx++;
   }
@@ -1053,46 +1060,68 @@ const vineVertexShader = /* glsl */`
   varying float vColorVar;
 
   void main() {
-    float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
-    vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
+    float alpha;
+    float sz;
+    vec3 pos;
 
-    // 随风摇曳：每根藤蔓摆幅/频率不同
-    float swayBase = 1.0 - aParamT * 0.3;
-    float vineAmp = aVineId < 0.5 ? 1.0 : aVineId < 1.5 ? 1.4 : 0.7;
-    float vineFreq = aVineId < 0.5 ? 1.0 : aVineId < 1.5 ? 0.8 : 1.3;
-    float swayX = sin(uTime * 0.35 * vineFreq + aParamT * 3.0 + aVinePhase) * 0.03 * swayBase * vineAmp;
-    float swayY = sin(uTime * 0.6 * vineFreq + aParamT * 8.0 + aVinePhase * 2.0) * 0.06 * swayBase * vineAmp
-                + sin(uTime * 1.2 * vineFreq + aParamT * 14.0) * 0.02 * swayBase * vineAmp;
-    pos2d.x += swayX;
-    pos2d.y += swayY;
+    if (aVineId > 9.5) {
+      // ── 弥散粒子：从尖端持续发射向远方飘散 ──
+      float life = fract(uTime * 0.10 + aVinePhase); // 0=尖端, 1=远方
+      // aCurvedPos=起点(尖端), aStraightPos=终点(远方)
+      vec2 pos2d = mix(aCurvedPos, aStraightPos, life);
+      pos = vec3(pos2d.x, pos2d.y, aZPos);
 
-    vec3 pos = vec3(pos2d.x, pos2d.y, aZPos);
+      // 跟主藤蔓一起出现
+      float mainGrowth = uVineGrowth.x;
+      float driftVisible = smoothstep(0.0, 0.3, mainGrowth);
 
-    // 3根藤蔓依次生长
-    float myGrowth = aVineId < 0.5 ? uVineGrowth.x
-                   : aVineId < 1.5 ? uVineGrowth.y
-                   : uVineGrowth.z;
-    float growFront = myGrowth * 1.15;
-    float visible = smoothstep(growFront + 0.01, growFront - 0.12, aParamT);
+      alpha = aAlpha * driftVisible * (1.0 - life * life); // 远处衰减
+      sz = aSize * (1.0 - life * 0.6); // 远处缩小
 
-    // 光流脉冲
-    float pulsePos = mod(uTime * 0.13 + aVinePhase, 1.6) - 0.15;
-    float pulse = exp(-pow((aParamT - pulsePos) * 5.0, 2.0));
-    // 第二道微光
-    float pulsePos2 = mod(uTime * 0.20 + aVinePhase + 0.7, 1.8) - 0.1;
-    float pulse2 = exp(-pow((aParamT - pulsePos2) * 7.0, 2.0)) * 0.4;
-    float totalPulse = pulse + pulse2;
+      vAlpha = alpha;
+      vColorVar = aColorVar;
 
-    float endFade = smoothstep(0.0, 0.04, aParamT) * smoothstep(1.0, 0.93, aParamT);
-    float depthFade = 0.25 + 0.75 * smoothstep(-0.06, 0.01, aZPos);
+    } else {
+      // ── 藤蔓粒子（主藤+点缀）──
+      float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
+      vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
 
-    // 脉冲受depthFade约束：后面的粒子脉冲也暗
-    float effectivePulse = totalPulse * depthFade;
-    float alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * 0.45);
-    float sz    = aSize * (1.0 + effectivePulse * 0.5);
+      // 随风摇曳
+      float swayBase = 1.0 - aParamT * 0.3;
+      float vineAmp = aVineId < 0.5 ? 1.0 : aVineId < 1.5 ? 1.4 : 0.7;
+      float vineFreq = aVineId < 0.5 ? 1.0 : aVineId < 1.5 ? 0.8 : 1.3;
+      float swayX = sin(uTime * 0.35 * vineFreq + aParamT * 3.0 + aVinePhase) * 0.03 * swayBase * vineAmp;
+      float swayY = sin(uTime * 0.6 * vineFreq + aParamT * 8.0 + aVinePhase * 2.0) * 0.06 * swayBase * vineAmp
+                  + sin(uTime * 1.2 * vineFreq + aParamT * 14.0) * 0.02 * swayBase * vineAmp;
+      pos2d.x += swayX;
+      pos2d.y += swayY;
 
-    vAlpha    = alpha;
-    vColorVar = aColorVar + totalPulse * 0.5;
+      pos = vec3(pos2d.x, pos2d.y, aZPos);
+
+      // 3根藤蔓依次生长
+      float myGrowth = aVineId < 0.5 ? uVineGrowth.x
+                     : aVineId < 1.5 ? uVineGrowth.y
+                     : uVineGrowth.z;
+      float growFront = myGrowth * 1.15;
+      float visible = smoothstep(growFront + 0.01, growFront - 0.12, aParamT);
+
+      // 光流脉冲
+      float pulsePos = mod(uTime * 0.13 + aVinePhase, 1.6) - 0.15;
+      float pulse = exp(-pow((aParamT - pulsePos) * 5.0, 2.0));
+      float pulsePos2 = mod(uTime * 0.20 + aVinePhase + 0.7, 1.8) - 0.1;
+      float pulse2 = exp(-pow((aParamT - pulsePos2) * 7.0, 2.0)) * 0.4;
+      float totalPulse = pulse + pulse2;
+
+      float endFade = smoothstep(0.0, 0.04, aParamT) * smoothstep(1.0, 0.93, aParamT);
+      float depthFade = 0.25 + 0.75 * smoothstep(-0.06, 0.01, aZPos);
+
+      float effectivePulse = totalPulse * depthFade;
+      alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * 0.45);
+      sz = aSize * (1.0 + effectivePulse * 0.5);
+
+      vAlpha = alpha;
+      vColorVar = aColorVar + totalPulse * 0.5;
+    }
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_PointSize = sz * (300.0 / -mv.z);
@@ -1127,7 +1156,7 @@ spineGroup.add(vinePoints);
 
 // 藤蔓生长状态（JS侧管理，触发式动画）
 const vineGrowTriggered = [false, false, false];
-const vineGrowStartTime = [0, 0, 0];
+const vineGrowStartTime = [-10, -10, -10];
 const vineGrowProgress  = [0, 0, 0];
 
 
