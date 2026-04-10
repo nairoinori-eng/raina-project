@@ -939,9 +939,10 @@ for (const accent of ACCENT_VINES) {
     vnCurvedX[particleIdx]   = cx;
     vnCurvedY[particleIdx]   = cy;
 
-    // Z: 正弦偏移的余弦分量 → 缠绕
-    const wrapZ = Math.cos(t * Math.PI * accent.freq + accent.phase) * 0.06 * env;
-    vnZPos[particleIdx] = wrapZ + gaussRand() * 0.005;
+    // Z: 用切线方向（cos）决定前后，穿越脊柱时交替
+    // cos>0(往右摆)=前面, cos<0(往左摆)=后面
+    const tangentDir = Math.cos(t * Math.PI * accent.freq + accent.phase);
+    vnZPos[particleIdx] = tangentDir * 0.10 + gaussRand() * 0.005;
 
     const yNorm = (vineYMax - sy) / vineYRange;
     vnParamT[particleIdx]  = yNorm;
