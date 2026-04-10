@@ -248,14 +248,14 @@ const spineVertexShader = /* glsl */`
     // ── Blend between scatter and formed ──
     vec3 pos = mix(scatterPos, formedPos, uFormation);
 
-    // ── Size: small dust in IDLE, normal when formed ──
-    float idleSize = 0.012 + fract(seed * 3.14) * 0.012;
+    // ── Size: visible dust in IDLE, normal when formed ──
+    float idleSize = 0.030 + fract(seed * 3.14) * 0.035;
     float formedSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
     float size = mix(idleSize, formedSize, uFormation);
 
-    // ── Alpha: dim in IDLE (~35% visible), full when formed ──
-    float idleVisible = step(0.62, fract(seed * 0.618));
-    float idleAlpha = (0.10 + fract(seed * 2.71) * 0.12) * idleVisible;
+    // ── Alpha: scattered particles visible in IDLE (~30% visible) ──
+    float idleVisible = step(0.70, fract(seed * 0.618));
+    float idleAlpha = (0.15 + fract(seed * 2.71) * 0.20) * idleVisible;
     float formedAlpha = aAlpha * (0.55 + uBreathe * 0.45);
     float alpha = mix(idleAlpha, formedAlpha, uFormation) * uGuideAlpha;
 
