@@ -763,9 +763,8 @@ function getSpineXAtY(y) {
 }
 
 // ── 预计算曲线和弧长 ──
-const VINE_X_SCALE = 2.0;  // 藤蔓横向扩展，拉开与脊柱的距离
-const VINE_Y_SCALE = 1.25; // 藤蔓纵向拉伸，覆盖脊柱全长
-const VINE_MIN_R = 0.12;   // 藤蔓离脊柱最小距离，防止收腰成葫芦
+const VINE_X_SCALE = 2.8;  // 藤蔓横向扩展，拉开与脊柱的距离
+const VINE_Y_SCALE = 1.35; // 藤蔓纵向拉伸，覆盖到脊柱尖端
 const VINE_WIDTHS = [0.025, 0.016, 0.008];
 const VINE_GROW_THRESHOLDS = [0.25, 0.55];
 const VINE_GROW_DURATION = 2.0;
@@ -774,7 +773,7 @@ const vineData = VINE_ALL_SEGMENTS.map((segments) => {
   const topo = analyzeVineTopology(segments);
   const curves = segments.map(seg => {
     const pts = seg.map(([x, y]) => new THREE.Vector3(x, y, 0));
-    return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.3);
+    return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.15);
   });
   const lengths = curves.map(c => c.getLength());
   return { segments, topo, curves, lengths };
@@ -837,9 +836,7 @@ for (let vi = 0; vi < N_VINES; vi++) {
       const pt = curve.getPointAt(t);
       const tangent = curve.getTangentAt(t);
 
-      const rawX = pt.x * VINE_X_SCALE;
-      const xSign = rawX >= 0 ? 1 : -1;
-      const sx = xSign * Math.sqrt(rawX * rawX + VINE_MIN_R * VINE_MIN_R);
+      const sx = pt.x * VINE_X_SCALE;
       const sy = pt.y * VINE_Y_SCALE;
 
       // curved: 扩展后的坐标 + 脊柱弯曲偏移
@@ -864,10 +861,13 @@ for (let vi = 0; vi < N_VINES; vi++) {
       vnCurvedX[particleIdx]   = cx + perpX * spread;
       vnCurvedY[particleIdx]   = cy + perpY * spread;
 
-      // Z 深度：正弦缠绕
+      // Z 深度：切线方向驱动缠绕
+      // 藤蔓往右摆(tangent.x>0)=前面，往左摆=后面
+      // 两根藤蔓反向，形成交织
       const yNorm = (vineYMax - sy) / vineYRange;
-      const wrapZ = Math.sin(yNorm * Math.PI * 3 + vi * 1.2) * 0.15;
-      vnZPos[particleIdx] = wrapZ + gaussRand() * 0.015;
+      const vineFactor = vi === 0 ? 1 : -1;
+      const wrapR = 0.20;
+      vnZPos[particleIdx] = tangent.x * wrapR * vineFactor + gaussRand() * 0.015;
 
       vnParamT[particleIdx] = yNorm;
       vnVineId[particleIdx] = vi;
