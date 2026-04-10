@@ -727,7 +727,7 @@ const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 // ── 分支尖端弥散粒子 ──
 // 从3个分支尖端弥散（位置从实际曲线计算，不硬编码）
 const DRIFT_SEG_INDICES = [7, 9, 12]; // VINE1中弥散的3个分支段
-const DRIFT_PPV = 3000; // 每个分支弥散粒子数
+const DRIFT_PPV = 5000; // 每个分支弥散粒子数
 const DRIFT_TOTAL = DRIFT_SEG_INDICES.length * DRIFT_PPV;
 
 // ── 藤蔓拓扑分析（自动检测主干/分支/末梢）──
@@ -1001,32 +1001,32 @@ for (const si of DRIFT_SEG_INDICES) {
     // rawT: 0=分支根部, 1=尖端, 1~3=超出尖端飘散
     const rawT = (p / (DRIFT_PPV - 1)) * 3.0;
 
+    // 计算沿曲线位置 + 超出尖端的延伸
     let px, py, tanX, tanY;
-    if (rawT <= 1.0) {
+    const clampedT = Math.min(rawT, 1.0);
+    const ct = rootAtStart
+      ? Math.max(0.002, Math.min(0.998, clampedT))
+      : Math.max(0.002, Math.min(0.998, 1.0 - clampedT));
+    const curvePt = curve.getPointAt(ct);
+    const curveTan = curve.getTangentAt(ct);
+
+    if (rawT <= 0.95) {
       // 在分支曲线上
-      const ct = rootAtStart
-        ? Math.max(0.002, Math.min(0.998, rawT))
-        : Math.max(0.002, Math.min(0.998, 1.0 - rawT));
-      const pt = curve.getPointAt(ct);
-      const tan = curve.getTangentAt(ct);
-      px = pt.x; py = pt.y;
-      tanX = tan.x * outSign; tanY = tan.y * outSign;
+      px = curvePt.x; py = curvePt.y;
+      tanX = curveTan.x * outSign; tanY = curveTan.y * outSign;
     } else {
-      // 超出尖端：沿切线延伸 + 正弦蜿蜒
-      const beyond = (rawT - 1.0) * 0.7;
+      // 0.95~1.0平滑过渡，1.0+延伸 + 蜿蜒
+      const beyond = Math.max(0, rawT - 0.95) * 0.7;
       const baseX = tipPt.x + tipTan.x * outSign * beyond;
       const baseY = tipPt.y + tipTan.y * outSign * beyond;
-      // 垂直于前进方向的蜿蜒（振幅随距离增大）
+      // 蜿蜒
       const perpDx = -tipTan.y * outSign;
       const perpDy =  tipTan.x * outSign;
-      const waveAmp = 0.08 + beyond * 0.12;
+      const waveAmp = beyond * 0.15;
       const wave = Math.sin(beyond * 5.0 + si * 2.0);
       px = baseX + perpDx * wave * waveAmp;
       py = baseY + perpDy * wave * waveAmp;
-      // 切线也随蜿蜒偏转
-      const waveDeriv = Math.cos(beyond * 5.0 + si * 2.0) * waveAmp * 5.0;
-      tanX = tipTan.x * outSign + perpDx * waveDeriv * 0.3;
-      tanY = tipTan.y * outSign + perpDy * waveDeriv * 0.3;
+      tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
     }
 
     // 散布：始终保持线条形状，只是逐渐变宽
@@ -1057,7 +1057,7 @@ for (const si of DRIFT_SEG_INDICES) {
     const fadeAlpha = rawT < 1.0 ? 0.75 - rawT * 0.15
                     : Math.max(0.0, 0.60 * (1.0 - (rawT - 1.0) / 2.0));
     vnAlphas[particleIdx]    = fadeAlpha;
-    vnSizes[particleIdx]     = 0.038 + Math.random() * 0.010;
+    vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
     vnColorVars[particleIdx] = 0.1 + Math.random() * 0.2;
 
     particleIdx++;
