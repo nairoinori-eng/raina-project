@@ -800,7 +800,7 @@ const vineData = VINE_ALL_SEGMENTS.map((segments) => {
 });
 
 // 按弧长比例分配粒子（目标 >= 21000）
-const VINE_TARGET_TOTAL = 35000;
+const VINE_TARGET_TOTAL = 50000;
 const totalArcLen = vineData.reduce((s, vd) =>
   s + vd.lengths.reduce((a, b) => a + b, 0), 0);
 
@@ -893,8 +893,8 @@ for (let vi = 0; vi < vineData.length; vi++) {
       vnVineId[particleIdx] = vi;
       vnPhase[particleIdx]  = pulsePhase;
 
-      const baseSize = depth === 0 ? 0.060 : depth === 1 ? 0.048 : 0.038;
-      vnSizes[particleIdx] = baseSize + Math.random() * 0.015;
+      const baseSize = depth === 0 ? 0.038 : depth === 1 ? 0.030 : 0.022;
+      vnSizes[particleIdx] = baseSize + Math.random() * 0.010;
       vnAlphas[particleIdx] = (depth === 0 ? 0.90 : 0.75) + Math.random() * 0.10;
 
       // 颜色渐变：顶部暖亮 → 底部深冷 + Z深度立体
@@ -952,7 +952,7 @@ ACCENT_VINES.forEach((accent, accentIdx) => {
     vnParamT[particleIdx]  = yNorm;
     vnVineId[particleIdx]  = accentIdx + 1; // 1,2,3 依次长出
     vnPhase[particleIdx]   = accent.phase;
-    vnSizes[particleIdx]   = 0.055 + Math.random() * 0.015;
+    vnSizes[particleIdx]   = 0.035 + Math.random() * 0.010;
     vnAlphas[particleIdx]  = accent.alpha + Math.random() * 0.10;
     vnColorVars[particleIdx] = (Math.random() - 0.5) * 0.15;
 
@@ -1057,7 +1057,7 @@ const vineVertexShader = /* glsl */`
 
 // 藤蔓固定配色（绿色系立体感）
 const VINE_COLOR = new THREE.Color(0x1a5040);   // 翡翠绿（基色）
-const VINE_HL    = new THREE.Color(0x3a8868);   // 玉色高光（柔和）
+const VINE_HL    = new THREE.Color(0x2a6850);   // 玉色高光（克制）
 const VINE_AC1   = new THREE.Color(0x3a7848);   // 苔藓暖绿
 const VINE_AC2   = new THREE.Color(0x186058);   // 深青绿（冷调）
 
