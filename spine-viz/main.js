@@ -1012,12 +1012,13 @@ const vineVertexShader = /* glsl */`
     float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
 
-    // 随风摇曳：X轻微水平摆，Y分支上下颤动
+    // 随风摇曳：每根藤蔓摆幅/频率不同
     float swayBase = 1.0 - aParamT * 0.3;
-    float swayX = sin(uTime * 0.35 + aParamT * 3.0 + aVinePhase) * 0.03 * swayBase;
-    // 上下摆（分支被风吹动的感觉），沿藤蔓波浪传播
-    float swayY = sin(uTime * 0.6 + aParamT * 8.0 + aVinePhase * 2.0) * 0.06 * swayBase
-                + sin(uTime * 1.2 + aParamT * 14.0) * 0.02 * swayBase;
+    float vineAmp = aVineId < 0.5 ? 1.0 : aVineId < 1.5 ? 1.4 : 0.7;
+    float vineFreq = aVineId < 0.5 ? 1.0 : aVineId < 1.5 ? 0.8 : 1.3;
+    float swayX = sin(uTime * 0.35 * vineFreq + aParamT * 3.0 + aVinePhase) * 0.03 * swayBase * vineAmp;
+    float swayY = sin(uTime * 0.6 * vineFreq + aParamT * 8.0 + aVinePhase * 2.0) * 0.06 * swayBase * vineAmp
+                + sin(uTime * 1.2 * vineFreq + aParamT * 14.0) * 0.02 * swayBase * vineAmp;
     pos2d.x += swayX;
     pos2d.y += swayY;
 
@@ -1057,7 +1058,7 @@ const vineVertexShader = /* glsl */`
 
 // 藤蔓固定配色（绿色系立体感）
 const VINE_COLOR = new THREE.Color(0x1a5040);   // 翡翠绿（基色）
-const VINE_HL    = new THREE.Color(0x2a6850);   // 玉色高光（克制）
+const VINE_HL    = new THREE.Color(0x225845);   // 玉色高光（压暗）
 const VINE_AC1   = new THREE.Color(0x3a7848);   // 苔藓暖绿
 const VINE_AC2   = new THREE.Color(0x186058);   // 深青绿（冷调）
 
