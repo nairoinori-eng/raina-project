@@ -1201,6 +1201,338 @@ const vineGrowProgress  = [0, 0, 0];
 
 
 
+
+// ============================================================
+// 9b. leafGeo (Layer F2 — 叶子系统)
+// ============================================================
+//
+// 沿主藤蔓曲线 + junction 附近放置叶片
+// 3种SDF形状混搭，混搭色系(绿→金 / 绿→紫 / 绿→粉)
+// 藤蔓长完后触发生长，从上到下依次展开
+//
+
+const LEAF_COUNT = 100;
+const LEAF_GROW_THRESHOLD = 0.25; // 藤蔓在0.05-0.15长完后，0.25开始长叶
+const LEAF_GROW_DURATION = 3.0;
+
+// ── 叶子位置采样 ──
+// 沿主藤蔓主干段采样，偏移到脊柱两侧
+const leafCurvedX   = new Float32Array(LEAF_COUNT);
+const leafCurvedY   = new Float32Array(LEAF_COUNT);
+const leafStraightX = new Float32Array(LEAF_COUNT);
+const leafStraightY = new Float32Array(LEAF_COUNT);
+const leafZPos      = new Float32Array(LEAF_COUNT);
+const leafParamT    = new Float32Array(LEAF_COUNT);
+const leafRotation  = new Float32Array(LEAF_COUNT);
+const leafSize      = new Float32Array(LEAF_COUNT);
+const leafAlpha     = new Float32Array(LEAF_COUNT);
+const leafType      = new Float32Array(LEAF_COUNT); // 0=心形 1=杏仁 2=尖头
+const leafColorType = new Float32Array(LEAF_COUNT); // 0=绿→金 1=绿→紫 2=绿→粉
+
+// 主干段索引（从拓扑分析得来，depth=0的段）
+const trunkSegIndices = [];
+for (let si = 0; si < vineData[0].topo.length; si++) {
+  if (vineData[0].topo[si].depth === 0) trunkSegIndices.push(si);
+}
+
+// 所有可用的曲线（主干 + 分支）
+const allCurves = vineData[0].curves;
+const allTopo = vineData[0].topo;
+
+let leafIdx = 0;
+const goldenAngle = 137.508 * Math.PI / 180;
+
+// 沿主干放叶子（约70%），其余放在分支junction
+for (let i = 0; i < LEAF_COUNT; i++) {
+  const isCluster = Math.random() < 0.35; // 35%概率是簇
+  const clusterSize = isCluster ? Math.floor(2 + Math.random() * 3) : 1;
+
+  // 选择放置位置：主干或分支
+  let curve, segTopo;
+  const onTrunk = Math.random() < 0.65;
+  if (onTrunk && trunkSegIndices.length > 0) {
+    const si = trunkSegIndices[Math.floor(Math.random() * trunkSegIndices.length)];
+    curve = allCurves[si];
+    segTopo = allTopo[si];
+  } else {
+    // 随机分支
+    const si = Math.floor(Math.random() * allCurves.length);
+    curve = allCurves[si];
+    segTopo = allTopo[si];
+  }
+
+  const baseT = 0.1 + Math.random() * 0.8; // 避免极端端点
+  const basePt = curve.getPointAt(baseT);
+  const baseTan = curve.getTangentAt(baseT);
+
+  for (let c = 0; c < clusterSize && leafIdx < LEAF_COUNT; c++) {
+    // 位置：沿藤蔓 + 侧向偏移（交替左右，主要在脊柱两侧）
+    const side = ((i + c) % 2 === 0) ? 1 : -1;
+    const perpX = -baseTan.y;
+    const perpY = baseTan.x;
+    const sideOffset = (0.12 + Math.random() * 0.15) * side;
+    const clusterJitter = c * 0.02; // 簇内微偏
+
+    const rawX = basePt.x + perpX * (sideOffset + clusterJitter);
+    const rawY = basePt.y + perpY * (sideOffset + clusterJitter) + (c - 1) * 0.015;
+
+    const sx = rawX * VINE_X_SCALE;
+    const sy = rawY * VINE_Y_SCALE;
+    const spineX = getSpineXAtY(sy);
+
+    leafStraightX[leafIdx] = sx;
+    leafStraightY[leafIdx] = sy;
+    leafCurvedX[leafIdx]   = sx + spineX;
+    leafCurvedY[leafIdx]   = sy;
+
+    // Z：在脊柱侧面（不直接遮挡脊柱正面）
+    // 大部分在侧面(Z≈0)或略后方，极少量略前
+    const zRoll = Math.random();
+    if (zRoll < 0.15) leafZPos[leafIdx] = 0.03 + Math.random() * 0.04; // 极少量微微在前
+    else if (zRoll < 0.50) leafZPos[leafIdx] = -(0.02 + Math.random() * 0.06); // 略后方
+    else leafZPos[leafIdx] = (Math.random() - 0.5) * 0.03; // 侧面
+
+    // paramT（生长顺序：从上到下）
+    const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
+    leafParamT[leafIdx] = yNorm;
+
+    // 旋转：黄金角基础 + 随机偏移 + 簇内扇形
+    const baseAngle = i * goldenAngle + (Math.random() - 0.5) * 0.8;
+    const clusterSpread = (c - (clusterSize - 1) / 2) * 0.4;
+    leafRotation[leafIdx] = baseAngle + clusterSpread;
+
+    // 大小：中段大、上下端小、簇内稍小
+    const sizeMod = 1.0 - Math.abs(yNorm - 0.5) * 0.6;
+    leafSize[leafIdx] = (0.10 + Math.random() * 0.06) * sizeMod * (c === 0 ? 1.0 : 0.75);
+
+    // alpha：半透明不遮脊柱
+    leafAlpha[leafIdx] = 0.45 + Math.random() * 0.20;
+
+    // 形状随机：心形40% 杏仁35% 尖头25%
+    const typeRoll = Math.random();
+    leafType[leafIdx] = typeRoll < 0.40 ? 0.0 : typeRoll < 0.75 ? 1.0 : 2.0;
+
+    // 色系：绿→金70% 绿→紫15% 绿→粉15%
+    const colorRoll = Math.random();
+    leafColorType[leafIdx] = colorRoll < 0.70 ? 0.0 : colorRoll < 0.85 ? 1.0 : 2.0;
+
+    leafIdx++;
+  }
+}
+
+// ── GPU geometry ──
+const leafPositions = new Float32Array(LEAF_COUNT * 3);
+const leafGpuCurved = new Float32Array(LEAF_COUNT * 2);
+const leafGpuStraight = new Float32Array(LEAF_COUNT * 2);
+for (let i = 0; i < LEAF_COUNT; i++) {
+  leafPositions[i * 3]     = leafCurvedX[i];
+  leafPositions[i * 3 + 1] = leafCurvedY[i];
+  leafPositions[i * 3 + 2] = leafZPos[i];
+  leafGpuCurved[i * 2]     = leafCurvedX[i];
+  leafGpuCurved[i * 2 + 1] = leafCurvedY[i];
+  leafGpuStraight[i * 2]     = leafStraightX[i];
+  leafGpuStraight[i * 2 + 1] = leafStraightY[i];
+}
+
+const leafGeo = new THREE.BufferGeometry();
+leafGeo.setAttribute('position',     new THREE.BufferAttribute(leafPositions, 3));
+leafGeo.setAttribute('aCurvedPos',   new THREE.BufferAttribute(leafGpuCurved, 2));
+leafGeo.setAttribute('aStraightPos', new THREE.BufferAttribute(leafGpuStraight, 2));
+leafGeo.setAttribute('aZPos',        new THREE.BufferAttribute(leafZPos, 1));
+leafGeo.setAttribute('aParamT',      new THREE.BufferAttribute(leafParamT, 1));
+leafGeo.setAttribute('aRotation',    new THREE.BufferAttribute(leafRotation, 1));
+leafGeo.setAttribute('aSize',        new THREE.BufferAttribute(leafSize, 1));
+leafGeo.setAttribute('aAlpha',       new THREE.BufferAttribute(leafAlpha, 1));
+leafGeo.setAttribute('aLeafType',    new THREE.BufferAttribute(leafType, 1));
+leafGeo.setAttribute('aColorType',   new THREE.BufferAttribute(leafColorType, 1));
+
+// ── 叶子 vertex shader ──
+const leafVertexShader = /* glsl */`
+  attribute vec2 aCurvedPos;
+  attribute vec2 aStraightPos;
+  attribute float aZPos;
+  attribute float aParamT;
+  attribute float aRotation;
+  attribute float aSize;
+  attribute float aAlpha;
+  attribute float aLeafType;
+  attribute float aColorType;
+
+  uniform float uBlend;
+  uniform float uTime;
+  uniform float uLeafGrowth; // 0→1 叶子整体生长进度
+
+  varying float vAlpha;
+  varying float vRotation;
+  varying float vLeafType;
+  varying float vColorType;
+  varying vec2 vLeafUV; // 传递叶片局部UV（用于颜色渐变）
+
+  void main() {
+    // blend 插值
+    float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
+    vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
+
+    // 随风摇曳（比藤蔓幅度大1.5x）
+    float swayAmt = 0.045 * (1.0 - aParamT * 0.3);
+    pos2d.x += sin(uTime * 0.4 + aParamT * 3.0 + aRotation) * swayAmt;
+    pos2d.y += sin(uTime * 0.55 + aParamT * 7.0) * swayAmt * 0.6;
+
+    vec3 pos = vec3(pos2d.x, pos2d.y, aZPos);
+
+    // 生长动画：从上到下展开
+    float growFront = uLeafGrowth * 1.2;
+    float leafVisible = smoothstep(growFront + 0.02, growFront - 0.15, aParamT);
+
+    // 展开动画：size从0到目标值
+    float unfurl = leafVisible * leafVisible; // ease-in
+    float sz = aSize * unfurl;
+
+    // 展开时旋转从折叠到展开
+    float rotOffset = (1.0 - unfurl) * 1.5; // 折叠时多旋转1.5rad
+    vRotation = aRotation + rotOffset;
+
+    vAlpha = aAlpha * leafVisible;
+    vLeafType = aLeafType;
+    vColorType = aColorType;
+
+    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+    gl_PointSize = sz * (300.0 / -mv.z);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+// ── 叶子 fragment shader（3种SDF形状 + 叶脉 + 混搭色系）──
+const leafFragmentShader = /* glsl */`
+  varying float vAlpha;
+  varying float vRotation;
+  varying float vLeafType;
+  varying float vColorType;
+
+  // 旋转UV
+  vec2 rotUV(vec2 uv, float angle) {
+    float c = cos(angle), s = sin(angle);
+    return vec2(c * uv.x + s * uv.y, -s * uv.x + c * uv.y);
+  }
+
+  // SDF心形叶
+  float leafHeart(vec2 p) {
+    p.x = abs(p.x);
+    float body = length(p - vec2(0.12, 0.10)) - 0.30;
+    float cut = -p.y + 0.05;
+    float tip = length(p - vec2(0.0, -0.35)) - 0.12;
+    return min(body, min(cut * 0.5 + body * 0.5, tip));
+  }
+
+  // SDF杏仁叶（vesica变形）
+  float leafAlmond(vec2 p) {
+    p.y *= 0.55; // 拉长
+    float d = length(p) - 0.28;
+    // 尖端
+    d += smoothstep(0.0, 0.30, p.y) * 0.12;
+    d += smoothstep(0.0, -0.25, p.y) * 0.08;
+    return d;
+  }
+
+  // SDF尖头卵形
+  float leafPointed(vec2 p) {
+    // 不对称：上尖下圆
+    float yStretch = p.y > 0.0 ? 0.45 : 0.60;
+    p.y *= yStretch;
+    float d = length(p) - 0.28;
+    d += smoothstep(0.0, 0.20, p.y) * 0.15; // 尖端
+    return d;
+  }
+
+  // 叶脉
+  float veinPattern(vec2 p) {
+    // 主脉
+    float mainVein = abs(p.x) * 8.0;
+    mainVein = smoothstep(0.08, 0.0, mainVein / (0.5 + abs(p.y)));
+    // 侧脉
+    float sideVein = abs(fract(p.y * 5.0 + 0.5) - 0.5);
+    sideVein = smoothstep(0.12, 0.04, sideVein) * smoothstep(-0.30, 0.05, p.y);
+    sideVein *= (1.0 - abs(p.x) * 3.0); // 只在中间区域
+    return mainVein * 0.5 + sideVein * 0.3;
+  }
+
+  void main() {
+    vec2 uv = gl_PointCoord - 0.5;
+    uv = rotUV(uv, vRotation);
+
+    // 轻微不对称（左右不完全一样）
+    uv.x *= 1.0 + uv.y * 0.15;
+
+    // 根据形状类型选SDF
+    float d;
+    if (vLeafType < 0.5) d = leafHeart(uv);
+    else if (vLeafType < 1.5) d = leafAlmond(uv);
+    else d = leafPointed(uv);
+
+    // 抗锯齿边缘
+    float edge = smoothstep(0.01, -0.02, d);
+    if (edge < 0.01) discard;
+
+    // 叶脉
+    float vein = veinPattern(uv);
+
+    // 颜色：基于UV位置渐变（叶根→叶尖）
+    float tipGrad = smoothstep(-0.3, 0.3, uv.y); // 0=根 1=尖
+
+    vec3 color;
+    if (vColorType < 0.5) {
+      // 绿→金
+      vec3 rootCol = vec3(0.10, 0.28, 0.12); // 深绿
+      vec3 tipCol  = vec3(0.55, 0.42, 0.15); // 暖金
+      color = mix(rootCol, tipCol, tipGrad);
+    } else if (vColorType < 1.5) {
+      // 绿→紫
+      vec3 rootCol = vec3(0.10, 0.28, 0.15);
+      vec3 tipCol  = vec3(0.35, 0.18, 0.42);
+      color = mix(rootCol, tipCol, tipGrad);
+    } else {
+      // 绿→粉
+      vec3 rootCol = vec3(0.10, 0.28, 0.12);
+      vec3 tipCol  = vec3(0.50, 0.25, 0.30);
+      color = mix(rootCol, tipCol, tipGrad);
+    }
+
+    // 叶脉加深
+    color = mix(color, color * 0.4, vein);
+
+    // 边缘微微亮（半透明发光感）
+    float edgeGlow = smoothstep(-0.02, 0.005, d) * 0.3;
+    color += edgeGlow;
+
+    float alpha = edge * vAlpha;
+    gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+// ── 叶子材质 ──
+const leafMat = new THREE.ShaderMaterial({
+  vertexShader: leafVertexShader,
+  fragmentShader: leafFragmentShader,
+  uniforms: {
+    uBlend:      { value: 0.0 },
+    uTime:       { value: 0.0 },
+    uLeafGrowth: { value: 0.0 },
+  },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+
+const leafPoints = new THREE.Points(leafGeo, leafMat);
+leafPoints.frustumCulled = false;
+spineGroup.add(leafPoints);
+
+// 叶子生长状态
+let leafGrowTriggered = false;
+let leafGrowStartTime = -10;
+let leafGrowProgress = 0;
+
+
 // ============================================================
 // 10. ambGeo (Layer E)
 // ============================================================
@@ -1288,7 +1620,7 @@ let fpsFrames = 0, fpsLast = performance.now();
 const debugFps = document.getElementById('debug-fps');
 const debugParticles = document.getElementById('debug-particles');
 // 统计总粒子数
-const totalParticleCount = N_SPINE + N_DFULL + N_AMB + N_VINE_TOTAL;
+const totalParticleCount = N_SPINE + N_DFULL + N_AMB + N_VINE_TOTAL + LEAF_COUNT;
 if (debugParticles) debugParticles.textContent = totalParticleCount.toLocaleString();
 
 function animate() {
@@ -1356,6 +1688,25 @@ function animate() {
   vineMat.uniforms.uVineGrowth.value.set(vineGrowProgress[0], vineGrowProgress[1], vineGrowProgress[2]);
   vineMat.uniforms.uBlend.value = smoothBlend;
   vineMat.uniforms.uTime.value  = time;
+
+  // ── 叶子生长状态管理 ──
+  if (!leafGrowTriggered && smoothBlend >= LEAF_GROW_THRESHOLD) {
+    leafGrowTriggered = true;
+    leafGrowStartTime = time;
+  }
+  if (leafGrowTriggered && smoothBlend < LEAF_GROW_THRESHOLD - 0.05) {
+    leafGrowTriggered = false;
+    leafGrowStartTime = time - (1.0 - leafGrowProgress) * LEAF_GROW_DURATION;
+  }
+  if (leafGrowTriggered) {
+    leafGrowProgress = Math.min(1.0, (time - leafGrowStartTime) / LEAF_GROW_DURATION);
+  } else {
+    const elapsed = time - leafGrowStartTime;
+    leafGrowProgress = Math.max(0.0, 1.0 - elapsed / LEAF_GROW_DURATION);
+  }
+  leafMat.uniforms.uLeafGrowth.value = leafGrowProgress;
+  leafMat.uniforms.uBlend.value = smoothBlend;
+  leafMat.uniforms.uTime.value  = time;
 
   // ── Layer C：贝塞尔弧线粒子流────────────────────────────────
   for (let i = 0; i < N_DIFF; i++) {
