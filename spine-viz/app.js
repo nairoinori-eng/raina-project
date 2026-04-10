@@ -986,34 +986,66 @@ ACCENT_VINES.forEach((accent, accentIdx) => {
   }
 });
 
-// ── 分支尖端弥散粒子（跟随blend + 飘到屏幕边缘）──
-// aCurvedPos=弯曲态尖端, aStraightPos=直立态尖端
-// aZPos=漂移方向X, aParamT=漂移方向Y（属性复用）
-const DRIFT_LEN = 3.0; // 弥散距离（飘到屏幕边缘）
-for (const em of driftEmitters) {
-  const tipSpineX = getSpineXAtY(em.sy);
+// ── 分支弥散（整个分支逐渐化开：根部实→尖端散→远处消失）──
+for (const si of DRIFT_SEG_INDICES) {
+  const curve = vineData[0].curves[si];
+  const { rootAtStart } = vineData[0].topo[si];
+  const tipT = rootAtStart ? 0.998 : 0.002;
+  const tipPt = curve.getPointAt(tipT);
+  const tipTan = curve.getTangentAt(tipT);
+  const outSign = rootAtStart ? 1 : -1;
 
   for (let p = 0; p < DRIFT_PPV; p++) {
-    // 近端紧凑如线(±0.10rad)，自然散开
-    const spreadAngle = gaussRand() * 0.10;
-    const cA = Math.cos(spreadAngle), sA = Math.sin(spreadAngle);
-    const pDirX = em.dx * cA - em.dy * sA;
-    const pDirY = em.dx * sA + em.dy * cA;
+    // rawT: 0=分支根部, 1=尖端, 1~3=超出尖端飘散
+    const rawT = (p / (DRIFT_PPV - 1)) * 3.0;
 
-    // curved tip / straight tip（跟随blend移动）
-    vnCurvedX[particleIdx]   = em.sx + tipSpineX;
-    vnCurvedY[particleIdx]   = em.sy;
-    vnStraightX[particleIdx] = em.sx;
-    vnStraightY[particleIdx] = em.sy;
+    let px, py, tanX, tanY;
+    if (rawT <= 1.0) {
+      // 在分支曲线上
+      const ct = rootAtStart
+        ? Math.max(0.002, Math.min(0.998, rawT))
+        : Math.max(0.002, Math.min(0.998, 1.0 - rawT));
+      const pt = curve.getPointAt(ct);
+      const tan = curve.getTangentAt(ct);
+      px = pt.x; py = pt.y;
+      tanX = tan.x * outSign; tanY = tan.y * outSign;
+    } else {
+      // 超出尖端：沿切线延伸
+      const beyond = (rawT - 1.0) * 0.6;
+      px = tipPt.x + tipTan.x * outSign * beyond;
+      py = tipPt.y + tipTan.y * outSign * beyond;
+      tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
+    }
 
-    // 复用Z和paramT存漂移方向
-    vnZPos[particleIdx]      = pDirX;
-    vnParamT[particleIdx]    = pDirY;
-    vnVineId[particleIdx]    = 10;
-    vnPhase[particleIdx]     = Math.random();
-    vnAlphas[particleIdx]    = 1.0;
-    vnSizes[particleIdx]     = 0.060 + Math.random() * 0.015;
-    vnColorVars[particleIdx] = 0.15 + Math.random() * 0.20;
+    // 散布：根部紧凑 → 尖端散开 → 远处很散
+    const spreadWidth = rawT < 0.4
+      ? 0.003 + rawT * 0.008
+      : 0.006 + (rawT - 0.4) * (rawT - 0.4) * 0.06;
+    const perpX = -tanY, perpY = tanX;
+    const spread = gaussRand() * spreadWidth;
+
+    const sx = px * VINE_X_SCALE + perpX * spread;
+    const sy = py * VINE_Y_SCALE + perpY * spread;
+    const spineX = getSpineXAtY(sy);
+
+    vnCurvedX[particleIdx]   = sx + spineX;
+    vnCurvedY[particleIdx]   = sy;
+    vnStraightX[particleIdx] = sx;
+    vnStraightY[particleIdx] = sy;
+    vnZPos[particleIdx]      = gaussRand() * 0.01;
+
+    const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
+    vnParamT[particleIdx]    = yNorm;
+    vnVineId[particleIdx]    = 0;
+    vnPhase[particleIdx]     = Math.random() * 3.0;
+
+    // 根部不透明 → 尖端半透明 → 远处消失
+    const fadeAlpha = rawT < 0.7 ? 0.70
+                    : rawT < 1.0 ? 0.70 * (1.0 - (rawT - 0.7) * 1.2)
+                    : Math.max(0.0, 0.35 * (1.0 - (rawT - 1.0) / 2.0));
+    vnAlphas[particleIdx]    = fadeAlpha;
+    vnSizes[particleIdx]     = 0.038 + Math.random() * 0.010;
+    vnColorVars[particleIdx] = 0.1 + Math.random() * 0.2;
 
     particleIdx++;
   }
@@ -1072,32 +1104,7 @@ const vineVertexShader = /* glsl */`
     float sz;
     vec3 pos;
 
-    if (aVineId > 9.5) {
-      // ── 弥散粒子：尖端跟随blend，沿方向飘到屏幕边缘 ──
-      // aCurvedPos=弯曲态尖端, aStraightPos=直立态尖端
-      float lb = clamp(uBlend, 0.0, 1.0);
-      vec2 tipPos = mix(aCurvedPos, aStraightPos, lb);
-
-      // aZPos=漂移方向X, aParamT=漂移方向Y
-      vec2 driftDir = vec2(aZPos, aParamT);
-      float life = fract(uTime * 0.08 + aVinePhase); // 慢飘
-      vec2 pos2d = tipPos + driftDir * life * 3.0;
-      pos = vec3(pos2d.x, pos2d.y, 0.0);
-
-      // 跟主藤蔓一起出现
-      float mainGrowth = uVineGrowth.x;
-      float driftVisible = smoothstep(0.0, 0.3, mainGrowth);
-
-      // 前80%保持可见，最后才淡出
-      float fadeOut = 1.0 - smoothstep(0.75, 1.0, life);
-      alpha = aAlpha * driftVisible * fadeOut;
-      sz = aSize * (1.0 - life * 0.3);
-
-      vAlpha = alpha;
-      vColorVar = aColorVar;
-
-    } else {
-      // ── 藤蔓粒子（主藤+点缀）──
+    {
       float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
       vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
 
