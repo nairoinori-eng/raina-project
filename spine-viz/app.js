@@ -765,14 +765,26 @@ function getSpineXAtY(y) {
 // ── 预计算曲线和弧长 ──
 const VINE_X_SCALE = 2.0;  // 藤蔓横向扩展，拉开与脊柱的距离
 const VINE_Y_SCALE = 1.35; // 藤蔓纵向拉伸，覆盖到脊柱尖端
-const VINE_WIDTHS = [0.025, 0.016, 0.008];
+const VINE_WIDTHS = [0.012, 0.008, 0.005];
 const VINE_GROW_THRESHOLDS = [0.25, 0.55];
 const VINE_GROW_DURATION = 2.0;
 
+const VINE_BRANCH_EXTEND = 1.6; // 分支从junction向外延伸倍率
 const vineData = VINE_ALL_SEGMENTS.map((segments) => {
   const topo = analyzeVineTopology(segments);
-  const curves = segments.map(seg => {
+  const curves = segments.map((seg, si) => {
     const pts = seg.map(([x, y]) => new THREE.Vector3(x, y, 0));
+    // 分支加长：从root端向外拉伸
+    const { depth, rootAtStart } = topo[si];
+    if (depth > 0) {
+      const rootIdx = rootAtStart ? 0 : pts.length - 1;
+      const root = pts[rootIdx];
+      for (let i = 0; i < pts.length; i++) {
+        if (i === rootIdx) continue;
+        pts[i].x = root.x + (pts[i].x - root.x) * VINE_BRANCH_EXTEND;
+        pts[i].y = root.y + (pts[i].y - root.y) * VINE_BRANCH_EXTEND;
+      }
+    }
     return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.15);
   });
   const lengths = curves.map(c => c.getLength());
@@ -866,15 +878,15 @@ for (let vi = 0; vi < N_VINES; vi++) {
       // 两根藤蔓反向，形成交织
       const yNorm = (vineYMax - sy) / vineYRange;
       const vineFactor = vi === 0 ? 1 : -1;
-      const wrapR = 0.20;
-      vnZPos[particleIdx] = tangent.x * wrapR * vineFactor + gaussRand() * 0.015;
+      const wrapR = 0.06;
+      vnZPos[particleIdx] = tangent.x * wrapR * vineFactor + gaussRand() * 0.008;
 
       vnParamT[particleIdx] = yNorm;
       vnVineId[particleIdx] = vi;
       vnPhase[particleIdx]  = pulsePhase;
 
-      const baseSize = depth === 0 ? 0.055 : depth === 1 ? 0.045 : 0.035;
-      vnSizes[particleIdx] = baseSize + Math.random() * 0.020;
+      const baseSize = depth === 0 ? 0.040 : depth === 1 ? 0.032 : 0.025;
+      vnSizes[particleIdx] = baseSize + Math.random() * 0.012;
       vnAlphas[particleIdx] = (depth === 0 ? 0.75 : 0.60) + Math.random() * 0.20;
 
       // 颜色：Z 深度驱动立体感（前暖后冷）
@@ -949,7 +961,7 @@ const vineVertexShader = /* glsl */`
     float pulse = exp(-pow((aParamT - pulsePos) * 8.0, 2.0));
 
     float endFade = smoothstep(0.0, 0.04, aParamT) * smoothstep(1.0, 0.93, aParamT);
-    float depthFade = 0.15 + 0.85 * smoothstep(-0.15, 0.02, aZPos);
+    float depthFade = 0.25 + 0.75 * smoothstep(-0.06, 0.01, aZPos);
 
     float alpha = aAlpha * visible * endFade * depthFade * (0.8 + pulse * 0.2);
     float sz    = aSize * (1.0 + pulse * 0.3);
@@ -964,10 +976,10 @@ const vineVertexShader = /* glsl */`
 `;
 
 // 藤蔓固定配色（绿色系立体感）
-const VINE_COLOR = new THREE.Color(0x2a3d30);
-const VINE_HL    = new THREE.Color(0x507050);
-const VINE_AC1   = new THREE.Color(0x4a5838);
-const VINE_AC2   = new THREE.Color(0x1e4848);
+const VINE_COLOR = new THREE.Color(0x182818);
+const VINE_HL    = new THREE.Color(0x304030);
+const VINE_AC1   = new THREE.Color(0x2a3520);
+const VINE_AC2   = new THREE.Color(0x122828);
 
 const vineMat = new THREE.ShaderMaterial({
   vertexShader: vineVertexShader, fragmentShader,
