@@ -996,6 +996,9 @@ for (const si of DRIFT_SEG_INDICES) {
   const tipPt = curve.getPointAt(tipT);
   const tipTan = curve.getTangentAt(tipT);
   const outSign = rootAtStart ? 1 : -1;
+  // 尖端在脊柱左边还是右边？决定飘散的横向偏移
+  const tipWorldX = tipPt.x * VINE_X_SCALE;
+  const sideBias = tipWorldX > 0 ? 1.0 : -1.0; // 正=右侧→往右飘，负=左侧→往左飘
 
   for (let p = 0; p < DRIFT_PPV; p++) {
     // rawT: 0=分支根部, 1=尖端, 1~5=超出尖端飘散到屏幕边缘
@@ -1015,17 +1018,17 @@ for (const si of DRIFT_SEG_INDICES) {
       px = curvePt.x; py = curvePt.y;
       tanX = curveTan.x * outSign; tanY = curveTan.y * outSign;
     } else {
-      // 0.95+延伸到屏幕边缘 + 大幅蜿蜒
-      const beyond = Math.max(0, rawT - 0.95) * 1.5;
-      const baseX = tipPt.x + tipTan.x * outSign * beyond;
+      // 0.95+延伸：主方向=切线，横向偏移=往左/右飘 + 蜿蜒
+      const beyond = Math.max(0, rawT - 0.95) * 1.2;
+      // 沿切线前进 + 横向偏移（左边→左飘，右边→右飘）
+      const lateralDrift = beyond * beyond * 0.25 * sideBias; // 二次方加速往外飘
+      const baseX = tipPt.x + tipTan.x * outSign * beyond + lateralDrift;
       const baseY = tipPt.y + tipTan.y * outSign * beyond;
-      // 大幅蜿蜒S曲线
-      const perpDx = -tipTan.y * outSign;
-      const perpDy =  tipTan.x * outSign;
-      const waveAmp = 0.03 + beyond * 0.20;
-      const wave = Math.sin(beyond * 3.0 + si * 2.5);
-      px = baseX + perpDx * wave * waveAmp;
-      py = baseY + perpDy * wave * waveAmp;
+      // 蜿蜒（垂直于飘散方向）
+      const waveAmp = 0.02 + beyond * 0.10;
+      const wave = Math.sin(beyond * 4.0 + si * 2.5);
+      px = baseX;
+      py = baseY + wave * waveAmp; // Y方向蜿蜒
       tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
     }
 
@@ -1282,6 +1285,10 @@ const WAVE = 0.28;
 let time = 0;
 let fpsFrames = 0, fpsLast = performance.now();
 const debugFps = document.getElementById('debug-fps');
+const debugParticles = document.getElementById('debug-particles');
+// 统计总粒子数
+const totalParticleCount = N_SPINE + N_DFULL + N_AMB + N_VINE_TOTAL;
+if (debugParticles) debugParticles.textContent = totalParticleCount.toLocaleString();
 
 function animate() {
   requestAnimationFrame(animate);
