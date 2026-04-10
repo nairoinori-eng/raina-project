@@ -724,6 +724,15 @@ const ACCENT_VINES = [
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
+// ── 分支尖端弥散粒子 ──
+// 从3个分支尖端向外弥散，轨迹相似不乱飞
+const DRIFT_EMITTERS = [
+  { tipX: -0.85, tipY: 3.00, dirX: -0.6, dirY: 0.4, len: 0.45, count: 350 },
+  { tipX:  0.43, tipY:-0.15, dirX:  0.7, dirY: 0.2, len: 0.40, count: 350 },
+  { tipX: -0.33, tipY:-1.30, dirX: -0.5, dirY:-0.5, len: 0.40, count: 350 },
+];
+const DRIFT_TOTAL = DRIFT_EMITTERS.reduce((s, e) => s + e.count, 0);
+
 // ── 藤蔓拓扑分析（自动检测主干/分支/末梢）──
 function vineKey(pt) {
   return `${pt[0].toFixed(3)},${pt[1].toFixed(3)}`;
@@ -813,7 +822,7 @@ vineData.forEach(vd => {
 });
 
 const N_VINE_TOTAL = vineData.reduce((sum, vd) =>
-  sum + vd.ppvs.reduce((a, b) => a + b, 0), 0) + ACCENT_TOTAL;
+  sum + vd.ppvs.reduce((a, b) => a + b, 0), 0) + ACCENT_TOTAL + DRIFT_TOTAL;
 
 // 全局 y 范围
 let vineYMax = -Infinity, vineYMin = Infinity;
@@ -960,6 +969,41 @@ ACCENT_VINES.forEach((accent, accentIdx) => {
   }
 });
 
+// ── 分支尖端弥散粒子 ──
+for (const em of DRIFT_EMITTERS) {
+  // 归一化方向
+  const dLen = Math.sqrt(em.dirX * em.dirX + em.dirY * em.dirY);
+  const ndx = em.dirX / dLen, ndy = em.dirY / dLen;
+  // 垂直方向（做弧线）
+  const pdx = -ndy, pdy = ndx;
+
+  for (let p = 0; p < em.count; p++) {
+    const t = p / (em.count - 1); // 0=尖端, 1=远端
+    const drift = t * em.len;
+    // 轻微弧线 + 微小随机
+    const arc = Math.sin(t * Math.PI) * 0.06;
+    const sx = em.tipX + ndx * drift + pdx * arc + gaussRand() * 0.012 * (0.5 + t);
+    const sy = em.tipY + ndy * drift + pdy * arc + gaussRand() * 0.012 * (0.5 + t);
+
+    const spineX = getSpineXAtY(sy);
+    vnStraightX[particleIdx] = sx;
+    vnStraightY[particleIdx] = sy;
+    vnCurvedX[particleIdx]   = sx + spineX;
+    vnCurvedY[particleIdx]   = sy;
+    vnZPos[particleIdx]      = gaussRand() * 0.025;
+
+    const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
+    vnParamT[particleIdx]    = yNorm;
+    vnVineId[particleIdx]    = 0; // 跟主藤蔓一起生长
+    vnPhase[particleIdx]     = Math.random() * 4.0;
+    vnAlphas[particleIdx]    = 0.55 * (1 - t * t); // 向远端衰减
+    vnSizes[particleIdx]     = (0.028 - t * 0.018) + Math.random() * 0.008;
+    vnColorVars[particleIdx] = 0.15 + Math.random() * 0.25; // 偏高光，有光感
+
+    particleIdx++;
+  }
+}
+
 // ── GPU attributes ──
 const vnPositions = new Float32Array(N_VINE_TOTAL * 3);
 for (let i = 0; i < N_VINE_TOTAL; i++) {
@@ -1058,7 +1102,7 @@ const vineVertexShader = /* glsl */`
 
 // 藤蔓固定配色（绿色系立体感）
 const VINE_COLOR = new THREE.Color(0x1a5040);   // 翡翠绿（基色）
-const VINE_HL    = new THREE.Color(0x225845);   // 玉色高光（压暗）
+const VINE_HL    = new THREE.Color(0x1c4838);   // 玉色高光（进一步压暗）
 const VINE_AC1   = new THREE.Color(0x3a7848);   // 苔藓暖绿
 const VINE_AC2   = new THREE.Color(0x186058);   // 深青绿（冷调）
 
