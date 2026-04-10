@@ -841,7 +841,7 @@ const vnColorVars = new Float32Array(N_VINE_TOTAL);
 const vnPhase     = new Float32Array(N_VINE_TOTAL);
 
 let particleIdx = 0;
-for (let vi = 0; vi < N_VINES; vi++) {
+for (let vi = 0; vi < vineData.length; vi++) {
   const vd = vineData[vi];
   const pulsePhase = vi * 1.3 + 0.2;
 
