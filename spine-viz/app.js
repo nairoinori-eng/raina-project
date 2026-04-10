@@ -1,0 +1,1831 @@
+/**
+ * raina-project — Three.js 粒子脊柱主程序 v6
+ * =============================================
+ * 五层架构：
+ *   Layer A  骨骼柱体（20000，空心管，呼吸横向扩张）
+ *   Layer B  椎节椭圆（13×800=10400，宽扁，呼吸完整调制+扩张）
+ *   Layer C  弥散粒子流（12000，有机流动，全屏弥散）
+ *   Layer D  脊柱辉光线（60个大粒子，跟随曲线弯曲）
+ *   Layer E  环境星尘（300，圆形轨道）
+ *
+ * v6 修复：
+ *   1. 椎节对齐到曲线切线方向（与骨骼管一致）
+ *   2. 弥散粒子流随机角度/曲率/速度，打破规律性
+ *   3. 弥散粒子终点覆盖全屏
+ *   4. ACESFilmic ToneMapping + 限制 bloom，消除过曝
+ */
+
+import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass }     from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { io } from 'socket.io-client';
+import { VINE1_SEGMENTS, VINE2_SEGMENTS } from './figma-vine-paths.js';
+
+
+// ============================================================
+// 1. 脊柱坐标（13控制点 S 型脊柱）
+// ============================================================
+
+const SPINE_SCALE = 1.18;   // 整体缩放（上下留约15%余量）
+
+const SPINE_CURVED = [
+  new THREE.Vector3( 0.00 * SPINE_SCALE,  2.00 * SPINE_SCALE, 0),  // C7
+  new THREE.Vector3( 0.08 * SPINE_SCALE,  1.60 * SPINE_SCALE, 0),  // T1
+  new THREE.Vector3( 0.22 * SPINE_SCALE,  1.20 * SPINE_SCALE, 0),  // T3
+  new THREE.Vector3( 0.36 * SPINE_SCALE,  0.80 * SPINE_SCALE, 0),  // T5
+  new THREE.Vector3( 0.42 * SPINE_SCALE,  0.35 * SPINE_SCALE, 0),  // T7
+  new THREE.Vector3( 0.34 * SPINE_SCALE, -0.05 * SPINE_SCALE, 0),  // T9
+  new THREE.Vector3( 0.14 * SPINE_SCALE, -0.35 * SPINE_SCALE, 0),  // T11
+  new THREE.Vector3(-0.06 * SPINE_SCALE, -0.60 * SPINE_SCALE, 0),  // L1
+  new THREE.Vector3(-0.22 * SPINE_SCALE, -0.90 * SPINE_SCALE, 0),  // L2
+  new THREE.Vector3(-0.34 * SPINE_SCALE, -1.20 * SPINE_SCALE, 0),  // L3
+  new THREE.Vector3(-0.24 * SPINE_SCALE, -1.50 * SPINE_SCALE, 0),  // L4
+  new THREE.Vector3(-0.08 * SPINE_SCALE, -1.80 * SPINE_SCALE, 0),  // L5
+  new THREE.Vector3( 0.00 * SPINE_SCALE, -2.00 * SPINE_SCALE, 0),  // S1
+];
+const SPINE_STRAIGHT = SPINE_CURVED.map(p => new THREE.Vector3(0, p.y, 0));
+
+const curveCurved   = new THREE.CatmullRomCurve3(SPINE_CURVED);
+const curveStraight = new THREE.CatmullRomCurve3(SPINE_STRAIGHT);
+
+
+// ============================================================
+// 2. 粒子数量
+// ============================================================
+
+const N_BONE  = 80000;                 // Layer A（极致精细）
+const N_VERT  = 39000;                 // Layer B (13 × 3000)
+const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
+
+const N_DIFF  = 0;                     // Layer C（暂时关闭弥散粒子）
+const N_GLOW  = 0;                     // Layer D（暂时关闭辉光线）
+const N_DFULL = N_DIFF + N_GLOW;       // diffuseGeo 总量
+
+const N_AMB   = 300;                   // Layer E
+
+
+// ============================================================
+// 3. 颜色（低饱和度，优雅克制）
+// ============================================================
+
+const COLOR_DARK = new THREE.Color(0x3a2d6e);  // 深蓝紫（压暗回来）
+const COLOR_MID  = new THREE.Color(0x5c527a);  // 灰紫过渡
+const COLOR_GOLD = new THREE.Color(0xc4a882);  // 灰金色
+
+// 高光色（接近白色的高亮，强烈正面光感）
+const HL_DARK = new THREE.Color(0xc0b0f0);   // 亮白紫
+const HL_MID  = new THREE.Color(0xe0d0c0);   // 亮白金
+const HL_GOLD = new THREE.Color(0xfff0d8);   // 近白暖光
+
+// 对比色1：暖色系（高饱和）
+const AC1_DARK = new THREE.Color(0xff6840);  // 鲜橘红
+const AC1_MID  = new THREE.Color(0xf0a030);  // 鲜琥珀
+const AC1_GOLD = new THREE.Color(0xff3090);  // 亮品红（在金色中极醒目）
+
+// 对比色2：冷色系（高饱和）
+const AC2_DARK = new THREE.Color(0x20e0c0);  // 鲜翡翠
+const AC2_MID  = new THREE.Color(0x30d870);  // 鲜翠绿
+const AC2_GOLD = new THREE.Color(0x2868ff);  // 亮宝蓝（金色的互补色）
+
+
+// ============================================================
+// 4. 工具函数
+// ============================================================
+
+function gaussRand() {
+  let u = 0, v = 0;
+  while (u === 0) u = Math.random();
+  while (v === 0) v = Math.random();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function smoothstep(e0, e1, x) {
+  const t = Math.max(0, Math.min(1, (x - e0) / (e1 - e0)));
+  return t * t * (3 - 2 * t);
+}
+
+/** 统一呼吸曲线：2s亮起 → 2s保持 → 2s暗下 → 2s保持（8s周期） */
+function breatheCurve(t) {
+  const phase = (t % 8.0) / 8.0;
+  if (phase < 0.25) return smoothstep(0, 1, phase / 0.25);       // 0→1: 2s 慢慢变亮
+  if (phase < 0.50) return 1.0;                                    // 保持亮: 2s
+  if (phase < 0.75) return smoothstep(1, 0, (phase - 0.50) / 0.25); // 1→0: 2s 慢慢变暗
+  return 0.0;                                                      // 保持暗: 2s
+}
+
+function getBlendColor(blend) {
+  const c = new THREE.Color();
+  if (blend < 0.5) c.lerpColors(COLOR_DARK, COLOR_MID, blend * 2);
+  else c.lerpColors(COLOR_MID, COLOR_GOLD, (blend - 0.5) * 2);
+  return c;
+}
+function getHighlightColor(blend) {
+  const c = new THREE.Color();
+  if (blend < 0.5) c.lerpColors(HL_DARK, HL_MID, blend * 2);
+  else c.lerpColors(HL_MID, HL_GOLD, (blend - 0.5) * 2);
+  return c;
+}
+function getAccent1Color(blend) {
+  const c = new THREE.Color();
+  if (blend < 0.5) c.lerpColors(AC1_DARK, AC1_MID, blend * 2);
+  else c.lerpColors(AC1_MID, AC1_GOLD, (blend - 0.5) * 2);
+  return c;
+}
+function getAccent2Color(blend) {
+  const c = new THREE.Color();
+  if (blend < 0.5) c.lerpColors(AC2_DARK, AC2_MID, blend * 2);
+  else c.lerpColors(AC2_MID, AC2_GOLD, (blend - 0.5) * 2);
+  return c;
+}
+
+
+// ============================================================
+// 5. 场景 / 摄像机 / 渲染器
+// ============================================================
+
+const canvas = document.getElementById('spine-canvas');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));  // 降低像素密度提升帧率
+renderer.setSize(window.innerWidth, window.innerHeight);
+// 不用色调映射（ACES会把暗色压太狠），用shader clamp防过曝即可
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x05050d);
+
+// 脊柱父容器：用于整体缓慢摆动，增加3D立体感
+const spineGroup = new THREE.Group();
+scene.add(spineGroup);
+
+const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 100);
+camera.position.set(0, 0, 5);
+camera.lookAt(0, 0, 0);
+
+
+// ============================================================
+// 6. Shader（逐粒子颜色偏移）
+// ============================================================
+
+const vertexShader = /* glsl */`
+  attribute float aSize;
+  attribute float aAlpha;
+  attribute float aColorVar;
+  varying float vAlpha;
+  varying float vColorVar;
+  void main() {
+    vAlpha    = aAlpha;
+    vColorVar = aColorVar;
+    vec4 mv   = modelViewMatrix * vec4(position, 1.0);
+    gl_PointSize = aSize * (300.0 / -mv.z);
+    gl_Position  = projectionMatrix * mv;
+  }
+`;
+
+const fragmentShader = /* glsl */`
+  uniform vec3 uColor;
+  uniform vec3 uHighlight;
+  uniform vec3 uAccent1;
+  uniform vec3 uAccent2;
+  varying float vAlpha;
+  varying float vColorVar;
+  void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    // colorVar > 0: 高光，-0.5~0: 暖对比色，< -0.5: 冷对比色
+    vec3 c;
+    if (vColorVar > 0.0) {
+      c = mix(uColor, uHighlight, clamp(vColorVar, 0.0, 1.0));
+    } else if (vColorVar > -0.5) {
+      c = mix(uColor, uAccent1, clamp(-vColorVar * 2.0, 0.0, 1.0));
+    } else {
+      c = mix(uColor, uAccent2, clamp((-vColorVar - 0.5) * 2.0, 0.0, 1.0));
+    }
+    c = clamp(c, 0.0, 0.88);
+    float core  = exp(-d * d * 24.0);
+    float halo  = exp(-d * d * 10.0) * 0.12;
+    float alpha = (core + halo) * vAlpha;
+    gl_FragColor = vec4(c, alpha);
+  }
+`;
+
+const spineVertexShader = /* glsl */`
+  attribute vec2 aCurvedPos;
+  attribute vec2 aStraightPos;
+  attribute vec2 aCurvedOff;
+  attribute vec2 aStraightOff;
+  attribute float aZPos;
+  attribute float aParamT;
+  attribute float aSize;
+  attribute float aAlpha;
+  attribute float aPhase;
+  attribute float aColorVar;
+  uniform float uBlend;
+  uniform float uBreatheExpand;
+  uniform float uBreathe;
+  uniform float uTime;
+  uniform float uFormation;    // 0 = scattered (IDLE), 1 = formed (spine visible)
+  uniform float uGuideAlpha;   // overall alpha multiplier (0 during teaching)
+  varying float vAlpha;
+  varying float vColorVar;
+  void main() {
+    // ── Formed position (normal spine) ──
+    float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
+    vec2 center = mix(aCurvedPos, aStraightPos, lb);
+    vec2 off = mix(aCurvedOff, aStraightOff, lb);
+    vec3 formedPos = vec3(center.x + off.x * uBreatheExpand, center.y + off.y, aZPos);
+
+    // ── Scattered position (IDLE star dust) ──
+    float seed = aPhase + aParamT * 137.0 + aColorVar * 43.0;
+    float rx = fract(sin(seed * 12.9898) * 43758.5453) * 2.0 - 1.0;
+    float ry = fract(sin(seed * 78.233 + 0.5) * 43758.5453) * 2.0 - 1.0;
+    float rz = fract(sin(seed * 45.164 + 1.0) * 43758.5453) * 2.0 - 1.0;
+    vec3 scatterPos = vec3(rx * 4.5, ry * 3.2, rz * 1.2);
+    // Slow drift in scattered state
+    scatterPos.x += sin(uTime * 0.15 + seed * 6.28) * 0.35;
+    scatterPos.y += cos(uTime * 0.12 + seed * 4.0) * 0.22;
+
+    // ── Blend between scatter and formed ──
+    vec3 pos = mix(scatterPos, formedPos, uFormation);
+
+    // ── Size: small dust in IDLE, normal when formed ──
+    float idleSize = 0.012 + fract(seed * 3.14) * 0.012;
+    float formedSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
+    float size = mix(idleSize, formedSize, uFormation);
+
+    // ── Alpha: dim in IDLE (~35% visible), full when formed ──
+    float idleVisible = step(0.62, fract(seed * 0.618));
+    float idleAlpha = (0.10 + fract(seed * 2.71) * 0.12) * idleVisible;
+    float formedAlpha = aAlpha * (0.55 + uBreathe * 0.45);
+    float alpha = mix(idleAlpha, formedAlpha, uFormation) * uGuideAlpha;
+
+    vAlpha = alpha;
+    vColorVar = aColorVar;
+    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+    gl_PointSize = size * (300.0 / -mv.z);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+
+// ============================================================
+// 7. spineGeo (Layer A + Layer B)
+// ============================================================
+
+const spPositions = new Float32Array(N_SPINE * 3);
+const spSizes     = new Float32Array(N_SPINE);
+const spAlphas    = new Float32Array(N_SPINE);
+const spColorVars = new Float32Array(N_SPINE);
+
+
+// ── Layer A：骨骼柱体（5000粒子，静止，空心管状）─────────────
+
+// 空心管参数（跟随 SPINE_SCALE 缩放）
+const TUBE_OUTER   = 0.14 * SPINE_SCALE;
+const TUBE_INNER   = 0.055 * SPINE_SCALE;
+const TUBE_Y_SCALE = 1.0;              // Z深度=X深度，真正的圆形截面
+
+// 管壁宽度沿脊柱变化（模拟真实椎体：颈椎窄→胸椎中→腰椎宽→骶椎收）
+function tubeWidthAt(t) {
+  // t=0(C7)→0.7, t~0.55(T11/L1)→1.3, t=0.8(L3/L4)→1.25, t=1(S1)→0.8
+  const lumbarPeak = Math.exp(-Math.pow((t - 0.65) * 3.0, 2)) * 0.5;
+  return 0.7 + lumbarPeak + t * 0.3;  // 基础从上到下渐宽 + 腰椎鼓起
+}
+
+const bCpX          = new Float32Array(N_BONE);
+const bCpY          = new Float32Array(N_BONE);
+const bSpX          = new Float32Array(N_BONE);
+const bSpY          = new Float32Array(N_BONE);
+const bT            = new Float32Array(N_BONE);
+const bOffCurvedX   = new Float32Array(N_BONE);  // 弯曲状态截面偏移（切线旋转）
+const bOffCurvedY   = new Float32Array(N_BONE);
+const bOffStraightX = new Float32Array(N_BONE);  // 直立状态截面偏移
+const bOffStraightY = new Float32Array(N_BONE);
+const bZ            = new Float32Array(N_BONE);
+const bBaseS = new Float32Array(N_BONE);   // base size
+const bBaseA = new Float32Array(N_BONE);   // base alpha
+const bPhase = new Float32Array(N_BONE);
+
+// 预计算端点位置和切线，用于上下延伸渐隐（taper）
+const TAPER_EXTEND = 0.12;  // 两端各延伸 12%
+const EXTEND_SCALE = 5.0 * SPINE_SCALE;  // t到世界坐标的近似缩放
+const curveTopPt  = curveCurved.getPoint(0);
+const curveBotPt  = curveCurved.getPoint(1);
+const curveTopTan = curveCurved.getTangent(0);
+const curveBotTan = curveCurved.getTangent(1);
+const straightTopY = curveStraight.getPoint(0).y;
+const straightBotY = curveStraight.getPoint(1).y;
+
+for (let i = 0; i < N_BONE; i++) {
+  // 扩展范围：[-TAPER, 1+TAPER]，两端渐隐延伸
+  bT[i] = -TAPER_EXTEND + Math.random() * (1 + 2 * TAPER_EXTEND);
+
+  let cpx, cpy, spx, spy;
+  const tClamped = Math.max(0, Math.min(1, bT[i]));
+
+  if (bT[i] < 0) {
+    // 上端延伸：沿切线外推 + 柔和内收弯曲
+    const rawExt = -bT[i];  // 0→TAPER_EXTEND
+    const ext = rawExt * EXTEND_SCALE;
+    const bend = rawExt * rawExt * 2.0;  // 二次曲线，越远越弯向中心
+    cpx = curveTopPt.x - curveTopTan.x * ext + (0 - curveTopPt.x) * bend;
+    cpy = curveTopPt.y - curveTopTan.y * ext;
+    spx = 0;
+    spy = straightTopY + ext;
+  } else if (bT[i] > 1) {
+    // 下端延伸：沿切线外推 + 柔和内收弯曲
+    const rawExt = bT[i] - 1;  // 0→TAPER_EXTEND
+    const ext = rawExt * EXTEND_SCALE;
+    const bend = rawExt * rawExt * 2.0;
+    cpx = curveBotPt.x + curveBotTan.x * ext + (0 - curveBotPt.x) * bend;
+    cpy = curveBotPt.y + curveBotTan.y * ext;
+    spx = 0;
+    spy = straightBotY - ext;
+  } else {
+    const cp = curveCurved.getPoint(bT[i]);
+    const sp = curveStraight.getPoint(bT[i]);
+    cpx = cp.x; cpy = cp.y;
+    spx = sp.x; spy = sp.y;
+  }
+
+  bCpX[i] = cpx;  bCpY[i] = cpy;
+  bSpX[i] = spx;  bSpY[i] = spy;
+
+  // 渐隐因子：越靠近延伸末端越窄越淡
+  let taperFactor = 1.0;
+  if (bT[i] < 0) {
+    taperFactor = Math.pow(Math.max(0, 1 + bT[i] / TAPER_EXTEND), 1.5);
+  } else if (bT[i] > 1) {
+    taperFactor = Math.pow(Math.max(0, 1 - (bT[i] - 1) / TAPER_EXTEND), 1.5);
+  }
+
+  // ── 椎间空腔：计算当前粒子距最近椎体中心的远近 ──
+  // 13个椎体均匀分布在 t∈[0,1]，间距 = 1/12
+  // 靠近椎体中心 → 粗亮，靠近两椎之间 → 细暗（椎间盘区域）
+  const segPos = tClamped * 12;          // 0~12 连续值
+  const distFromVert = Math.abs(segPos - Math.round(segPos));  // 0=椎体中心, 0.5=两椎之间
+  // gapFactor: 1.0=椎体处（满宽满亮），~0.12=椎间盘处（窄暗但不完全空）
+  const gapFactor = 0.12 + 0.88 * smoothstep(0.42, 0.18, distFromVert);
+  // 椎体处管壁微微鼓出，椎间处收窄
+  const gapWidth = 0.5 + 0.5 * gapFactor;  // 0.56~1.0
+
+  const widthScale = tubeWidthAt(tClamped);
+  const effectiveOuter = TUBE_OUTER * taperFactor * widthScale * gapWidth;
+  const effectiveInner = TUBE_INNER * taperFactor * widthScale * gapWidth;
+
+  // 25% 粒子填充管壁内部
+  const isInterior = Math.random() < 0.25;
+
+  // 左右两壁分布（保持中空感）+ 大角度范围（Z深度立体感）
+  const sideSign = Math.random() < 0.5 ? 1 : -1;
+  const angleMag = Math.random() * 1.35;   // 0~77°，比原来63°更宽，Z覆盖更深
+  let r;
+  if (isInterior) {
+    r = Math.random() * effectiveInner;
+  } else {
+    r = effectiveInner + Math.pow(Math.random(), 0.5) * (effectiveOuter - effectiveInner);
+  }
+  const cosA = sideSign * Math.cos(angleMag) * r;
+  bZ[i]      = Math.sin(angleMag) * r * TUBE_Y_SCALE;
+
+  const ct         = curveCurved.getTangent(tClamped);
+  bOffCurvedX[i]   = cosA * (-ct.y);
+  bOffCurvedY[i]   = cosA * ct.x;
+  bOffStraightX[i] = cosA;
+  bOffStraightY[i] = 0;
+
+  if (isInterior) {
+    bBaseS[i] = (0.035 + Math.random() * 0.03) * Math.max(0.3, taperFactor) * gapFactor;
+    bBaseA[i] = (0.10 + Math.random() * 0.07) * Math.max(0.3, taperFactor) * gapFactor;
+  } else {
+    const wallRatio = effectiveOuter > effectiveInner
+      ? (r - effectiveInner) / (effectiveOuter - effectiveInner) : 0;
+    bBaseS[i] = (0.04 + wallRatio * 0.03 + Math.random() * 0.02) * (0.6 + Math.random() * 0.7) * Math.max(0.2, taperFactor);
+    bBaseA[i] = ((0.12 + wallRatio * 0.10) + Math.random() * 0.05) * taperFactor * gapFactor;
+  }
+  bPhase[i] = Math.random() * Math.PI * 2;
+
+  // colorVar：Z靠前→高光(正值)，对比色粒子更大更亮才能突出
+  const zDepth = Math.abs(bZ[i]) / Math.max(effectiveOuter * TUBE_Y_SCALE, 0.01);
+  const acRoll = Math.random();
+  if (acRoll < 0.10) {
+    spColorVars[i] = -(0.25 + Math.random() * 0.25);   // 暖对比色
+    bBaseA[i] *= 3.5;
+  } else if (acRoll < 0.18) {
+    spColorVars[i] = -(0.55 + Math.random() * 0.40);   // 冷对比色
+    bBaseA[i] *= 3.5;
+  } else if (acRoll < 0.28) {
+    spColorVars[i] = 0.6 + Math.random() * 0.4;        // 强高光粒子
+    bBaseA[i] *= 2.5;
+  } else {
+    spColorVars[i] = (1 - zDepth) * 0.4 + (Math.random() - 0.5) * 0.1;
+  }
+  spPositions[i*3]   = cpx + bOffCurvedX[i];
+  spPositions[i*3+1] = cpy + bOffCurvedY[i];
+  spPositions[i*3+2] = bZ[i];
+  spSizes[i]  = bBaseS[i];
+  spAlphas[i] = bBaseA[i];
+}
+
+
+// ── Layer B：椎节椭圆（3900粒子，宽扁，加粗强调）─────────────
+
+const VERT_OUTER_BASE = 0.20 * SPINE_SCALE;  // 椎节外径基准
+const VERT_INNER = 0.04 * SPINE_SCALE;       // 椎节内径
+
+// 椎节大小随位置微调（腰椎稍大，但幅度克制避免毛刺）
+function vertSizeAt(vi) {
+  const t = vi / 12;
+  const lumbarBump = Math.exp(-Math.pow((t - 0.65) * 3.5, 2)) * 0.15;
+  return 1.0 + lumbarBump + t * 0.08;  // 1.0~1.2，很温和
+}
+
+const vCurvedX  = new Float32Array(N_VERT);
+const vDeltaX   = new Float32Array(N_VERT);  // straightX - curvedX = -cx
+const vGxOff    = new Float32Array(N_VERT);  // 每粒子横向高斯偏移（呼吸扩张用）
+const vBaseY    = new Float32Array(N_VERT);
+const vBaseZ    = new Float32Array(N_VERT);
+const vST       = new Float32Array(N_VERT);
+const vBaseSize = new Float32Array(N_VERT);
+const vBaseAlph = new Float32Array(N_VERT);
+
+// 预计算每个椎节在曲线上的切线（用于椎节盘对齐）
+const vertTangentsCurved = [];
+const vertTangentsStraight = [];
+for (let vi = 0; vi < 13; vi++) {
+  const t = vi / 12;
+  vertTangentsCurved.push(curveCurved.getTangent(t));
+  vertTangentsStraight.push(new THREE.Vector3(0, -1, 0)); // 直立时切线竖直
+}
+
+// 额外存储：椎节粒子的切线方向偏移（弯曲/直立两态）
+const vOffCurvedX   = new Float32Array(N_VERT);
+const vOffCurvedY   = new Float32Array(N_VERT);
+const vOffStraightX = new Float32Array(N_VERT);
+const vOffStraightY = new Float32Array(N_VERT);
+
+for (let vi = 0; vi < 13; vi++) {
+  const cx = SPINE_CURVED[vi].x;
+  const cy = SPINE_CURVED[vi].y;
+  const t  = vi / 12;
+  const ct = vertTangentsCurved[vi];  // 弯曲态切线
+
+  const vertScale = vertSizeAt(vi);
+  const VERT_OUTER = VERT_OUTER_BASE * vertScale;
+
+  for (let j = 0; j < 3000; j++) {
+    const idx = vi * 800 + j;
+    const vAngle = Math.random() * Math.PI * 2;
+    // 85% 外壳（清晰轮廓），15% 内部填充（体积感）
+    const isVertFill = Math.random() < 0.15;
+    const vr = isVertFill
+      ? Math.pow(Math.random(), 0.5) * VERT_OUTER
+      : VERT_INNER + Math.random() * (VERT_OUTER - VERT_INNER);
+    const cosA   = Math.cos(vAngle) * vr;
+    const gz     = Math.sin(vAngle) * vr;
+    // Y方向扩大分布范围，用 alpha 衰减制造上下渐变（立体感）
+    const ySigma = 0.030 * SPINE_SCALE;
+    const gy     = gaussRand() * ySigma;
+    const yNorm  = Math.abs(gy) / ySigma;  // 归一化距离（0=中心，1~3=边缘）
+    const yFalloff = Math.exp(-yNorm * yNorm * 1.2);  // 高斯衰减：中心亮、边缘暗
+
+    // 弯曲态：截面垂直于曲线切线（与 Layer A 骨骼管一致）
+    vOffCurvedX[idx]   = cosA * (-ct.y) + gy * ct.x;
+    vOffCurvedY[idx]   = cosA * ct.x    + gy * ct.y;
+    // 直立态：切线 = (0,-1,0)，垂直 = (1,0,0)
+    vOffStraightX[idx] = cosA;
+    vOffStraightY[idx] = gy;
+
+    vCurvedX[idx] = cx;
+    vDeltaX[idx]  = -cx;
+    vGxOff[idx]   = cosA;
+    vBaseY[idx]   = cy;
+    vBaseZ[idx]   = gz;
+    vST[idx]      = t;
+
+    const wallRatio = VERT_OUTER > VERT_INNER
+      ? Math.max(0, (vr - VERT_INNER) / (VERT_OUTER - VERT_INNER)) : 0;
+    // 径向边缘柔化：越靠近外缘越暗，消除毛刺
+    const radialNorm = vr / Math.max(VERT_OUTER, 0.001);
+    const edgeSoft = 1.0 - smoothstep(0.7, 1.0, radialNorm);
+    if (isVertFill) {
+      vBaseSize[idx] = (0.04 + Math.random() * 0.03) * (0.7 + 0.3 * yFalloff);
+      vBaseAlph[idx] = (0.10 + Math.random() * 0.07) * yFalloff * edgeSoft;
+    } else {
+      vBaseSize[idx] = (0.05 + wallRatio * 0.03) * (0.7 + Math.random() * 0.5) * (0.65 + 0.35 * yFalloff);
+      vBaseAlph[idx] = ((0.18 + wallRatio * 0.10) + Math.random() * 0.04) * yFalloff * edgeSoft;
+    }
+
+    const gi = N_BONE + idx;
+    spPositions[gi*3]   = cx + vOffCurvedX[idx];
+    spPositions[gi*3+1] = cy + vOffCurvedY[idx];
+    spPositions[gi*3+2] = gz;
+    spSizes[gi]         = vBaseSize[idx];
+    spAlphas[gi]        = vBaseAlph[idx];
+    const vzDepth = Math.abs(gz) / Math.max(VERT_OUTER, 0.01);
+    const vacRoll = Math.random();
+    if (vacRoll < 0.10) {
+      spColorVars[gi] = -(0.25 + Math.random() * 0.25);
+      vBaseAlph[idx] *= 3.5;
+    } else if (vacRoll < 0.18) {
+      spColorVars[gi] = -(0.55 + Math.random() * 0.40);
+      vBaseAlph[idx] *= 3.5;
+    } else if (vacRoll < 0.28) {
+      spColorVars[gi] = 0.6 + Math.random() * 0.4;
+      vBaseAlph[idx] *= 2.5;
+    } else {
+      spColorVars[gi] = (1 - vzDepth) * 0.4 + (Math.random() - 0.5) * 0.12;
+    }
+  }
+}
+
+const spineGeo = new THREE.BufferGeometry();
+spineGeo.setAttribute('position',  new THREE.BufferAttribute(spPositions, 3));
+spineGeo.setAttribute('aSize',     new THREE.BufferAttribute(spSizes, 1));
+spineGeo.setAttribute('aAlpha',    new THREE.BufferAttribute(spAlphas, 1));
+spineGeo.setAttribute('aColorVar', new THREE.BufferAttribute(spColorVars, 1));
+
+// ── GPU attribute packing (Layer A + Layer B into shared arrays) ──
+const gpuCurvedPos   = new Float32Array(N_SPINE * 2);
+const gpuStraightPos = new Float32Array(N_SPINE * 2);
+const gpuCurvedOff   = new Float32Array(N_SPINE * 2);
+const gpuStraightOff = new Float32Array(N_SPINE * 2);
+const gpuZPos        = new Float32Array(N_SPINE);
+const gpuParamT      = new Float32Array(N_SPINE);
+const gpuPhase       = new Float32Array(N_SPINE);
+
+// Pack Layer A (indices 0 .. N_BONE-1)
+for (let i = 0; i < N_BONE; i++) {
+  gpuCurvedPos[i * 2]     = bCpX[i];
+  gpuCurvedPos[i * 2 + 1] = bCpY[i];
+  gpuStraightPos[i * 2]     = bSpX[i];
+  gpuStraightPos[i * 2 + 1] = bSpY[i];
+  gpuCurvedOff[i * 2]     = bOffCurvedX[i];
+  gpuCurvedOff[i * 2 + 1] = bOffCurvedY[i];
+  gpuStraightOff[i * 2]     = bOffStraightX[i];
+  gpuStraightOff[i * 2 + 1] = bOffStraightY[i];
+  gpuZPos[i]   = bZ[i];
+  gpuParamT[i] = bT[i];
+  gpuPhase[i]  = bPhase[i];
+}
+
+// Pack Layer B (indices N_BONE .. N_SPINE-1)
+for (let j = 0; j < N_VERT; j++) {
+  const gi = N_BONE + j;
+  gpuCurvedPos[gi * 2]     = vCurvedX[j];
+  gpuCurvedPos[gi * 2 + 1] = vBaseY[j];
+  gpuStraightPos[gi * 2]     = 0;           // straight spine X is always 0
+  gpuStraightPos[gi * 2 + 1] = vBaseY[j];
+  gpuCurvedOff[gi * 2]     = vOffCurvedX[j];
+  gpuCurvedOff[gi * 2 + 1] = vOffCurvedY[j];
+  gpuStraightOff[gi * 2]     = vOffStraightX[j];
+  gpuStraightOff[gi * 2 + 1] = vOffStraightY[j];
+  gpuZPos[gi]   = vBaseZ[j];
+  gpuParamT[gi] = vST[j];
+  gpuPhase[gi]  = 0.0;  // Layer B has no per-particle phase
+}
+
+spineGeo.setAttribute('aCurvedPos',   new THREE.BufferAttribute(gpuCurvedPos, 2));
+spineGeo.setAttribute('aStraightPos', new THREE.BufferAttribute(gpuStraightPos, 2));
+spineGeo.setAttribute('aCurvedOff',   new THREE.BufferAttribute(gpuCurvedOff, 2));
+spineGeo.setAttribute('aStraightOff', new THREE.BufferAttribute(gpuStraightOff, 2));
+spineGeo.setAttribute('aZPos',        new THREE.BufferAttribute(gpuZPos, 1));
+spineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(gpuParamT, 1));
+spineGeo.setAttribute('aPhase',       new THREE.BufferAttribute(gpuPhase, 1));
+
+const spineMat = new THREE.ShaderMaterial({
+  vertexShader: spineVertexShader, fragmentShader,
+  uniforms: {
+    uColor:         { value: COLOR_DARK.clone() },
+    uHighlight:     { value: HL_DARK.clone() },
+    uAccent1:       { value: AC1_DARK.clone() },
+    uAccent2:       { value: AC2_DARK.clone() },
+    uBlend:         { value: 0.0 },
+    uBreatheExpand: { value: 1.0 },
+    uBreathe:       { value: 0.0 },
+    uTime:          { value: 0.0 },
+    uFormation:     { value: 0.0 },   // 0=scattered, 1=formed
+    uGuideAlpha:    { value: 1.0 },   // overall alpha (0 during teaching)
+  },
+  transparent: true,
+  blending:    THREE.AdditiveBlending,
+  depthWrite:  false,
+});
+const spinePoints = new THREE.Points(spineGeo, spineMat);
+spinePoints.frustumCulled = false;
+spineGroup.add(spinePoints);
+
+
+// ============================================================
+// 8. diffuseGeo (Layer C + Layer D)
+// ============================================================
+
+const dfPositions = new Float32Array(N_DFULL * 3);
+const dfSizes     = new Float32Array(N_DFULL);
+const dfAlphas    = new Float32Array(N_DFULL);
+const dfColorVars = new Float32Array(N_DFULL);
+
+
+// ── Layer C：贝塞尔弧线粒子流（12000粒子）───────────────────
+
+const dPx   = new Float32Array(N_DIFF);  // P0 出生点 X（贝塞尔起点，不再更新）
+const dPy   = new Float32Array(N_DIFF);  // P0 出生点 Y
+const dBzX1 = new Float32Array(N_DIFF);  // 贝塞尔控制点1
+const dBzY1 = new Float32Array(N_DIFF);
+const dBzX2 = new Float32Array(N_DIFF);  // 贝塞尔控制点2
+const dBzY2 = new Float32Array(N_DIFF);
+const dBzX3 = new Float32Array(N_DIFF);  // 贝塞尔终点
+const dBzY3 = new Float32Array(N_DIFF);
+const dT    = new Float32Array(N_DIFF);  // 当前 t ∈ [0,1]
+const dDt   = new Float32Array(N_DIFF);  // 每帧步进
+const dVi   = new Uint8Array(N_DIFF);
+const dSide = new Int8Array(N_DIFF);
+const dBSize  = new Float32Array(N_DIFF);
+const dBAlpha = new Float32Array(N_DIFF);
+const flowAngle = new Float32Array(13);  // 每椎节流向偏角（缓慢上下摆动）
+
+function resetDiffuse(i, blend) {
+  const vi   = Math.floor(Math.random() * 13);
+  const side = Math.random() < 0.5 ? 1 : -1;
+  dVi[i] = vi;  dSide[i] = side;
+
+  // P0：出生在椎节外侧（沿曲线位置）
+  const spineX = SPINE_CURVED[vi].x * (1 - blend);
+  const vtX = spineX + side * (VERT_OUTER_BASE * 0.9 + 0.02);
+  const vtY = SPINE_CURVED[vi].y + (Math.random() - 0.5) * 0.06;
+  dPx[i] = vtX;
+  dPy[i] = vtY;
+
+  // 每个粒子独立随机流向角度（-70度 ~ +70度，不限上下）
+  const flowAngle = (Math.random() - 0.5) * 2.4;  // ±~70度弧度
+  const cosF = Math.cos(flowAngle);
+  const sinF = Math.sin(flowAngle);
+
+  // 总伸展距离：随机长短，覆盖到屏幕边缘（camera z=5, FOV=60 → ~±2.9）
+  const reach = 0.8 + Math.random() * 2.4;   // 0.8 ~ 3.2 单位（最远可到屏幕边缘）
+
+  // 中途弯曲程度：随机曲率
+  const curvature = (Math.random() - 0.5) * 1.2;  // 上弯或下弯
+
+  // 沿（side方向 + 角度偏转）构建贝塞尔控制点
+  const dx1 = side * reach * 0.33;
+  const dy1 = sinF * reach * 0.33 + curvature * 0.15;
+  const dx2 = side * reach * 0.66;
+  const dy2 = sinF * reach * 0.66 + curvature * 0.3;
+  const dx3 = side * reach;
+  const dy3 = sinF * reach + curvature * 0.15;
+
+  // 每个控制点加小扰动防止完全重叠
+  const n = () => (Math.random() - 0.5) * 0.12;
+  dBzX1[i] = vtX + dx1 + n();   dBzY1[i] = vtY + dy1 + n();
+  dBzX2[i] = vtX + dx2 + n();   dBzY2[i] = vtY + dy2 + n();
+  dBzX3[i] = vtX + dx3 + n();   dBzY3[i] = vtY + dy3 + n();
+
+  dT[i]  = 0;
+  // 速度也随机化更大范围：短的快，长的慢
+  dDt[i] = (0.0008 + Math.random() * 0.0014) * (2.0 / (0.8 + reach));
+
+  const sz = Math.random();
+  dBSize[i]  = 0.04 + sz * sz * 0.09;
+  // 远距离粒子更透明
+  dBAlpha[i] = (0.10 + Math.random() * 0.14) * (1.0 - reach * 0.12);
+  dfColorVars[i] = (Math.random() - 0.5) * 0.25;
+}
+
+// 初始化：随机 t 起点，贝塞尔求值无需估算
+for (let i = 0; i < N_DIFF; i++) {
+  resetDiffuse(i, 0);
+  dT[i] = Math.random();
+}
+
+
+// ── Layer D：辉光线（60个大粒子，跟随曲线）──────────────────
+
+// 预计算辉光点的曲线位置（初始化时固定，animate 内仅做线性插值）
+const glowCurvedX  = new Float32Array(N_GLOW);
+const glowStraightX = new Float32Array(N_GLOW);
+const glowY         = new Float32Array(N_GLOW);
+
+for (let i = 0; i < N_GLOW; i++) {
+  const t0 = i / (N_GLOW - 1);
+  const cp = curveCurved.getPoint(t0);
+  const sp = curveStraight.getPoint(t0);
+  glowCurvedX[i]   = cp.x;
+  glowStraightX[i] = sp.x;
+  glowY[i]         = cp.y;
+  dfSizes[N_DIFF + i]     = 0.40;   // 大型软圆（屏幕 ~24px）
+  dfColorVars[N_DIFF + i] = 0;
+}
+
+const diffuseGeo = new THREE.BufferGeometry();
+diffuseGeo.setAttribute('position',  new THREE.BufferAttribute(dfPositions, 3));
+diffuseGeo.setAttribute('aSize',     new THREE.BufferAttribute(dfSizes, 1));
+diffuseGeo.setAttribute('aAlpha',    new THREE.BufferAttribute(dfAlphas, 1));
+diffuseGeo.setAttribute('aColorVar', new THREE.BufferAttribute(dfColorVars, 1));
+
+const diffuseMat = new THREE.ShaderMaterial({
+  vertexShader, fragmentShader,
+  uniforms: {
+    uColor:     { value: COLOR_DARK.clone() },
+    uHighlight: { value: HL_DARK.clone() },
+    uAccent1:   { value: AC1_DARK.clone() },
+    uAccent2:   { value: AC2_DARK.clone() },
+  },
+  transparent: true,
+  blending:    THREE.AdditiveBlending,
+  depthWrite:  false,
+});
+spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
+
+
+// ============================================================
+// 9. vineGeo (Layer F — Figma路径藤蔓系统)
+// ============================================================
+
+const VINE_ALL_SEGMENTS = [VINE1_SEGMENTS]; // 只保留主藤蔓
+const N_VINES = 3; // vineId 0=主藤蔓, 1/2=点缀藤蔓（依次生长）
+
+// ── 点缀藤蔓配置（薄、细、装饰性）──
+// 螺旋缠绕：x=R*sin(θ), z=R*cos(θ)，永远在骨骼外圈
+const ACCENT_VINES = [
+  { radius: 0.34, freq: 2.5, phase: Math.PI * 0.35, ppv: 15000, width: 0.016, alpha: 0.85 },
+  { radius: 0.26, freq: 3.5, phase: Math.PI * 1.30, ppv: 12000, width: 0.014, alpha: 0.80 },
+];
+const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
+
+// ── 分支尖端弥散粒子 ──
+// 从3个分支尖端弥散（位置从实际曲线计算，不硬编码）
+const DRIFT_SEG_INDICES = [7, 9, 12]; // VINE1中弥散的3个分支段
+const DRIFT_PPV = 5000; // 每个分支弥散粒子数
+const DRIFT_TOTAL = DRIFT_SEG_INDICES.length * DRIFT_PPV;
+
+// ── 藤蔓拓扑分析（自动检测主干/分支/末梢）──
+function vineKey(pt) {
+  return `${pt[0].toFixed(3)},${pt[1].toFixed(3)}`;
+}
+
+function analyzeVineTopology(segments) {
+  const conns = new Map();
+  for (const seg of segments) {
+    const sk = vineKey(seg[0]);
+    const ek = vineKey(seg[seg.length - 1]);
+    conns.set(sk, (conns.get(sk) || 0) + 1);
+    conns.set(ek, (conns.get(ek) || 0) + 1);
+  }
+  return segments.map(seg => {
+    const sc = conns.get(vineKey(seg[0])) || 1;
+    const ec = conns.get(vineKey(seg[seg.length - 1])) || 1;
+    const depth = (sc >= 3 && ec >= 3) ? 0
+                : (sc >= 3 || ec >= 3) ? 1 : 2;
+    const rootAtStart = sc >= ec;
+    return { depth, rootAtStart };
+  });
+}
+
+// ── 脊柱 x 偏移查找表（straight→curved 映射）──
+const SPINE_LUT_N = 500;
+const spineLutY = new Float32Array(SPINE_LUT_N);
+const spineLutX = new Float32Array(SPINE_LUT_N);
+for (let i = 0; i < SPINE_LUT_N; i++) {
+  const t = i / (SPINE_LUT_N - 1);
+  const pt = curveCurved.getPoint(t);
+  spineLutY[i] = pt.y;
+  spineLutX[i] = pt.x;
+}
+
+function getSpineXAtY(y) {
+  if (y >= spineLutY[0]) return spineLutX[0];
+  if (y <= spineLutY[SPINE_LUT_N - 1]) return spineLutX[SPINE_LUT_N - 1];
+  let lo = 0, hi = SPINE_LUT_N - 1;
+  while (lo < hi - 1) {
+    const mid = (lo + hi) >> 1;
+    if (spineLutY[mid] > y) lo = mid; else hi = mid;
+  }
+  const frac = (y - spineLutY[lo]) / (spineLutY[hi] - spineLutY[lo]);
+  return spineLutX[lo] + frac * (spineLutX[hi] - spineLutX[lo]);
+}
+
+// ── 预计算曲线和弧长 ──
+const VINE_X_SCALE = 1.5;  // 藤蔓横向扩展，拉开与脊柱的距离
+const VINE_Y_SCALE = 1.35; // 藤蔓纵向拉伸，覆盖到脊柱尖端
+const VINE_WIDTHS = [0.018, 0.007, 0.004];
+const VINE_GROW_THRESHOLDS = [0.05, 0.10, 0.15];
+const VINE_GROW_DURATION = 2.0;
+
+const VINE_BRANCH_EXTEND = 1.6; // 分支从junction向外延伸倍率
+const vineData = VINE_ALL_SEGMENTS.map((segments) => {
+  const topo = analyzeVineTopology(segments);
+  const curves = segments.map((seg, si) => {
+    const pts = seg.map(([x, y]) => new THREE.Vector3(x, y, 0));
+    // 分支加长：从root端向外拉伸
+    const { depth, rootAtStart } = topo[si];
+    if (depth > 0) {
+      const rootIdx = rootAtStart ? 0 : pts.length - 1;
+      const root = pts[rootIdx];
+      for (let i = 0; i < pts.length; i++) {
+        if (i === rootIdx) continue;
+        pts[i].x = root.x + (pts[i].x - root.x) * VINE_BRANCH_EXTEND;
+        pts[i].y = root.y + (pts[i].y - root.y) * VINE_BRANCH_EXTEND;
+      }
+    }
+    return new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.15);
+  });
+  const lengths = curves.map(c => c.getLength());
+  return { segments, topo, curves, lengths };
+});
+
+// 按弧长比例分配粒子（目标 >= 21000）
+const VINE_TARGET_TOTAL = 80000;
+const totalArcLen = vineData.reduce((s, vd) =>
+  s + vd.lengths.reduce((a, b) => a + b, 0), 0);
+
+vineData.forEach(vd => {
+  const vineLen = vd.lengths.reduce((a, b) => a + b, 0);
+  const vineTarget = Math.round(VINE_TARGET_TOTAL * vineLen / totalArcLen);
+  vd.ppvs = vd.lengths.map(len =>
+    Math.max(30, Math.round(vineTarget * len / vineLen))
+  );
+});
+
+// ── 从曲线计算弥散发射点（精确位于分支尖端）──
+const driftEmitters = DRIFT_SEG_INDICES.map(si => {
+  const curve = vineData[0].curves[si];
+  const { rootAtStart } = vineData[0].topo[si];
+  const tipT = rootAtStart ? 0.998 : 0.002; // 接近端点避免边界问题
+  const tipPt = curve.getPointAt(tipT);
+  const tipTan = curve.getTangentAt(tipT);
+  // 方向：从root指向tip（向外）
+  const sign = rootAtStart ? 1 : -1;
+  const rawDx = tipTan.x * sign * VINE_X_SCALE;
+  const rawDy = tipTan.y * sign * VINE_Y_SCALE;
+  const dLen = Math.sqrt(rawDx * rawDx + rawDy * rawDy) || 1;
+  return {
+    sx: tipPt.x * VINE_X_SCALE,
+    sy: tipPt.y * VINE_Y_SCALE,
+    dx: rawDx / dLen,
+    dy: rawDy / dLen,
+  };
+});
+
+const N_VINE_TOTAL = vineData.reduce((sum, vd) =>
+  sum + vd.ppvs.reduce((a, b) => a + b, 0), 0) + ACCENT_TOTAL + DRIFT_TOTAL;
+
+// 全局 y 范围
+let vineYMax = -Infinity, vineYMin = Infinity;
+for (const vd of vineData) {
+  for (const seg of vd.segments) {
+    for (const [, y] of seg) {
+      if (y > vineYMax) vineYMax = y;
+      if (y < vineYMin) vineYMin = y;
+    }
+  }
+}
+const vineYRange = vineYMax - vineYMin;
+
+// ── 预分配粒子数组 ──
+const vnStraightX = new Float32Array(N_VINE_TOTAL);
+const vnStraightY = new Float32Array(N_VINE_TOTAL);
+const vnCurvedX   = new Float32Array(N_VINE_TOTAL);
+const vnCurvedY   = new Float32Array(N_VINE_TOTAL);
+const vnZPos      = new Float32Array(N_VINE_TOTAL);
+const vnParamT    = new Float32Array(N_VINE_TOTAL);
+const vnVineId    = new Float32Array(N_VINE_TOTAL);
+const vnSizes     = new Float32Array(N_VINE_TOTAL);
+const vnAlphas    = new Float32Array(N_VINE_TOTAL);
+const vnColorVars = new Float32Array(N_VINE_TOTAL);
+const vnPhase     = new Float32Array(N_VINE_TOTAL);
+
+let particleIdx = 0;
+for (let vi = 0; vi < vineData.length; vi++) {
+  const vd = vineData[vi];
+  const pulsePhase = vi * 1.3 + 0.2;
+
+  for (let si = 0; si < vd.curves.length; si++) {
+    // 弥散分支由专门的弥散系统处理，跳过
+    if (vi === 0 && DRIFT_SEG_INDICES.includes(si)) continue;
+    const curve = vd.curves[si];
+    const ppv = vd.ppvs[si];
+    const { depth, rootAtStart } = vd.topo[si];
+    const baseWidth = VINE_WIDTHS[Math.min(depth, 2)];
+
+    for (let p = 0; p < ppv; p++) {
+      const t = p / Math.max(1, ppv - 1);
+      const pt = curve.getPointAt(t);
+      const tangent = curve.getTangentAt(t);
+
+      const sx = pt.x * VINE_X_SCALE;
+      const sy = pt.y * VINE_Y_SCALE;
+
+      // curved: 扩展后的坐标 + 脊柱弯曲偏移
+      const spineX = getSpineXAtY(sy);
+      const cx = sx + spineX;
+      const cy = sy;
+
+      // 粗细渐变：root端粗 → tip端细
+      const taperT = rootAtStart ? t : (1 - t);
+      const taper = depth === 0
+        ? (0.85 + 0.15 * (1 - taperT))
+        : (1.0 - taperT * 0.92);
+      const width = baseWidth * taper;
+
+      // 垂直于藤蔓切线方向展宽
+      const perpX = -tangent.y;
+      const perpY = tangent.x;
+      const spread = gaussRand() * width;
+
+      vnStraightX[particleIdx] = sx + perpX * spread;
+      vnStraightY[particleIdx] = sy + perpY * spread;
+      vnCurvedX[particleIdx]   = cx + perpX * spread;
+      vnCurvedY[particleIdx]   = cy + perpY * spread;
+
+      // Z 深度：切线方向驱动缠绕
+      // 藤蔓往右摆(tangent.x>0)=前面，往左摆=后面
+      // 两根藤蔓反向，形成交织
+      const yNorm = (vineYMax - sy) / vineYRange;
+      const vineFactor = vi === 0 ? 1 : -1;
+      const wrapR = 0.06;
+      vnZPos[particleIdx] = tangent.x * wrapR * vineFactor + gaussRand() * 0.008;
+
+      vnParamT[particleIdx] = yNorm;
+      vnVineId[particleIdx] = vi;
+      vnPhase[particleIdx]  = pulsePhase;
+
+      const baseSize = depth === 0 ? 0.038 : depth === 1 ? 0.030 : 0.022;
+      vnSizes[particleIdx] = baseSize + Math.random() * 0.010;
+      vnAlphas[particleIdx] = (depth === 0 ? 0.90 : 0.75) + Math.random() * 0.10;
+
+      // 颜色渐变：顶部暖亮 → 底部深冷 + Z深度立体
+      const yNormColor = (vineYMax - sy) / vineYRange;
+      const gradient = 0.4 - yNormColor * 0.9; // +0.4(顶/高光) → -0.5(底/冷调)
+      const z = vnZPos[particleIdx];
+      const zBias = z > 0.03 ? 0.15 : z < -0.03 ? -0.15 : 0.0;
+      vnColorVars[particleIdx] = gradient + zBias + (Math.random() - 0.5) * 0.12;
+
+      particleIdx++;
+    }
+  }
+}
+
+// ── 点缀藤蔓（螺旋缠绕，永远在骨骼外圈）──
+function vineEnvelope(t) {
+  return 0.6 + 0.4 * Math.sin(t * Math.PI);
+}
+ACCENT_VINES.forEach((accent, accentIdx) => {
+  for (let p = 0; p < accent.ppv; p++) {
+    const t = p / (accent.ppv - 1);
+    const cpS = curveStraight.getPoint(t);
+    const cpC = curveCurved.getPoint(t);
+    const tanC = curveCurved.getTangent(t);
+
+    // 螺旋角度
+    const theta = t * Math.PI * accent.freq * 2 + accent.phase;
+    const env = vineEnvelope(t);
+    const r = accent.radius * env;
+
+    // x = R*sin(θ), z = R*cos(θ) → 圆形缠绕，永不穿过骨骼
+    const helixX = r * Math.sin(theta);
+    const helixZ = r * Math.cos(theta);
+    const spread = gaussRand() * accent.width;
+
+    // straight: 螺旋偏移
+    const sx = helixX + spread;
+    const sy = cpS.y;
+
+    // curved: 沿脊柱切线法向偏移
+    const perpCX = -tanC.y;
+    const perpCY =  tanC.x;
+    const cx = cpC.x + perpCX * (helixX + spread);
+    const cy = cpC.y + perpCY * (helixX + spread);
+
+    vnStraightX[particleIdx] = sx;
+    vnStraightY[particleIdx] = sy;
+    vnCurvedX[particleIdx]   = cx;
+    vnCurvedY[particleIdx]   = cy;
+
+    // Z: cos分量 → 前面(z>0)亮, 后面(z<0)暗
+    vnZPos[particleIdx] = helixZ + gaussRand() * 0.005;
+
+    const yNorm = (vineYMax - sy) / vineYRange;
+    vnParamT[particleIdx]  = yNorm;
+    vnVineId[particleIdx]  = accentIdx + 1; // 1,2,3 依次长出
+    vnPhase[particleIdx]   = accent.phase;
+    vnSizes[particleIdx]   = 0.035 + Math.random() * 0.010;
+    vnAlphas[particleIdx]  = accent.alpha + Math.random() * 0.10;
+    vnColorVars[particleIdx] = (Math.random() - 0.5) * 0.15;
+
+    particleIdx++;
+  }
+});
+
+// ── 分支弥散（整个分支逐渐化开：根部实→尖端散→远处消失）──
+for (const si of DRIFT_SEG_INDICES) {
+  const curve = vineData[0].curves[si];
+  const { rootAtStart } = vineData[0].topo[si];
+  const tipT = rootAtStart ? 0.998 : 0.002;
+  const tipPt = curve.getPointAt(tipT);
+  const tipTan = curve.getTangentAt(tipT);
+  const outSign = rootAtStart ? 1 : -1;
+  // 尖端在脊柱左边还是右边？决定飘散的横向偏移
+  const tipWorldX = tipPt.x * VINE_X_SCALE;
+  const sideBias = tipWorldX > 0 ? 1.0 : -1.0; // 正=右侧→往右飘，负=左侧→往左飘
+
+  for (let p = 0; p < DRIFT_PPV; p++) {
+    // rawT: 0=分支根部, 1=尖端, 1~5=超出尖端飘散到屏幕边缘
+    const rawT = (p / (DRIFT_PPV - 1)) * 5.0;
+
+    // 计算沿曲线位置 + 超出尖端的延伸
+    let px, py, tanX, tanY;
+    const clampedT = Math.min(rawT, 1.0);
+    const ct = rootAtStart
+      ? Math.max(0.002, Math.min(0.998, clampedT))
+      : Math.max(0.002, Math.min(0.998, 1.0 - clampedT));
+    const curvePt = curve.getPointAt(ct);
+    const curveTan = curve.getTangentAt(ct);
+
+    if (rawT <= 0.95) {
+      // 在分支曲线上
+      px = curvePt.x; py = curvePt.y;
+      tanX = curveTan.x * outSign; tanY = curveTan.y * outSign;
+    } else {
+      // 0.95+延伸：一出尖端就往左/右弯，带蜿蜒
+      const beyond = Math.max(0, rawT - 0.95) * 1.2;
+      // 沿切线少量前进，主要是横向飘
+      const forwardDrift = beyond * 0.3;
+      const lateralDrift = (beyond * 0.25 + beyond * beyond * 0.08) * sideBias;
+      const baseX = tipPt.x + tipTan.x * outSign * forwardDrift + lateralDrift;
+      const baseY = tipPt.y + tipTan.y * outSign * forwardDrift;
+      // 蜿蜒S曲线
+      const waveAmp = 0.03 + beyond * 0.08;
+      const wave = Math.sin(beyond * 2.5 + si * 2.5);
+      px = baseX;
+      py = baseY + wave * waveAmp;
+      tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
+    }
+
+    // 散布：根部实线 → 尖端微宽 → 远处渐散但仍成线
+    const spreadWidth = rawT < 0.5
+      ? 0.003 + rawT * 0.010
+      : rawT < 1.0
+        ? 0.008 + (rawT - 0.5) * 0.012
+        : 0.014 + (rawT - 1.0) * 0.008; // 远处max≈0.046，仍可见
+    const perpX = -tanY, perpY = tanX;
+    const spread = gaussRand() * spreadWidth;
+
+    const sx = px * VINE_X_SCALE + perpX * spread;
+    const sy = py * VINE_Y_SCALE + perpY * spread;
+    const spineX = getSpineXAtY(sy);
+
+    vnCurvedX[particleIdx]   = sx + spineX;
+    vnCurvedY[particleIdx]   = sy;
+    vnStraightX[particleIdx] = sx;
+    vnStraightY[particleIdx] = sy;
+    vnZPos[particleIdx]      = gaussRand() * 0.01;
+
+    const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
+    vnParamT[particleIdx]    = yNorm;
+    vnVineId[particleIdx]    = 0;
+    vnPhase[particleIdx]     = Math.random() * 3.0;
+
+    // 根部实 → 缓慢变淡 → 屏幕边缘消失
+    const fadeAlpha = rawT < 1.0 ? 0.75 - rawT * 0.10
+                    : Math.max(0.0, 0.65 * (1.0 - (rawT - 1.0) / 4.0));
+    vnAlphas[particleIdx]    = fadeAlpha;
+    vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
+    vnColorVars[particleIdx] = 0.1 + Math.random() * 0.2;
+
+    particleIdx++;
+  }
+}
+
+// ── GPU attributes ──
+const vnPositions = new Float32Array(N_VINE_TOTAL * 3);
+for (let i = 0; i < N_VINE_TOTAL; i++) {
+  vnPositions[i * 3]     = vnCurvedX[i];
+  vnPositions[i * 3 + 1] = vnCurvedY[i];
+  vnPositions[i * 3 + 2] = vnZPos[i];
+}
+
+const vineGeo = new THREE.BufferGeometry();
+vineGeo.setAttribute('position',   new THREE.BufferAttribute(vnPositions, 3));
+vineGeo.setAttribute('aSize',      new THREE.BufferAttribute(vnSizes, 1));
+vineGeo.setAttribute('aAlpha',     new THREE.BufferAttribute(vnAlphas, 1));
+vineGeo.setAttribute('aColorVar',  new THREE.BufferAttribute(vnColorVars, 1));
+
+const vnGpuCurvedPos   = new Float32Array(N_VINE_TOTAL * 2);
+const vnGpuStraightPos = new Float32Array(N_VINE_TOTAL * 2);
+for (let i = 0; i < N_VINE_TOTAL; i++) {
+  vnGpuCurvedPos[i * 2]     = vnCurvedX[i];
+  vnGpuCurvedPos[i * 2 + 1] = vnCurvedY[i];
+  vnGpuStraightPos[i * 2]     = vnStraightX[i];
+  vnGpuStraightPos[i * 2 + 1] = vnStraightY[i];
+}
+vineGeo.setAttribute('aCurvedPos',   new THREE.BufferAttribute(vnGpuCurvedPos, 2));
+vineGeo.setAttribute('aStraightPos', new THREE.BufferAttribute(vnGpuStraightPos, 2));
+vineGeo.setAttribute('aZPos',        new THREE.BufferAttribute(vnZPos, 1));
+vineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(vnParamT, 1));
+vineGeo.setAttribute('aVineId',      new THREE.BufferAttribute(vnVineId, 1));
+vineGeo.setAttribute('aVinePhase',   new THREE.BufferAttribute(vnPhase, 1));
+
+// 藤蔓 vertex shader：GPU双态插值 + 触发式生长 + 能量脉冲
+const vineVertexShader = /* glsl */`
+  attribute vec2 aCurvedPos;
+  attribute vec2 aStraightPos;
+  attribute float aZPos;
+  attribute float aParamT;
+  attribute float aVineId;
+  attribute float aVinePhase;
+  attribute float aSize;
+  attribute float aAlpha;
+  attribute float aColorVar;
+
+  uniform float uBlend;
+  uniform float uTime;
+  uniform vec3 uVineGrowth;
+  uniform float uFormation;  // hide vines during intro (0=hidden, 1=visible)
+
+  varying float vAlpha;
+  varying float vColorVar;
+
+  void main() {
+    float alpha;
+    float sz;
+    vec3 pos;
+
+    {
+      float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
+      vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
+
+      // 随风摇曳
+      float swayBase = 1.0 - aParamT * 0.3;
+      float vineAmp = aVineId < 0.5 ? 1.0 : aVineId < 1.5 ? 1.4 : 0.7;
+      float vineFreq = aVineId < 0.5 ? 1.0 : aVineId < 1.5 ? 0.8 : 1.3;
+      float swayX = sin(uTime * 0.35 * vineFreq + aParamT * 3.0 + aVinePhase) * 0.03 * swayBase * vineAmp;
+      float swayY = sin(uTime * 0.6 * vineFreq + aParamT * 8.0 + aVinePhase * 2.0) * 0.06 * swayBase * vineAmp
+                  + sin(uTime * 1.2 * vineFreq + aParamT * 14.0) * 0.02 * swayBase * vineAmp;
+      pos2d.x += swayX;
+      pos2d.y += swayY;
+
+      pos = vec3(pos2d.x, pos2d.y, aZPos);
+
+      // 3根藤蔓依次生长
+      float myGrowth = aVineId < 0.5 ? uVineGrowth.x
+                     : aVineId < 1.5 ? uVineGrowth.y
+                     : uVineGrowth.z;
+      float growFront = myGrowth * 1.15;
+      float visible = smoothstep(growFront + 0.01, growFront - 0.12, aParamT);
+
+      // 光流脉冲（每根藤蔓节奏错开）
+      float pulseOff = aVineId < 0.5 ? 0.0 : aVineId < 1.5 ? 0.55 : 1.10;
+      float pulsePos = mod(uTime * 0.13 + pulseOff, 1.6) - 0.15;
+      float pulse = exp(-pow((aParamT - pulsePos) * 5.0, 2.0));
+      float pulsePos2 = mod(uTime * 0.20 + pulseOff + 0.7, 1.8) - 0.1;
+      float pulse2 = exp(-pow((aParamT - pulsePos2) * 7.0, 2.0)) * 0.4;
+      float totalPulse = pulse + pulse2;
+
+      float endFade = smoothstep(0.0, 0.04, aParamT) * smoothstep(1.0, 0.93, aParamT);
+      float depthFade = 0.25 + 0.75 * smoothstep(-0.06, 0.01, aZPos);
+
+      float effectivePulse = totalPulse * depthFade;
+      alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * 0.45);
+      alpha *= uFormation;  // hide vines during intro
+      sz = aSize * (1.0 + effectivePulse * 0.5);
+
+      vAlpha = alpha;
+      vColorVar = aColorVar + totalPulse * 0.5;
+    }
+
+    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+    gl_PointSize = sz * (300.0 / -mv.z);
+    gl_Position  = projectionMatrix * mv;
+  }
+`;
+
+// 藤蔓固定配色（绿色系立体感）
+const VINE_COLOR = new THREE.Color(0x1a5040);   // 翡翠绿（基色）
+const VINE_HL    = new THREE.Color(0x1c4838);   // 玉色高光（进一步压暗）
+const VINE_AC1   = new THREE.Color(0x3a7848);   // 苔藓暖绿
+const VINE_AC2   = new THREE.Color(0x186058);   // 深青绿（冷调）
+
+const vineMat = new THREE.ShaderMaterial({
+  vertexShader: vineVertexShader, fragmentShader,
+  uniforms: {
+    uColor:     { value: VINE_COLOR },
+    uHighlight: { value: VINE_HL },
+    uAccent1:   { value: VINE_AC1 },
+    uAccent2:   { value: VINE_AC2 },
+    uBlend:      { value: 0.0 },
+    uTime:       { value: 0.0 },
+    uVineGrowth: { value: new THREE.Vector3(0, 0, 0) },
+    uFormation:  { value: 0.0 },
+  },
+  transparent: true,
+  blending:    THREE.AdditiveBlending,
+  depthWrite:  false,
+});
+const vinePoints = new THREE.Points(vineGeo, vineMat);
+vinePoints.frustumCulled = false;
+spineGroup.add(vinePoints);
+
+// 藤蔓生长状态（JS侧管理，触发式动画）
+const vineGrowTriggered = [false, false, false];
+const vineGrowStartTime = [-10, -10, -10];
+const vineGrowProgress  = [0, 0, 0];
+
+
+
+// ============================================================
+// 10. ambGeo (Layer E)
+// ============================================================
+
+const ambBase     = new Float32Array(N_AMB * 3);
+const ambOrbitR   = new Float32Array(N_AMB);
+const ambOrbitSpd = new Float32Array(N_AMB);
+const ambOrbitPh  = new Float32Array(N_AMB);
+const ambPos      = new Float32Array(N_AMB * 3);
+const ambSizes    = new Float32Array(N_AMB);
+const ambAlphas   = new Float32Array(N_AMB);
+const ambCVars    = new Float32Array(N_AMB);
+
+for (let i = 0; i < N_AMB; i++) {
+  ambBase[i*3]   = (Math.random() - 0.5) * 10;
+  ambBase[i*3+1] = (Math.random() - 0.5) * 7;
+  ambBase[i*3+2] = (Math.random() - 0.5) * 1.5;
+  ambPos[i*3]   = ambBase[i*3];
+  ambPos[i*3+1] = ambBase[i*3+1];
+  ambPos[i*3+2] = ambBase[i*3+2];
+  ambSizes[i]    = 0.010 + Math.random() * 0.015;
+  ambAlphas[i]   = 0.05  + Math.random() * 0.08;
+  ambOrbitR[i]   = 0.04  + Math.random() * 0.18;
+  ambOrbitSpd[i] = 0.04  + Math.random() * 0.12;
+  ambOrbitPh[i]  = Math.random() * Math.PI * 2;
+  ambCVars[i]    = (Math.random() - 0.5) * 0.15;
+}
+
+const ambGeo = new THREE.BufferGeometry();
+ambGeo.setAttribute('position',  new THREE.BufferAttribute(ambPos, 3));
+ambGeo.setAttribute('aSize',     new THREE.BufferAttribute(ambSizes, 1));
+ambGeo.setAttribute('aAlpha',    new THREE.BufferAttribute(ambAlphas, 1));
+ambGeo.setAttribute('aColorVar', new THREE.BufferAttribute(ambCVars, 1));
+
+const ambMat = new THREE.ShaderMaterial({
+  vertexShader, fragmentShader,
+  uniforms: {
+    uColor:     { value: new THREE.Color(0x18102e) },
+    uHighlight: { value: new THREE.Color(0x18102e) },
+    uAccent1:   { value: new THREE.Color(0x18102e) },
+    uAccent2:   { value: new THREE.Color(0x18102e) },
+  },
+  transparent: true,
+  blending:    THREE.AdditiveBlending,
+  depthWrite:  false,
+});
+scene.add(new THREE.Points(ambGeo, ambMat));
+
+
+// ============================================================
+// 10. 后处理
+// ============================================================
+
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+
+// Bloom 用半分辨率渲染（性能关键优化）
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2)),
+  0.15,  // strength
+  0.15,  // radius
+  0.45   // threshold
+);
+composer.addPass(bloomPass);
+
+
+
+// ============================================================
+// 11. 状态 / blend 控制 + 引导动画状态
+// ============================================================
+
+let currentMode   = 'IDLE';   // IDLE → GUIDE → EXPERIENCE
+let targetBlend   = 0.0;
+let smoothBlend   = 0.0;
+let blendVelocity = 0.0;
+const WAVE = 0.28;
+
+// ── 引导动画状态 ──
+let guideStartTime = 0;       // 引导开始的绝对时间(秒)
+let guideElapsed   = 0;       // 引导已经过的秒数
+
+// Import overlay manager
+import { IntroOverlays } from './intro-overlays.js';
+const overlays = new IntroOverlays();
+
+
+// ============================================================
+// 11b. 引导动画控制函数
+// ============================================================
+
+function startGuide() {
+  if (currentMode !== 'IDLE') return;
+  currentMode = 'GUIDE';
+  guideStartTime = performance.now() / 1000;
+  overlays.hideIdleUI();
+  updateDebugUI();
+  console.log('[raina] 60s 认知引导开始');
+}
+
+function enterExperience() {
+  currentMode = 'EXPERIENCE';
+  overlays.clearAll();
+  // 确保 formation = 1, guideAlpha = 1
+  spineMat.uniforms.uFormation.value  = 1.0;
+  spineMat.uniforms.uGuideAlpha.value = 1.0;
+  vineMat.uniforms.uFormation.value   = 1.0;
+  updateDebugUI();
+  console.log('[raina] 呼吸体验阶段开始');
+}
+
+function resetToIdle() {
+  currentMode = 'IDLE';
+  targetBlend   = 0.0;
+  smoothBlend   = 0.0;
+  blendVelocity = 0.0;
+  spineMat.uniforms.uFormation.value  = 0.0;
+  spineMat.uniforms.uGuideAlpha.value = 1.0;
+  vineMat.uniforms.uFormation.value   = 0.0;
+  overlays.showIdleUI();
+  updateDebugUI();
+}
+
+
+// ============================================================
+// 12. 动画主循环
+// ============================================================
+
+let time = 0;
+let fpsFrames = 0, fpsLast = performance.now();
+const debugFps = document.getElementById('debug-fps');
+const debugParticles = document.getElementById('debug-particles');
+const totalParticleCount = N_SPINE + N_DFULL + N_AMB + N_VINE_TOTAL;
+if (debugParticles) debugParticles.textContent = totalParticleCount.toLocaleString();
+
+function animate() {
+  requestAnimationFrame(animate);
+  time += 0.016;
+
+  // FPS
+  fpsFrames++;
+  const now = performance.now();
+  if (now - fpsLast >= 1000) {
+    if (debugFps) debugFps.textContent = fpsFrames;
+    fpsFrames = 0;
+    fpsLast = now;
+  }
+
+  // ── 分模式更新 ──
+  switch (currentMode) {
+    case 'IDLE':       updateIdle(time);       break;
+    case 'GUIDE':      updateGuide(time);      break;
+    case 'EXPERIENCE': updateExperience(time); break;
+  }
+
+  // ── 公共：环境星尘始终更新 ──
+  const ap = ambGeo.attributes.position.array;
+  for (let i = 0; i < N_AMB; i++) {
+    ap[i*3]   = ambBase[i*3]   + Math.cos(time * ambOrbitSpd[i]       + ambOrbitPh[i]) * ambOrbitR[i];
+    ap[i*3+1] = ambBase[i*3+1] + Math.sin(time * ambOrbitSpd[i] * 0.7 + ambOrbitPh[i]) * ambOrbitR[i];
+  }
+  ambGeo.attributes.position.needsUpdate = true;
+
+  if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
+  composer.render();
+}
+
+// ── IDLE 更新 ──────────────────────────────────────────────
+function updateIdle(t) {
+  spineMat.uniforms.uFormation.value  = 0.0;
+  spineMat.uniforms.uGuideAlpha.value = 1.0;
+  spineMat.uniforms.uBlend.value      = 0.0;
+  spineMat.uniforms.uBreatheExpand.value = 1.0;
+  spineMat.uniforms.uBreathe.value    = 0.0;
+  spineMat.uniforms.uTime.value       = t;
+  vineMat.uniforms.uFormation.value   = 0.0;
+  vineMat.uniforms.uTime.value        = t;
+
+  // 缓慢摆动
+  if (!branchEditMode) spineGroup.rotation.y = Math.sin(t * 0.52) * 0.35;
+
+  // 颜色：固定在暗蓝紫
+  spineMat.uniforms.uColor.value.copy(COLOR_DARK);
+  spineMat.uniforms.uHighlight.value.copy(HL_DARK);
+  spineMat.uniforms.uAccent1.value.copy(AC1_DARK);
+  spineMat.uniforms.uAccent2.value.copy(AC2_DARK);
+
+  bloomPass.strength = 0.08;
+}
+
+// ── GUIDE 更新（60s 认知引导时间线）─────────────────────────
+function updateGuide(t) {
+  guideElapsed = performance.now() / 1000 - guideStartTime;
+
+  // 检查结束
+  if (guideElapsed >= 60) {
+    enterExperience();
+    return;
+  }
+
+  // 更新叠加层
+  overlays.updateGuide(guideElapsed);
+
+  // 缓慢摆动
+  if (!branchEditMode) spineGroup.rotation.y = Math.sin(t * 0.52) * 0.35;
+
+  // 时间总是同步
+  spineMat.uniforms.uTime.value = t;
+  vineMat.uniforms.uTime.value  = t;
+
+  // blend 在引导期间保持0
+  spineMat.uniforms.uBlend.value = 0.0;
+
+  // 颜色：固定在暗蓝紫（blend=0 的颜色）
+  spineMat.uniforms.uColor.value.copy(COLOR_DARK);
+  spineMat.uniforms.uHighlight.value.copy(HL_DARK);
+  spineMat.uniforms.uAccent1.value.copy(AC1_DARK);
+  spineMat.uniforms.uAccent2.value.copy(AC2_DARK);
+  diffuseMat.uniforms.uColor.value.copy(COLOR_DARK);
+  diffuseMat.uniforms.uHighlight.value.copy(HL_DARK);
+  diffuseMat.uniforms.uAccent1.value.copy(AC1_DARK);
+  diffuseMat.uniforms.uAccent2.value.copy(AC2_DARK);
+
+  // 藤蔓始终隐藏
+  vineMat.uniforms.uFormation.value = 0.0;
+
+  const e = guideElapsed;
+
+  if (e < 12) {
+    // ─── 第一段："我的脊柱"（0-12s）—— 粒子凝聚成脊柱 ───
+    const formation = Math.min(1, e / 5);          // 5s 内完成凝聚
+    const breathe   = smoothstep(0, 1, (e - 3) / 4) * 0.3; // 3s后开始微弱呼吸脉动
+
+    spineMat.uniforms.uFormation.value  = formation;
+    spineMat.uniforms.uGuideAlpha.value = 1.0;
+    spineMat.uniforms.uBreathe.value    = breathe;
+    spineMat.uniforms.uBreatheExpand.value = 1.0;
+
+    bloomPass.strength = 0.08 + formation * 0.08;
+
+  } else if (e < 22) {
+    // ─── 第二段："什么是脊柱侧弯"（12-22s）—— 脊柱展示 ───
+    spineMat.uniforms.uFormation.value  = 1.0;
+    spineMat.uniforms.uGuideAlpha.value = 1.0;
+    spineMat.uniforms.uBreathe.value    = 0.3;
+    spineMat.uniforms.uBreatheExpand.value = 1.0;
+    bloomPass.strength = 0.16;
+
+  } else if (e < 32) {
+    // ─── 第三段a："找到凸起侧"（22-32s）—— 脊柱淡出 ───
+    const segT = (e - 22) / 10;
+    const guideAlpha = Math.max(0, 1 - segT * 2.5); // 4s 内淡出
+
+    spineMat.uniforms.uFormation.value  = 1.0;
+    spineMat.uniforms.uGuideAlpha.value = guideAlpha;
+    spineMat.uniforms.uBreathe.value    = 0.2 * guideAlpha;
+    spineMat.uniforms.uBreatheExpand.value = 1.0;
+    bloomPass.strength = 0.16 * guideAlpha + 0.04;
+
+  } else if (e < 45) {
+    // ─── 第三段b："演示+跟做"（32-45s）—— 脊柱隐藏，教学 ───
+    spineMat.uniforms.uFormation.value  = 1.0;
+    spineMat.uniforms.uGuideAlpha.value = 0.0;
+    spineMat.uniforms.uBreathe.value    = 0.0;
+    spineMat.uniforms.uBreatheExpand.value = 1.0;
+    bloomPass.strength = 0.04;
+
+  } else if (e < 55) {
+    // ─── 第三段c："预告"（45-55s）—— 脊柱回归，微微偏暖 ───
+    const segT = (e - 45) / 10;
+    const guideAlpha = Math.min(1, segT * 2.5);     // 渐入
+    const breathe = guideAlpha * 0.35;
+
+    spineMat.uniforms.uFormation.value  = 1.0;
+    spineMat.uniforms.uGuideAlpha.value = guideAlpha;
+    spineMat.uniforms.uBreathe.value    = breathe;
+    spineMat.uniforms.uBreatheExpand.value = 1.0;
+    bloomPass.strength = 0.04 + guideAlpha * 0.12;
+
+  } else {
+    // ─── 第四段："开始"（55-60s）—— 过渡到体验 ───
+    spineMat.uniforms.uFormation.value  = 1.0;
+    spineMat.uniforms.uGuideAlpha.value = 1.0;
+    spineMat.uniforms.uBreathe.value    = breatheCurve(t) * 0.4;
+    spineMat.uniforms.uBreatheExpand.value = 1 + breatheCurve(t) * 0.10;
+    bloomPass.strength = 0.12 + breatheCurve(t) * 0.04;
+  }
+}
+
+// ── EXPERIENCE 更新（原有呼吸体验逻辑）──────────────────────
+function updateExperience(t) {
+  // 弹簧物理平滑 blend
+  const springF = (targetBlend - smoothBlend) * 0.035;
+  blendVelocity = blendVelocity * 0.82 + springF;
+  smoothBlend   = Math.max(0, Math.min(1, smoothBlend + blendVelocity));
+
+  const breathe       = breatheCurve(t);
+  const breatheExpand = 1 + breathe * 0.20;
+
+  if (!branchEditMode) spineGroup.rotation.y = Math.sin(t * 0.52) * 0.35;
+
+  // Layer A + B
+  spineMat.uniforms.uFormation.value     = 1.0;
+  spineMat.uniforms.uGuideAlpha.value    = 1.0;
+  spineMat.uniforms.uBlend.value         = smoothBlend;
+  spineMat.uniforms.uBreatheExpand.value = breatheExpand;
+  spineMat.uniforms.uBreathe.value       = breathe;
+  spineMat.uniforms.uTime.value          = t;
+
+  const blendColor = getBlendColor(smoothBlend);
+  const hlColor    = getHighlightColor(smoothBlend);
+  const ac1Color   = getAccent1Color(smoothBlend);
+  const ac2Color   = getAccent2Color(smoothBlend);
+  spineMat.uniforms.uColor.value.copy(blendColor);
+  spineMat.uniforms.uHighlight.value.copy(hlColor);
+  spineMat.uniforms.uAccent1.value.copy(ac1Color);
+  spineMat.uniforms.uAccent2.value.copy(ac2Color);
+  diffuseMat.uniforms.uColor.value.copy(blendColor);
+  diffuseMat.uniforms.uHighlight.value.copy(hlColor);
+  diffuseMat.uniforms.uAccent1.value.copy(ac1Color);
+  diffuseMat.uniforms.uAccent2.value.copy(ac2Color);
+
+  // 藤蔓
+  vineMat.uniforms.uFormation.value = 1.0;
+  for (let v = 0; v < N_VINES; v++) {
+    if (!vineGrowTriggered[v] && smoothBlend >= VINE_GROW_THRESHOLDS[v]) {
+      vineGrowTriggered[v] = true;
+      vineGrowStartTime[v] = t;
+    }
+    if (vineGrowTriggered[v] && smoothBlend < VINE_GROW_THRESHOLDS[v] - 0.05) {
+      vineGrowTriggered[v] = false;
+      vineGrowStartTime[v] = t - (1.0 - vineGrowProgress[v]) * VINE_GROW_DURATION;
+    }
+    if (vineGrowTriggered[v]) {
+      vineGrowProgress[v] = Math.min(1.0, (t - vineGrowStartTime[v]) / VINE_GROW_DURATION);
+    } else {
+      vineGrowProgress[v] = Math.max(0.0, 1.0 - (t - vineGrowStartTime[v]) / VINE_GROW_DURATION);
+    }
+  }
+  vineMat.uniforms.uVineGrowth.value.set(vineGrowProgress[0], vineGrowProgress[1], vineGrowProgress[2]);
+  vineMat.uniforms.uBlend.value = smoothBlend;
+  vineMat.uniforms.uTime.value  = t;
+
+  // Layer C
+  for (let i = 0; i < N_DIFF; i++) {
+    dT[i] += dDt[i];
+    if (dT[i] >= 1.0) resetDiffuse(i, smoothBlend);
+    const tt = dT[i], u = 1-tt, u2=u*u, u3=u2*u, t2=tt*tt, t3=t2*tt;
+    dfPositions[i*3]   = u3*dPx[i]+3*u2*tt*dBzX1[i]+3*u*t2*dBzX2[i]+t3*dBzX3[i];
+    dfPositions[i*3+1] = u3*dPy[i]+3*u2*tt*dBzY1[i]+3*u*t2*dBzY2[i]+t3*dBzY3[i];
+    dfPositions[i*3+2] = 0.1;
+    dfSizes[i]  = dBSize[i];
+    dfAlphas[i] = dBAlpha[i] * smoothstep(0,0.08,tt) * (1-smoothstep(0.85,1,tt));
+  }
+  // Layer D
+  for (let i = 0; i < N_GLOW; i++) {
+    const gi = N_DIFF+i, t0 = i/(N_GLOW-1);
+    const endFade = smoothstep(0,0.08,t0)*smoothstep(1,0.92,t0);
+    dfPositions[gi*3]   = glowCurvedX[i]+(glowStraightX[i]-glowCurvedX[i])*smoothBlend;
+    dfPositions[gi*3+1] = glowY[i];
+    dfPositions[gi*3+2] = -0.5;
+    dfAlphas[gi] = (0.035+breathe*0.025)*endFade;
+  }
+  if (N_DFULL > 0) {
+    diffuseGeo.attributes.position.needsUpdate = true;
+    diffuseGeo.attributes.aSize.needsUpdate    = true;
+    diffuseGeo.attributes.aAlpha.needsUpdate   = true;
+  }
+
+  bloomPass.strength = 0.12 + breathe * 0.06 - smoothBlend * 0.03;
+}
+
+
+// ============================================================
+// 13. SocketIO（与 Flask 通信）
+// ============================================================
+
+const socket = io('http://localhost:5000');
+
+socket.on('connect',    () => { console.log('✅ Flask 已连接'); updateDebugUI(); });
+socket.on('disconnect', () => { console.log('❌ Flask 断开');   });
+
+socket.on('sensor_data', (data) => {
+  targetBlend = data.blend;
+  updateDebugUI();
+});
+
+socket.on('state_change', (data) => {
+  if (data.mode === 'START_GUIDE') { startGuide(); return; }
+  if (data.mode === 'EXPERIENCE') { enterExperience(); }
+  currentMode = data.mode;
+  if (data.blend !== undefined) targetBlend = data.blend;
+  updateDebugUI();
+  console.log(`[状态] → ${currentMode}`);
+});
+
+
+// ============================================================
+// 14. 调试面板
+// ============================================================
+
+const debugPanel  = document.getElementById('debug-panel');
+const debugState  = document.getElementById('debug-state');
+const debugBlend  = document.getElementById('debug-blend');
+const blendSlider = document.getElementById('blend-slider');
+
+blendSlider.addEventListener('input', () => {
+  targetBlend = blendSlider.value / 100;   // 本地直接生效，无需 Flask
+  socket.emit('set_blend', { value: targetBlend });
+});
+
+document.getElementById('btn-start').addEventListener('click', () => startGuide());
+document.getElementById('btn-reset').addEventListener('click', () => resetToIdle());
+
+function updateDebugUI() {
+  if (debugState) debugState.textContent = currentMode;
+  if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
+}
+
+
+// ============================================================
+// 15. 键盘快捷键
+// ============================================================
+
+// ============================================================
+// 15b. 分支藤蔓编辑器（按B进入）
+// ============================================================
+
+let branchEditMode = false;
+const branchEditorData = [];   // 所有已完成分支 [[x,y], ...]
+let currentBranchPts = [];     // 当前正在编辑的分支
+
+// 编辑器预览用的临时 Three.js 对象
+let branchPreviewLine = null;
+let branchPreviewDots = null;
+
+function screenToWorld(mx, my) {
+  const ndc = new THREE.Vector3(
+    (mx / window.innerWidth) * 2 - 1,
+    -(my / window.innerHeight) * 2 + 1,
+    0
+  );
+  ndc.unproject(camera);
+  // 投射到 z=0 平面
+  const dir = ndc.sub(camera.position).normalize();
+  const dist = -camera.position.z / dir.z;
+  const pt = camera.position.clone().add(dir.multiplyScalar(dist));
+  return [parseFloat(pt.x.toFixed(3)), parseFloat(pt.y.toFixed(3))];
+}
+
+function updateBranchPreview() {
+  // 清除旧预览
+  if (branchPreviewLine) { scene.remove(branchPreviewLine); branchPreviewLine.geometry.dispose(); }
+  if (branchPreviewDots) { scene.remove(branchPreviewDots); branchPreviewDots.geometry.dispose(); }
+
+  const allPts = [...branchEditorData, currentBranchPts].filter(b => b.length >= 2);
+
+  // 绘制所有分支曲线（白色线条）
+  const lineVerts = [];
+  for (const branch of allPts) {
+    const curve = new THREE.CatmullRomCurve3(branch.map(([x,y]) => new THREE.Vector3(x, y, 0.5)));
+    const pts = curve.getPoints(branch.length * 20);
+    for (let i = 0; i < pts.length - 1; i++) {
+      lineVerts.push(pts[i].x, pts[i].y, pts[i].z, pts[i+1].x, pts[i+1].y, pts[i+1].z);
+    }
+  }
+  if (lineVerts.length > 0) {
+    const lineGeo = new THREE.BufferGeometry();
+    lineGeo.setAttribute('position', new THREE.Float32BufferAttribute(lineVerts, 3));
+    branchPreviewLine = new THREE.LineSegments(lineGeo, new THREE.LineBasicMaterial({ color: 0x00ff88, linewidth: 1 }));
+    scene.add(branchPreviewLine);
+  }
+
+  // 绘制所有控制点（红色小圆点）
+  const dotVerts = [];
+  const dotSizes = [];
+  for (const branch of [...branchEditorData, [currentBranchPts]].flat()) {
+    if (!Array.isArray(branch)) continue;
+    for (const b of (Array.isArray(branch[0]) ? [branch] : [[branch]])) {
+      // skip
+    }
+  }
+  // 简化：直接画所有点
+  const allDots = [...branchEditorData.flat(), ...currentBranchPts];
+  if (allDots.length > 0) {
+    const dg = new THREE.BufferGeometry();
+    const dp = new Float32Array(allDots.length * 3);
+    const ds = new Float32Array(allDots.length);
+    for (let i = 0; i < allDots.length; i++) {
+      dp[i*3] = allDots[i][0]; dp[i*3+1] = allDots[i][1]; dp[i*3+2] = 0.5;
+      ds[i] = 8.0;
+    }
+    dg.setAttribute('position', new THREE.BufferAttribute(dp, 3));
+    dg.setAttribute('aSize', new THREE.BufferAttribute(ds, 1));
+    branchPreviewDots = new THREE.Points(dg, new THREE.PointsMaterial({ color: 0xff4444, size: 8, sizeAttenuation: false }));
+    scene.add(branchPreviewDots);
+  }
+}
+
+function enterBranchEdit() {
+  branchEditMode = true;
+  currentBranchPts = [];
+  // 暂停脊柱旋转，方便编辑
+  spineGroup.rotation.y = 0;
+  console.log('🌿 分支编辑模式 ON — 点击放置控制点 | 回车=确认当前分支 | Z=撤销 | X=导出 | B=退出');
+}
+
+function exitBranchEdit() {
+  branchEditMode = false;
+  if (currentBranchPts.length >= 2) {
+    branchEditorData.push([...currentBranchPts]);
+  }
+  currentBranchPts = [];
+  // 清除预览
+  if (branchPreviewLine) { scene.remove(branchPreviewLine); branchPreviewLine.geometry.dispose(); branchPreviewLine = null; }
+  if (branchPreviewDots) { scene.remove(branchPreviewDots); branchPreviewDots.geometry.dispose(); branchPreviewDots = null; }
+  console.log('🌿 分支编辑模式 OFF');
+}
+
+function exportBranches() {
+  // 把当前分支也加进去
+  const all = [...branchEditorData];
+  if (currentBranchPts.length >= 2) all.push([...currentBranchPts]);
+
+  console.log('===== 分支藤蔓坐标导出 =====');
+  console.log('共 ' + all.length + ' 根分支');
+  console.log('');
+  console.log('const branchPaths = [');
+  for (let i = 0; i < all.length; i++) {
+    const pts = all[i].map(([x,y]) => `[${x}, ${y}]`).join(', ');
+    console.log(`  [${pts}],  // 分支${i+1}`);
+  }
+  console.log('];');
+  console.log('');
+  console.log('===== 复制以上内容发给开发者 =====');
+}
+
+canvas.addEventListener('click', (e) => {
+  if (!branchEditMode) return;
+  // 不在调试面板区域才处理
+  if (e.target !== canvas) return;
+  const [wx, wy] = screenToWorld(e.clientX, e.clientY);
+  currentBranchPts.push([wx, wy]);
+  console.log(`  控制点 ${currentBranchPts.length}: [${wx}, ${wy}]`);
+  updateBranchPreview();
+});
+
+document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); startGuide(); }
+  if (e.key === 'r' || e.key === 'R') { if (!branchEditMode) resetToIdle(); }
+  if (e.key === 'd' || e.key === 'D') debugPanel.classList.toggle('hidden');
+  if (e.key === 'f' || e.key === 'F') {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen();
+    else document.exitFullscreen();
+  }
+  if (e.key === 'b' || e.key === 'B') {
+    if (branchEditMode) exitBranchEdit();
+    else enterBranchEdit();
+  }
+  if (branchEditMode) {
+    if (e.key === 'Enter') {
+      if (currentBranchPts.length >= 2) {
+        branchEditorData.push([...currentBranchPts]);
+        console.log(`✅ 分支 ${branchEditorData.length} 已保存（${currentBranchPts.length}个控制点）`);
+        currentBranchPts = [];
+        updateBranchPreview();
+      } else {
+        console.log('⚠️ 至少需要2个控制点');
+      }
+    }
+    if (e.key === 'z' || e.key === 'Z') {
+      if (currentBranchPts.length > 0) {
+        const removed = currentBranchPts.pop();
+        console.log(`↩ 撤销控制点 [${removed}]`);
+        updateBranchPreview();
+      }
+    }
+    if (e.key === 'x' || e.key === 'X') {
+      exportBranches();
+    }
+  }
+});
+
+
+// ============================================================
+// 16. 窗口缩放
+// ============================================================
+
+window.addEventListener('resize', () => {
+  const w = window.innerWidth, h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  composer.setSize(w, h);
+  bloomPass.resolution.set(Math.floor(w / 2), Math.floor(h / 2));
+});
+
+animate();
