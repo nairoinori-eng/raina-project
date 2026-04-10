@@ -727,9 +727,9 @@ const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 // ── 分支尖端弥散粒子 ──
 // 从3个分支尖端向外弥散，轨迹相似不乱飞
 const DRIFT_EMITTERS = [
-  { tipX: -0.85, tipY: 3.00, dirX: -0.6, dirY: 0.4, len: 0.45, count: 350 },
-  { tipX:  0.43, tipY:-0.15, dirX:  0.7, dirY: 0.2, len: 0.40, count: 350 },
-  { tipX: -0.33, tipY:-1.30, dirX: -0.5, dirY:-0.5, len: 0.40, count: 350 },
+  { tipX: -0.85, tipY: 3.00, dirX: -0.6, dirY: 0.4, len: 0.60, count: 800 },
+  { tipX:  0.43, tipY:-0.15, dirX:  0.7, dirY: 0.2, len: 0.55, count: 800 },
+  { tipX: -0.33, tipY:-1.30, dirX: -0.5, dirY:-0.5, len: 0.55, count: 800 },
 ];
 const DRIFT_TOTAL = DRIFT_EMITTERS.reduce((s, e) => s + e.count, 0);
 
@@ -996,8 +996,8 @@ for (const em of DRIFT_EMITTERS) {
     vnParamT[particleIdx]    = yNorm;
     vnVineId[particleIdx]    = 0; // 跟主藤蔓一起生长
     vnPhase[particleIdx]     = Math.random() * 4.0;
-    vnAlphas[particleIdx]    = 0.55 * (1 - t * t); // 向远端衰减
-    vnSizes[particleIdx]     = (0.028 - t * 0.018) + Math.random() * 0.008;
+    vnAlphas[particleIdx]    = 0.80 * (1 - t * t); // 向远端衰减
+    vnSizes[particleIdx]     = (0.050 - t * 0.030) + Math.random() * 0.012;
     vnColorVars[particleIdx] = 0.15 + Math.random() * 0.25; // 偏高光，有光感
 
     particleIdx++;
