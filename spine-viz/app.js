@@ -21,6 +21,7 @@ import { RenderPass }     from 'three/examples/jsm/postprocessing/RenderPass.js'
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { io } from 'socket.io-client';
 import { VINE1_SEGMENTS, VINE2_SEGMENTS } from './figma-vine-paths.js';
+import { IntroOverlays } from './intro-overlays.js';
 
 
 // ============================================================
@@ -1313,8 +1314,6 @@ const WAVE = 0.28;
 let guideStartTime = 0;       // 引导开始的绝对时间(秒)
 let guideElapsed   = 0;       // 引导已经过的秒数
 
-// Import overlay manager
-import { IntroOverlays } from './intro-overlays.js';
 const overlays = new IntroOverlays();
 
 
