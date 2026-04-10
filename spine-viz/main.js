@@ -1303,7 +1303,7 @@ for (let i = 0; i < LEAF_COUNT; i++) {
 
     // 大小：中段大、上下端小、簇内稍小
     const sizeMod = 1.0 - Math.abs(yNorm - 0.5) * 0.6;
-    leafSize[leafIdx] = (0.10 + Math.random() * 0.06) * sizeMod * (c === 0 ? 1.0 : 0.75);
+    leafSize[leafIdx] = (0.80 + Math.random() * 0.50) * sizeMod * (c === 0 ? 1.0 : 0.75);
 
     // alpha：半透明不遮脊柱
     leafAlpha[leafIdx] = 0.45 + Math.random() * 0.20;
