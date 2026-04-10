@@ -63,7 +63,7 @@ const N_DIFF  = 0;                     // Layer C（暂时关闭弥散粒子）
 const N_GLOW  = 0;                     // Layer D（暂时关闭辉光线）
 const N_DFULL = N_DIFF + N_GLOW;       // diffuseGeo 总量
 
-const N_AMB   = 1200;                  // Layer E（星辰感背景）
+const N_AMB   = 2000;                  // Layer E（星辰感背景）
 
 
 // ============================================================
@@ -1279,10 +1279,10 @@ ambGeo.setAttribute('aColorVar', new THREE.BufferAttribute(ambCVars, 1));
 const ambMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
   uniforms: {
-    uColor:     { value: new THREE.Color(0x6055a0) },
-    uHighlight: { value: new THREE.Color(0x9088cc) },
-    uAccent1:   { value: new THREE.Color(0x8070b8) },
-    uAccent2:   { value: new THREE.Color(0x5568aa) },
+    uColor:     { value: COLOR_DARK.clone() },
+    uHighlight: { value: HL_DARK.clone() },
+    uAccent1:   { value: AC1_DARK.clone() },
+    uAccent2:   { value: AC2_DARK.clone() },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
