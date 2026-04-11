@@ -373,6 +373,7 @@ byte breathingCuePwm(unsigned long nowMs) {
   unsigned long cycleMs = elapsed % BREATH_CYCLE_MS;
   unsigned long inhaleEndMs = INHALE_MS;
   unsigned long holdEndMs = inhaleEndMs + HOLD_MS;
+  unsigned long exhaleEndMs = holdEndMs + EXHALE_MS;
 
   if (cycleMs < inhaleEndMs) {
     return MOTOR_INHALE_PWM;
@@ -380,6 +381,10 @@ byte breathingCuePwm(unsigned long nowMs) {
 
   if (cycleMs < holdEndMs) {
     return 0;
+  }
+
+  if (cycleMs < exhaleEndMs) {
+    return MOTOR_INHALE_PWM;
   }
 
   return 0;
