@@ -28,19 +28,10 @@ const unsigned int BASELINE_WINDOW_SAMPLES = 90;
 const unsigned long INHALE_MS = 4000UL;
 const unsigned long HOLD_MS = 2000UL;
 const unsigned long EXHALE_MS = 4000UL;
+const unsigned long BREATH_CYCLE_MS = INHALE_MS + HOLD_MS + EXHALE_MS;
 
-const byte MOTOR_PREPULSE_PWM = 200;
 const byte MOTOR_INHALE_PWM = 165;
 const byte MOTOR_REMINDER_PWM = 125;
-
-const unsigned long PREPULSE_ON_MS = 50UL;
-const unsigned long PREPULSE_GAP_MS = 50UL;
-const byte PREPULSE_COUNT = 3;
-const unsigned long PREPULSE_WINDOW_MS = 500UL;
-const unsigned long PREPULSE_TOTAL_MS =
-  (PREPULSE_COUNT * PREPULSE_ON_MS) + ((PREPULSE_COUNT - 1) * PREPULSE_GAP_MS);
-const unsigned long BREATH_CYCLE_MS =
-  PREPULSE_WINDOW_MS + INHALE_MS + HOLD_MS + EXHALE_MS;
 
 const byte LOW_BLEND_THRESHOLD = 30;
 const unsigned long LOW_BLEND_REMINDER_DELAY_MS = 10000UL;
@@ -264,8 +255,6 @@ void startExperience() {
   unsigned long nowMs = millis();
   freezeBaselineFromRollingWindow();
   runMode = MODE_RUNNING;
-  // Start at the cue phase so the first feedback is always the three
-  // short prepulses, then the full 4-2-4 breathing sequence.
   runningSinceMs = nowMs;
   lowBlendSinceMs = 0UL;
   reminderUntilMs = 0UL;
@@ -382,24 +371,8 @@ void serviceSerialInput() {
 byte breathingCuePwm(unsigned long nowMs) {
   unsigned long elapsed = nowMs - runningSinceMs;
   unsigned long cycleMs = elapsed % BREATH_CYCLE_MS;
-  unsigned long prepulseEndMs = PREPULSE_WINDOW_MS;
-  unsigned long inhaleStartMs = prepulseEndMs;
-  unsigned long inhaleEndMs = inhaleStartMs + INHALE_MS;
+  unsigned long inhaleEndMs = INHALE_MS;
   unsigned long holdEndMs = inhaleEndMs + HOLD_MS;
-
-  if (cycleMs < prepulseEndMs) {
-    if (cycleMs < PREPULSE_TOTAL_MS) {
-      unsigned long chunk = PREPULSE_ON_MS + PREPULSE_GAP_MS;
-      unsigned long pulseIndex = cycleMs / chunk;
-      if (pulseIndex < PREPULSE_COUNT) {
-        unsigned long pulseOffset = cycleMs % chunk;
-        if (pulseOffset < PREPULSE_ON_MS) {
-          return MOTOR_PREPULSE_PWM;
-        }
-      }
-    }
-    return 0;
-  }
 
   if (cycleMs < inhaleEndMs) {
     return MOTOR_INHALE_PWM;
