@@ -25,7 +25,6 @@ const float DEFAULT_THRESHOLD = 200.0f;
 
 const unsigned int BASELINE_WINDOW_SAMPLES = 90;
 
-const unsigned long BREATH_CYCLE_MS = 10000UL;
 const unsigned long INHALE_MS = 4000UL;
 const unsigned long HOLD_MS = 2000UL;
 const unsigned long EXHALE_MS = 4000UL;
@@ -40,6 +39,8 @@ const byte PREPULSE_COUNT = 3;
 const unsigned long PREPULSE_WINDOW_MS = 500UL;
 const unsigned long PREPULSE_TOTAL_MS =
   (PREPULSE_COUNT * PREPULSE_ON_MS) + ((PREPULSE_COUNT - 1) * PREPULSE_GAP_MS);
+const unsigned long BREATH_CYCLE_MS =
+  PREPULSE_WINDOW_MS + INHALE_MS + HOLD_MS + EXHALE_MS;
 
 const byte LOW_BLEND_THRESHOLD = 30;
 const unsigned long LOW_BLEND_REMINDER_DELAY_MS = 10000UL;
@@ -263,9 +264,9 @@ void startExperience() {
   unsigned long nowMs = millis();
   freezeBaselineFromRollingWindow();
   runMode = MODE_RUNNING;
-  // Start near the end of the cycle so the first thing the user feels is the
-  // three short prepulses, then the inhale cue begins immediately afterward.
-  runningSinceMs = nowMs - (BREATH_CYCLE_MS - PREPULSE_TOTAL_MS);
+  // Start at the cue phase so the first feedback is always the three
+  // short prepulses, then the full 4-2-4 breathing sequence.
+  runningSinceMs = nowMs;
   lowBlendSinceMs = 0UL;
   reminderUntilMs = 0UL;
   nextReminderEligibleMs = nowMs + LOW_BLEND_REMINDER_DELAY_MS;
@@ -381,33 +382,30 @@ void serviceSerialInput() {
 byte breathingCuePwm(unsigned long nowMs) {
   unsigned long elapsed = nowMs - runningSinceMs;
   unsigned long cycleMs = elapsed % BREATH_CYCLE_MS;
-  unsigned long inhaleEndMs = INHALE_MS;
+  unsigned long prepulseEndMs = PREPULSE_WINDOW_MS;
+  unsigned long inhaleStartMs = prepulseEndMs;
+  unsigned long inhaleEndMs = inhaleStartMs + INHALE_MS;
   unsigned long holdEndMs = inhaleEndMs + HOLD_MS;
-  unsigned long exhaleEndMs = holdEndMs + EXHALE_MS;
-  unsigned long prepulseStartMs = exhaleEndMs - PREPULSE_WINDOW_MS;
-  unsigned long prepulseOffsetMs = PREPULSE_WINDOW_MS - PREPULSE_TOTAL_MS;
+
+  if (cycleMs < prepulseEndMs) {
+    if (cycleMs < PREPULSE_TOTAL_MS) {
+      unsigned long chunk = PREPULSE_ON_MS + PREPULSE_GAP_MS;
+      unsigned long pulseIndex = cycleMs / chunk;
+      if (pulseIndex < PREPULSE_COUNT) {
+        unsigned long pulseOffset = cycleMs % chunk;
+        if (pulseOffset < PREPULSE_ON_MS) {
+          return MOTOR_PREPULSE_PWM;
+        }
+      }
+    }
+    return 0;
+  }
 
   if (cycleMs < inhaleEndMs) {
     return MOTOR_INHALE_PWM;
   }
 
   if (cycleMs < holdEndMs) {
-    return 0;
-  }
-
-  if (cycleMs >= prepulseStartMs) {
-    unsigned long cueMs = cycleMs - prepulseStartMs;
-    if (cueMs >= prepulseOffsetMs) {
-      unsigned long pulseMs = cueMs - prepulseOffsetMs;
-      unsigned long chunk = PREPULSE_ON_MS + PREPULSE_GAP_MS;
-      unsigned long pulseIndex = pulseMs / chunk;
-      if (pulseIndex < PREPULSE_COUNT) {
-        unsigned long pulseOffset = pulseMs % chunk;
-        if (pulseOffset < PREPULSE_ON_MS) {
-          return MOTOR_PREPULSE_PWM;
-        }
-      }
-    }
     return 0;
   }
 
