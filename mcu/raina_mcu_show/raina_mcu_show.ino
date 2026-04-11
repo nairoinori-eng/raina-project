@@ -37,6 +37,7 @@ const byte MOTOR_REMINDER_PWM = 125;
 const unsigned long PREPULSE_ON_MS = 50UL;
 const unsigned long PREPULSE_GAP_MS = 50UL;
 const byte PREPULSE_COUNT = 3;
+const unsigned long PREPULSE_WINDOW_MS = 500UL;
 const unsigned long PREPULSE_TOTAL_MS =
   (PREPULSE_COUNT * PREPULSE_ON_MS) + ((PREPULSE_COUNT - 1) * PREPULSE_GAP_MS);
 
@@ -377,24 +378,33 @@ void serviceSerialInput() {
 byte breathingCuePwm(unsigned long nowMs) {
   unsigned long elapsed = nowMs - runningSinceMs;
   unsigned long cycleMs = elapsed % BREATH_CYCLE_MS;
+  unsigned long inhaleEndMs = INHALE_MS;
+  unsigned long holdEndMs = inhaleEndMs + HOLD_MS;
+  unsigned long exhaleEndMs = holdEndMs + EXHALE_MS;
+  unsigned long prepulseStartMs = exhaleEndMs - PREPULSE_WINDOW_MS;
+  unsigned long prepulseOffsetMs = PREPULSE_WINDOW_MS - PREPULSE_TOTAL_MS;
 
-  if (cycleMs < PREPULSE_TOTAL_MS) {
-    unsigned long chunk = PREPULSE_ON_MS + PREPULSE_GAP_MS;
-    unsigned long pulseIndex = cycleMs / chunk;
-    if (pulseIndex < PREPULSE_COUNT) {
-      unsigned long pulseOffset = cycleMs % chunk;
-      if (pulseOffset < PREPULSE_ON_MS) {
-        return MOTOR_PREPULSE_PWM;
-      }
-    }
-    return 0;
-  }
-
-  if (cycleMs < INHALE_MS) {
+  if (cycleMs < inhaleEndMs) {
     return MOTOR_INHALE_PWM;
   }
 
-  if (cycleMs < (INHALE_MS + HOLD_MS + EXHALE_MS)) {
+  if (cycleMs < holdEndMs) {
+    return 0;
+  }
+
+  if (cycleMs >= prepulseStartMs) {
+    unsigned long cueMs = cycleMs - prepulseStartMs;
+    if (cueMs >= prepulseOffsetMs) {
+      unsigned long pulseMs = cueMs - prepulseOffsetMs;
+      unsigned long chunk = PREPULSE_ON_MS + PREPULSE_GAP_MS;
+      unsigned long pulseIndex = pulseMs / chunk;
+      if (pulseIndex < PREPULSE_COUNT) {
+        unsigned long pulseOffset = pulseMs % chunk;
+        if (pulseOffset < PREPULSE_ON_MS) {
+          return MOTOR_PREPULSE_PWM;
+        }
+      }
+    }
     return 0;
   }
 
