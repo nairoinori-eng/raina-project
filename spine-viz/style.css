@@ -198,38 +198,71 @@ body {
   color: rgba(180, 170, 220, 0.35); letter-spacing: 0.1em;
 }
 
-/* ── 引导文字（默认：左对齐固定在屏幕左侧）── */
+/* ── 叙事字幕容器（左侧固定，按组堆叠）── */
 #intro-text {
   position: fixed;
-  top: 48%;
+  top: 35%;
   left: 7%;
-  max-width: 35vw;
-  text-align: left;
+  width: 38vw;
+  max-width: 600px;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* 每个叙事段是一个 flex column，所有组重叠在相同位置 */
+.intro-group {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1em;
+}
+
+/* 单行字幕：默认透明，.vis 时显示 */
+.intro-line {
+  opacity: 0;
+  transition: opacity 0.9s ease;
   font-size: clamp(1.1rem, 2vw, 1.55rem);
   font-weight: 300;
   line-height: 1.75;
   letter-spacing: 0.12em;
   color: rgba(220, 215, 245, 0.92);
   white-space: nowrap;
-  opacity: 0;
-  transition: opacity 0.7s ease;
-  pointer-events: none;
-  z-index: 20;
+  text-align: left;
   text-shadow: 0 0 24px rgba(120, 80, 200, 0.45), 0 0 8px rgba(40, 20, 80, 0.6);
-  transform: translate(0, -50%);
 }
-#intro-text.vis { opacity: 1; }
-
-/* 倒数大字 */
-#intro-text.big {
-  font-size: clamp(4rem, 10vw, 8rem);
-  font-weight: 200;
-  letter-spacing: 0.05em;
-}
+.intro-line.vis { opacity: 1; }
 
 /* 高亮数据颜色 */
 .hl-o { color: #ffa255; font-weight: 500; letter-spacing: 0.05em; }
 .hl-c { color: #55cde0; font-weight: 500; letter-spacing: 0.05em; }
+
+/* ── 倒数字幕（居中单独显示）── */
+#intro-countdown {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: clamp(1.1rem, 2vw, 1.55rem);
+  font-weight: 300;
+  letter-spacing: 0.12em;
+  color: rgba(220, 215, 245, 0.92);
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+  z-index: 20;
+  text-shadow: 0 0 24px rgba(120, 80, 200, 0.45);
+}
+#intro-countdown.vis { opacity: 1; }
+#intro-countdown.big {
+  font-size: clamp(4rem, 10vw, 8rem);
+  font-weight: 200;
+  letter-spacing: 0.05em;
+}
 
 /* ── 人体剪影 ── */
 #intro-body {

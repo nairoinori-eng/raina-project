@@ -1,36 +1,41 @@
 /**
  * IntroOverlays — 86s 认知引导的 HTML/CSS 叠加层管理
- * 控制：叙事文字（左侧艺术排布）、人体剪影、呼吸节拍器、IDLE UI
+ *
+ * 字幕结构：按叙事段分组（group A/B/C），每组的句子按时间先后
+ * 逐句出现并堆叠在前一句下方，整组左对齐在屏幕左侧。
+ * 组结束时一起淡出，下一组接着在相同位置从头开始。
  */
 
+// ── 叙事段分组的结束时间（组内句子一起淡出）──
+const GROUP_ENDS = { A: 26, B: 40, C: 64 };
+
 // ── 文字时间表 ──
-// 所有叙事字幕用 CSS 默认位置（左对齐在左侧）；只有倒数用 pos 覆盖到中间
+//   group: 'A'|'B'|'C' → 叙事段分组；不带 group 的是倒数（居中单独显示）
 const TEXT_SCHEDULE = [
-  // ── 情感叙事段（4-26s）──
-  { text: '这是我的脊柱。',                              start: 4,  end: 9  },
-  { text: '十五岁那年，医生说它弯了。',                    start: 9,  end: 15 },
+  // 组 A：情感叙事 (4-26s)
+  { text: '这是我的脊柱。',                              start: 4,  group: 'A' },
+  { text: '十五岁那年，医生说它弯了。',                    start: 9,  group: 'A' },
   { text: '胸椎向右 <span class="hl-o">28</span> 度，腰椎向左 <span class="hl-c">18</span> 度。',
-    start: 15, end: 21 },
-  { text: '它已经这样，陪我十年了。',                      start: 21, end: 26 },
+    start: 15, group: 'A' },
+  { text: '它已经这样，陪我十年了。',                      start: 21, group: 'A' },
 
-  // ── 病理解释段（27-40s，配合段高亮）──
-  { text: '凸起的那一侧，肋骨被撑得太开；',                start: 27, end: 33 },
-  { text: '凹陷的那一侧，肋骨被挤在一起。',                start: 33, end: 40 },
+  // 组 B：病理解释 (27-40s)
+  { text: '凸起的那一侧，肋骨被撑得太开；',                start: 27, group: 'B' },
+  { text: '凹陷的那一侧，肋骨被挤在一起。',                start: 33, group: 'B' },
 
-  // ── 呼吸原理段（45-64s，配合人体轮廓）──
-  { text: '有一种呼吸，专门送气到凹陷的那一边，',           start: 45, end: 52 },
-  { text: '把被挤扁的肋骨，重新撑开。',                    start: 52, end: 58 },
-  { text: '跟我一起试试。',                               start: 58, end: 64 },
+  // 组 C：呼吸原理 (45-64s)
+  { text: '有一种呼吸，专门送气到凹陷的那一边，',           start: 45, group: 'C' },
+  { text: '把被挤扁的肋骨，重新撑开。',                    start: 52, group: 'C' },
+  { text: '跟我一起试试。',                               start: 58, group: 'C' },
 
   // 64-76s：呼吸节拍器 × 2 循环（无主文字）
 
-  // ── 换你 + 倒数（76-86s，居中大字）──
-  { text: '现在，换你试试。',
-    start: 76, end: 79, pos: { top: '42%', left: '50%', center: true } },
-  { text: '3', start: 79, end: 80, pos: { top: '50%', left: '50%', center: true }, big: true },
-  { text: '2', start: 80, end: 81, pos: { top: '50%', left: '50%', center: true }, big: true },
-  { text: '1', start: 81, end: 82, pos: { top: '50%', left: '50%', center: true }, big: true },
-  { text: '开始。', start: 82, end: 86, pos: { top: '50%', left: '50%', center: true } },
+  // 倒数（单独居中显示）
+  { text: '现在，换你试试。', start: 76, end: 79, countdown: true },
+  { text: '3',               start: 79, end: 80, countdown: true, big: true },
+  { text: '2',               start: 80, end: 81, countdown: true, big: true },
+  { text: '1',               start: 81, end: 82, countdown: true, big: true },
+  { text: '开始。',           start: 82, end: 86, countdown: true },
 ];
 
 // 呼吸节拍器：64-76s (12s = 2 x 6s 循环)
@@ -39,8 +44,9 @@ const BREATH_CYCLE = 6, INHALE = 3, HOLD = 1.5;
 
 export class IntroOverlays {
   constructor() {
+    this._lines = [];        // [{p, start, groupEnd}]
+    this._lastCdText = null;
     this._createDOM();
-    this._lastTextIdx = -1;
   }
 
   _createDOM() {
@@ -54,10 +60,36 @@ export class IntroOverlays {
     `;
     document.body.appendChild(this.$idle);
 
-    // ── 引导文字（动态定位）──
+    // ── 叙事字幕容器（左侧固定）──
+    // 按组分别创建子容器，每组是一个 flex column
     this.$text = document.createElement('div');
     this.$text.id = 'intro-text';
+
+    const groupDivs = {};
+    TEXT_SCHEDULE.forEach(entry => {
+      if (entry.countdown) return;
+      if (!groupDivs[entry.group]) {
+        const g = document.createElement('div');
+        g.className = 'intro-group';
+        this.$text.appendChild(g);
+        groupDivs[entry.group] = g;
+      }
+      const p = document.createElement('p');
+      p.className = 'intro-line';
+      p.innerHTML = entry.text;
+      groupDivs[entry.group].appendChild(p);
+      this._lines.push({
+        p,
+        start: entry.start,
+        groupEnd: GROUP_ENDS[entry.group],
+      });
+    });
     document.body.appendChild(this.$text);
+
+    // ── 倒数字幕（居中单独显示）──
+    this.$countdown = document.createElement('div');
+    this.$countdown.id = 'intro-countdown';
+    document.body.appendChild(this.$countdown);
 
     // ── 人体剪影 ──
     this.$body = document.createElement('div');
@@ -101,11 +133,12 @@ export class IntroOverlays {
 
   showIdleUI() {
     this.$idle.classList.remove('out');
-    this.$text.classList.remove('vis');
-    this.$text.innerHTML = '';
+    this._lines.forEach(({ p }) => { p.classList.remove('vis'); p.style.opacity = ''; });
+    this.$countdown.classList.remove('vis', 'big');
+    this.$countdown.innerHTML = '';
+    this._lastCdText = null;
     this.$body.classList.remove('vis');
     this.$pacer.classList.remove('vis');
-    this._lastTextIdx = -1;
   }
 
   updateGuide(e) {
@@ -115,51 +148,46 @@ export class IntroOverlays {
   }
 
   clearAll() {
-    this.$text.classList.remove('vis');
-    this.$text.innerHTML = '';
+    this._lines.forEach(({ p }) => { p.classList.remove('vis'); p.style.opacity = ''; });
+    this.$countdown.classList.remove('vis', 'big');
+    this.$countdown.innerHTML = '';
+    this._lastCdText = null;
     this.$body.classList.remove('vis');
     this.$pacer.classList.remove('vis');
     this.$idle.classList.add('out');
   }
 
-  // ── 文字（动态位置）──
+  // ── 叙事字幕（组内堆叠）+ 倒数（居中）──
   _updateText(t) {
-    let found = -1;
-    for (let i = 0; i < TEXT_SCHEDULE.length; i++) {
-      if (t >= TEXT_SCHEDULE[i].start && t < TEXT_SCHEDULE[i].end) { found = i; break; }
-    }
-    if (found === -1) {
-      this.$text.classList.remove('vis');
-      this._lastTextIdx = -1;
-      return;
-    }
-    const entry = TEXT_SCHEDULE[found];
-    if (found !== this._lastTextIdx) {
-      // 先设置新内容和位置
-      this.$text.innerHTML = entry.text;
-      if (entry.pos) {
-        this.$text.style.top  = entry.pos.top;
-        this.$text.style.left = entry.pos.left;
-        this.$text.style.transform = entry.pos.center
-          ? 'translate(-50%, -50%)'
-          : 'translate(0, -50%)';
+    // 叙事行：独立显示/淡出
+    for (const { p, start, groupEnd } of this._lines) {
+      if (t >= start && t < groupEnd) {
+        p.classList.add('vis');
+        const rem = groupEnd - t;
+        p.style.opacity = rem < 0.8 ? Math.max(0, rem / 0.8) : '';
       } else {
-        // 默认：恢复到 CSS 默认（左侧固定位置）
-        this.$text.style.top  = '';
-        this.$text.style.left = '';
-        this.$text.style.transform = '';
+        p.classList.remove('vis');
+        p.style.opacity = '';
       }
-      this.$text.classList.toggle('big', !!entry.big);
-
-      // 强制重排然后触发渐入
-      this.$text.classList.remove('vis');
-      void this.$text.offsetWidth;
-      this.$text.classList.add('vis');
-      this._lastTextIdx = found;
     }
-    // 临近结束时渐出
-    const rem = entry.end - t;
-    this.$text.style.opacity = rem < 0.6 ? Math.max(0, rem / 0.6) : '';
+
+    // 倒数
+    const cd = TEXT_SCHEDULE.find(e => e.countdown && t >= e.start && t < e.end);
+    if (cd) {
+      if (cd.text !== this._lastCdText) {
+        this.$countdown.innerHTML = cd.text;
+        this.$countdown.classList.toggle('big', !!cd.big);
+        this.$countdown.classList.remove('vis');
+        void this.$countdown.offsetWidth;
+        this.$countdown.classList.add('vis');
+        this._lastCdText = cd.text;
+      }
+      const rem = cd.end - t;
+      this.$countdown.style.opacity = rem < 0.4 ? Math.max(0, rem / 0.4) : '';
+    } else {
+      this.$countdown.classList.remove('vis');
+      this._lastCdText = null;
+    }
   }
 
   // ── 人体（教学段 44-76s）──
