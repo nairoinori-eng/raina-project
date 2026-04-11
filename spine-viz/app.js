@@ -2191,7 +2191,8 @@ pixelRatioSlider.addEventListener('input', () => {
   renderer.setPixelRatio(userPixelRatio);
   composer.setPixelRatio(userPixelRatio);
   // 高分辨率下粒子视觉变小，用 alpha 补偿保持亮度
-  const boost = Math.max(1.0, userPixelRatio / 1.5);
+  // 用二次方补偿（粒子面积是平方比例）
+  const boost = Math.max(1.0, Math.pow(userPixelRatio / 1.5, 2.0));
   spineMat.uniforms.uAlphaBoost.value = boost;
   diffuseMat.uniforms.uAlphaBoost.value = boost;
   vineMat.uniforms.uAlphaBoost.value = boost;
