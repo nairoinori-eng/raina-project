@@ -1416,20 +1416,29 @@ for (const src of leafSources) {
     // 叶子朝向角度：(leafOutX, leafOutY) 是叶尖指向
     const angle = Math.atan2(leafOutY, leafOutX) - Math.PI / 2;
 
-    // 簇内小角度偏移 + 随机旋转抖动（增加有机感）
-    const clusterAngle = (g - (groupSize - 1) / 2) * 0.25;
-    const randomAngleJitter = (Math.random() - 0.5) * 0.7; // ±0.35 rad
+    // 簇内角度偏移 + 大幅随机旋转抖动
+    const clusterAngle = (g - (groupSize - 1) / 2) * 0.35;
+    // ±60° 大幅抖动，打破"都朝一个方向"
+    const randomAngleJitter = (Math.random() - 0.5) * 2.1;
     const finalAngle = angle + clusterAngle + randomAngleJitter;
 
-    // 大小：中段大、两端小
-    const sizeMod = 0.65 + 0.5 * Math.sin(sParamT * Math.PI);
-    const scale = (0.10 + Math.random() * 0.06) * sizeMod * (g === 0 ? 1.0 : 0.75);
+    // 大小：基础范围大 + 强随机变化，打破"都一样大"
+    // 每片叶子独立大小系数，差别明显
+    const sizeRoll = Math.random();
+    const sizeBase = sizeRoll < 0.25 ? 0.08 + Math.random() * 0.04  // 25% 小叶
+                   : sizeRoll < 0.70 ? 0.14 + Math.random() * 0.06  // 45% 中叶
+                   : 0.20 + Math.random() * 0.08;                    // 30% 大叶
+    const scale = sizeBase * (g === 0 ? 1.0 : 0.65);
 
-    // 每片叶子独立 Z 深度（避免所有叶子在同一平面）
-    const leafZ = (Math.random() - 0.5) * 0.08;
+    // 叶子宽度压缩（模拟 3D 倾斜，破平面感）
+    // 部分叶子横向被压扁，像侧视
+    const widthSquash = 0.5 + Math.random() * 0.5; // 0.5~1.0
 
-    // 叶子卷曲强度（轻微 S 弯）
-    const curlStrength = (Math.random() - 0.5) * 0.08;
+    // 每片叶子独立 Z 深度
+    const leafZ = (Math.random() - 0.5) * 0.12;
+
+    // 大幅卷曲
+    const curlStrength = (Math.random() - 0.5) * 0.22;
 
     // 色系
     const colorRoll = Math.random();
@@ -1444,6 +1453,7 @@ for (const src of leafSources) {
       hostVineId,
       angle: finalAngle,
       scale,
+      widthSquash,
       colorType,
       leafParamT: sParamT,
       templateIdx,
@@ -1476,16 +1486,16 @@ for (const leaf of leafInstances) {
   for (let p = 0; p < PARTICLES_PER_LEAF; p++) {
     const pt = template.points[p % template.points.length];
 
-    // 粒子级随机抖动（打破模板规律）
-    const jitter = 0.03;
+    // 粒子级随机抖动（大幅增加）
+    const jitter = 0.08;
     const jx = (Math.random() - 0.5) * jitter;
     const jy = (Math.random() - 0.5) * jitter;
 
     // 卷曲：沿叶片长度方向的 x 偏移（S 弯）
     const curlX = Math.sin(pt.y * 2.2) * leaf.curlStrength;
 
-    // 模板坐标 + 卷曲 + 抖动
-    const lx = (pt.x + curlX + jx) * leaf.scale;
+    // 模板坐标 + 卷曲 + 抖动，x 再乘宽度压缩（模拟倾斜）
+    const lx = (pt.x * leaf.widthSquash + curlX + jx) * leaf.scale;
     const ly = (pt.y + jy) * leaf.scale;
 
     // 旋转到世界方向
