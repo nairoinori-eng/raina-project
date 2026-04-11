@@ -1369,14 +1369,14 @@ walkVineForLeaves(0, leafSources, 12); // 主藤
 walkVineForLeaves(1, leafSources, 4);  // 辅藤A
 walkVineForLeaves(2, leafSources, 3);  // 辅藤B
 
-// 针对性补充：黄框区域（主藤 seg8 下段，y ≈ -0.3 到 -0.5）
+// 主藤下部大弯曲（seg 11）强制放 2 片叶子
 {
-  const midSeg8 = vineData[0].curves[8];
-  if (midSeg8) {
-    const targetTs = [0.75, 0.85];
+  const seg11 = vineData[0].curves[11];
+  if (seg11) {
+    const targetTs = [0.30, 0.60];
     for (const localT of targetTs) {
-      const pt = midSeg8.getPointAt(localT);
-      const tan = midSeg8.getTangentAt(localT);
+      const pt = seg11.getPointAt(localT);
+      const tan = seg11.getTangentAt(localT);
       leafSources.push({
         type: 'figma',
         rawX: pt.x, rawY: pt.y,
