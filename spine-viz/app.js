@@ -70,14 +70,14 @@ const N_AMB   = 300;                   // Layer E
 // 3. 颜色（低饱和度，优雅克制）
 // ============================================================
 
-const COLOR_DARK = new THREE.Color(0x3a2d6e);  // 深蓝紫（压暗回来）
+const COLOR_DARK = new THREE.Color(0x4a1e9a);  // 饱和深紫
 const COLOR_MID  = new THREE.Color(0xd87890);  // 粉红过渡（饱和的中间色，不再灰）
-const COLOR_GOLD = new THREE.Color(0xc4a882);  // 灰金色
+const COLOR_GOLD = new THREE.Color(0xe8a038);  // 饱和暖金（不再灰金）
 
 // 高光色（接近白色的高亮，强烈正面光感）
-const HL_DARK = new THREE.Color(0xc0b0f0);   // 亮白紫
+const HL_DARK = new THREE.Color(0xd080ff);   // 亮紫高光（加饱和）
 const HL_MID  = new THREE.Color(0xffd8e8);   // 亮粉高光
-const HL_GOLD = new THREE.Color(0xfff0d8);   // 近白暖光
+const HL_GOLD = new THREE.Color(0xffd060);   // 亮金高光（加饱和）
 
 // 对比色1：暖色系（高饱和）
 const AC1_DARK = new THREE.Color(0xff6840);  // 鲜橘红
@@ -146,13 +146,12 @@ function lerpMid(out, A, MID, B, t) {
   else         out.lerpColors(MID, B, (t - 0.5) * 2);
 }
 
-/** 把 blend 两端"拉长停留"：0~hold 保持 0，1-hold~1 保持 1，中间线性过渡。
- *  用于颜色系统：希望紫色/金色那两端有足够时间被观众看到，
- *  几何形变继续用原始 smoothBlend 不影响。 */
-function remapDwell(t, hold) {
-  if (t <= hold)     return 0;
-  if (t >= 1 - hold) return 1;
-  return (t - hold) / (1 - 2 * hold);
+/** 不对称"拉长停留"：0~holdA 保持 0（紫色停留），1-holdB~1 保持 1（金色停留）。
+ *  紫色 hold 更长（观众看得多），金色 hold 更短（过渡占大头）。 */
+function remapDwellAsym(t, holdA, holdB) {
+  if (t <= holdA)       return 0;
+  if (t >= 1 - holdB)   return 1;
+  return (t - holdA) / (1 - holdA - holdB);
 }
 
 
@@ -162,7 +161,7 @@ function remapDwell(t, hold) {
 
 const canvas = document.getElementById('spine-canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));  // 降低像素密度提升帧率
+renderer.setPixelRatio(3.0);  // 锁定高清模式（uAlphaBoost 在 composer 初始化后一并设置）
 renderer.setSize(window.innerWidth, window.innerHeight);
 // 不用色调映射（ACES会把暗色压太狠），用shader clamp防过曝即可
 
@@ -797,7 +796,7 @@ function getSpineXAtY(y) {
 // ── 预计算曲线和弧长 ──
 const VINE_X_SCALE = 1.5;  // 藤蔓横向扩展，拉开与脊柱的距离
 const VINE_Y_SCALE = 1.35; // 藤蔓纵向拉伸，覆盖到脊柱尖端
-const VINE_WIDTHS = [0.015, 0.006, 0.0035];
+const VINE_WIDTHS = [0.012, 0.005, 0.003];
 const VINE_GROW_THRESHOLDS = [0.05, 0.10, 0.15];
 const VINE_GROW_DURATION = 2.0;
 
@@ -1190,12 +1189,12 @@ const vineVertexShader = /* glsl */`
 // 藤蔓配色：与骨骼互补反相 + 饱和中点（每档都有色相，不走灰）
 // A 套（blend=0）：骨骼深紫时 → 藤蔓金
 const VINE_A_COLOR = new THREE.Color(0x7a5618);  // 饱和深金基调
-const VINE_A_HL    = new THREE.Color(0x8a6e40);  // 沉金高光（压低亮度）
+const VINE_A_HL    = new THREE.Color(0x5a4628);  // 闷金脉冲（紫色阶段不刺眼）
 const VINE_A_AC1   = new THREE.Color(0xc8804a);  // 暖琥珀点缀
 const VINE_A_AC2   = new THREE.Color(0x4a2e08);  // 深青铜阴影
 // MID 套（blend=0.5）：翠绿过渡（粉红的对比色）
 const VINE_MID_COLOR = new THREE.Color(0x78c890);  // 翠绿基调
-const VINE_MID_HL    = new THREE.Color(0x68a078);  // 沉翠高光（压低亮度）
+const VINE_MID_HL    = new THREE.Color(0x406a50);  // 闷翠脉冲（粉色阶段不刺眼）
 const VINE_MID_AC1   = new THREE.Color(0x3a9068);  // 深翡翠点缀
 const VINE_MID_AC2   = new THREE.Color(0x28684a);  // 深墨绿阴影
 // B 套（blend=1）：骨骼金时 → 藤蔓花青
@@ -1893,11 +1892,11 @@ const LEAF_A_COLOR = new THREE.Color(0x8a6618);  // 金基座
 const LEAF_A_HL    = new THREE.Color(0xf0d040);  // 亮黄（pop）
 const LEAF_A_AC1   = new THREE.Color(0xe85020);  // 橘红
 const LEAF_A_AC2   = new THREE.Color(0xd83868);  // 玫红（跳出暖色域）
-// MID 套（blend=0.5）：嫩翠过渡（冷暖混搭）
+// MID 套（blend=0.5）：嫩翠过渡（高饱和撞色，粉色骨骼阶段要 pop）
 const LEAF_MID_COLOR = new THREE.Color(0x9ae0a8);  // 嫩翠基座
-const LEAF_MID_HL    = new THREE.Color(0xf0f0a0);  // 亮奶黄（pop）
-const LEAF_MID_AC1   = new THREE.Color(0x40b0c0);  // 薄荷蓝（冷跳色）
-const LEAF_MID_AC2   = new THREE.Color(0xe89070);  // 珊瑚（暖跳色）
+const LEAF_MID_HL    = new THREE.Color(0xf8e830);  // 亮柠黄（强 pop）
+const LEAF_MID_AC1   = new THREE.Color(0xf040a0);  // 亮洋红（撞粉系的浓色）
+const LEAF_MID_AC2   = new THREE.Color(0x9040f0);  // 亮紫罗兰（冷跳色）
 // B 套（blend=1）：骨骼金时 → 叶子花青（冷色域 4 色相）
 const LEAF_B_COLOR = new THREE.Color(0x244e7c);  // 花青基座
 const LEAF_B_HL    = new THREE.Color(0x40c8e0);  // 亮青（pop）
@@ -1994,7 +1993,18 @@ scene.add(new THREE.Points(ambGeo, ambMat));
 // ============================================================
 
 const composer = new EffectComposer(renderer);
+composer.setPixelRatio(3.0);  // 锁定高清模式
 composer.addPass(new RenderPass(scene, camera));
+
+// 锁定高清模式下的 alpha 补偿：boost = pow(3.0/1.5, 2) = 4.0
+{
+  const lockedBoost = Math.pow(3.0 / 1.5, 2.0);
+  spineMat  .uniforms.uAlphaBoost.value = lockedBoost;
+  diffuseMat.uniforms.uAlphaBoost.value = lockedBoost;
+  vineMat   .uniforms.uAlphaBoost.value = lockedBoost;
+  leafMat   .uniforms.uAlphaBoost.value = lockedBoost;
+  ambMat    .uniforms.uAlphaBoost.value = lockedBoost;
+}
 
 // Bloom 用半分辨率渲染（性能关键优化）
 const bloomPass = new UnrealBloomPass(
@@ -2061,9 +2071,9 @@ function animate() {
   spineMat.uniforms.uTime.value          = time;
 
   // 颜色同步（基色 + 高光 + 两种对比色 都跟随 blend）
-  // colorBlend: 两端"停留"的重映射 blend，用于颜色。
-  // 0~0.3 完全保持紫色，0.7~1 完全保持金色，0.3~0.7 才过渡（让叶子生长阶段色彩不提前褪去）。
-  const colorBlend = remapDwell(smoothBlend, 0.3);
+  // colorBlend: 两端不对称"停留"的重映射 blend，用于颜色。
+  // 紫色停留 0~0.3（30%），过渡 0.3~0.9（60%），金色只停留 0.9~1（10%）。
+  const colorBlend = remapDwellAsym(smoothBlend, 0.3, 0.1);
   const blendColor = getBlendColor(colorBlend);
   const hlColor    = getHighlightColor(colorBlend);
   const ac1Color   = getAccent1Color(colorBlend);
@@ -2233,7 +2243,7 @@ blendSlider.addEventListener('input', () => {
 // 高清粒子精度（pixel ratio 1.0~4.0）
 const pixelRatioSlider = document.getElementById('pixel-ratio-slider');
 const pixelRatioVal = document.getElementById('pixel-ratio-val');
-let userPixelRatio = 1.5;
+let userPixelRatio = 3.0;
 pixelRatioSlider.addEventListener('input', () => {
   userPixelRatio = pixelRatioSlider.value / 10;
   pixelRatioVal.textContent = userPixelRatio.toFixed(1);
