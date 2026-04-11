@@ -1429,19 +1429,30 @@ for (let checkT = 0.15; checkT < 0.88; checkT += GAP_CHECK_STEP) {
   }
 }
 
-// 针对性补充：弥散分支上的叶子（中右 seg9 + 下左 seg12 各 1-2 片）
-// 距离收短避免偏离实际分支路径
-const DRIFT_LEAF_EMITTERS = [driftEmitters[1], driftEmitters[2]];
-for (const em of DRIFT_LEAF_EMITTERS) {
-  const n = 1 + Math.floor(Math.random() * 2); // 1-2片
-  for (let i = 0; i < n; i++) {
-    const dist = 0.05 + Math.random() * 0.15; // 0.05-0.20，靠近分支尖端
-    const worldX = em.sx + em.dx * dist;
-    const worldY = em.sy + em.dy * dist;
+// 弥散分支上不放叶子（drift粒子sway相位随机，叶柄会脱离）
+
+// 补充右侧叶子：辅藤 A 在 t=0.15 和 t=0.55 时 helixX > 0（右侧）
+{
+  const accent = ACCENT_VINES[0]; // 辅藤 A
+  const rightSideTs = [0.15, 0.55];
+  for (const t of rightSideTs) {
+    const theta = t * Math.PI * accent.freq * 2 + accent.phase;
+    const env = 0.6 + 0.4 * Math.sin(t * Math.PI);
+    const r = accent.radius * env;
+    const helixX = r * Math.sin(theta);
+    // 只保留右侧（helixX > 0）
+    if (helixX <= 0) continue;
+    const cpS = curveStraight.getPoint(t);
+    const cpC = curveCurved.getPoint(t);
+    const tanC = curveCurved.getTangent(t);
     leafSources.push({
-      type: 'drift',
-      worldX, worldY,
-      tanX: em.dx, tanY: em.dy,
+      type: 'accent',
+      vineId: 1,
+      t,
+      helixX,
+      cpSY: cpS.y,
+      cpCX: cpC.x, cpCY: cpC.y,
+      tanCX: tanC.x, tanCY: tanC.y,
     });
   }
 }
@@ -1548,18 +1559,21 @@ for (const src of leafSources) {
     // 叶子朝向角度：(leafOutX, leafOutY) 是叶尖指向
     const angle = Math.atan2(leafOutY, leafOutX) - Math.PI / 2;
 
-    // 重力感：叶尖朝下或水平，不能朝上
-    // 根据位置在脊柱哪侧，选择下偏左或下偏右为主方向
+    // 重力感 + 朝外夹紧：永远朝远离脊柱的方向
     const side = sideBias;
-    // 右侧叶子：以 -45° (下偏右) 为中心
-    // 左侧叶子：以 -135° (下偏左) 为中心
+    // 右侧：角度在 [-π/2, 0]（下到右水平）
+    // 左侧：角度在 [-π, -π/2]（下到左水平）
     const centerWorldAngle = side > 0 ? -Math.PI * 0.28 : -Math.PI * 0.72;
-    // ±40° 抖动，但保持总体朝下
-    const worldTipAngle = centerWorldAngle + (Math.random() - 0.5) * Math.PI * 0.45;
-    // 簇内微小差异
-    const clusterAngleOffset = (g - (groupSize - 1) / 2) * 0.25;
-    // 模板 y+ → worldTipAngle 方向，所以旋转角 = worldTipAngle - PI/2
-    const finalAngle = worldTipAngle - Math.PI / 2 + clusterAngleOffset;
+    let worldTipAngle = centerWorldAngle + (Math.random() - 0.5) * Math.PI * 0.35;
+    const clusterAngleOffset = (g - (groupSize - 1) / 2) * 0.20;
+    worldTipAngle += clusterAngleOffset;
+    // 夹紧到朝外下半象限
+    if (side > 0) {
+      worldTipAngle = Math.max(-Math.PI * 0.5, Math.min(-0.05, worldTipAngle));
+    } else {
+      worldTipAngle = Math.max(-Math.PI + 0.05, Math.min(-Math.PI * 0.5, worldTipAngle));
+    }
+    const finalAngle = worldTipAngle - Math.PI / 2;
 
     // 大小：每片都略有不同，差距明显但小叶不要过多
     const sizeMod = 0.85 + 0.3 * Math.sin(sParamT * Math.PI);
