@@ -1173,10 +1173,11 @@ const vineVertexShader = /* glsl */`
 `;
 
 // 藤蔓固定配色（绿色系立体感）
-const VINE_COLOR = new THREE.Color(0x1a5040);   // 翡翠绿（基色）
-const VINE_HL    = new THREE.Color(0x1c4838);   // 玉色高光（进一步压暗）
-const VINE_AC1   = new THREE.Color(0x3a7848);   // 苔藓暖绿
-const VINE_AC2   = new THREE.Color(0x186058);   // 深青绿（冷调）
+// 藤蔓色系：深绿基底 + 花青 + 金（中式配色）
+const VINE_COLOR = new THREE.Color(0x162e28);   // 深翡翠绿（基色）
+const VINE_HL    = new THREE.Color(0x1a3854);   // 花青色（原金色位置）
+const VINE_AC1   = new THREE.Color(0x5a4418);   // 暗金（原紫色位置）
+const VINE_AC2   = new THREE.Color(0x10243e);   // 深夜蓝（最冷调）
 
 const vineMat = new THREE.ShaderMaterial({
   vertexShader: vineVertexShader, fragmentShader,
@@ -1862,11 +1863,11 @@ const leafVertexShader = /* glsl */`
 `;
 
 // ── 叶子颜色：4色系支持绿→金/紫/粉 ──
-// 叶子色系：和藤蔓同家族，但略有变化
-const LEAF_BASE = new THREE.Color(0x1e5244); // 基色翡翠绿
-const LEAF_HL   = new THREE.Color(0x6e7238); // 暗金橄榄（暖调）
-const LEAF_AC1  = new THREE.Color(0x6a4258); // 暗紫红（暖冷过渡）
-const LEAF_AC2  = new THREE.Color(0x1e5870); // 深青蓝（冷调）
+// 叶子色系：与藤蔓同族，花青 + 金（中式配色）
+const LEAF_BASE = new THREE.Color(0x1c4438); // 翡翠绿基色
+const LEAF_HL   = new THREE.Color(0x244e7c); // 花青色（原金色位置）
+const LEAF_AC1  = new THREE.Color(0x9c7428); // 真金（原紫色位置）
+const LEAF_AC2  = new THREE.Color(0x183458); // 深蓝（冷调）
 
 const leafMat = new THREE.ShaderMaterial({
   vertexShader: leafVertexShader,
