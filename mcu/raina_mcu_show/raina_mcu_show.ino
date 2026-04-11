@@ -32,8 +32,8 @@ const unsigned long CYCLE_GAP_MS = 2000UL;
 const unsigned long BREATH_CYCLE_MS =
   INHALE_MS + HOLD_MS + EXHALE_MS + CYCLE_GAP_MS;
 
-const byte MOTOR_CUE_PWM_MIN = 115;
-const byte MOTOR_CUE_PWM_MAX = 185;
+const byte MOTOR_CUE_PWM_MIN = 60;
+const byte MOTOR_CUE_PWM_MAX = 220;
 const unsigned long MOTOR_RAMP_MS = 2000UL;
 const byte MOTOR_REMINDER_PWM = 125;
 
