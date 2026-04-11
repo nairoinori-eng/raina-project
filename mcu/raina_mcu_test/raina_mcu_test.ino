@@ -176,21 +176,25 @@ void emitCommentLine(const char *message) {
 }
 
 void emitHelp() {
-  emitCommentLine("HELP 指令列表");
-  emitCommentLine("STATUS 查看当前状态");
-  emitCommentLine("STREAM_ON / STREAM_OFF 打开或关闭数据流");
-  emitCommentLine("CAPTURE_BASELINE 冻结当前基线");
-  emitCommentLine("THRESHOLD:x 设置阈值");
-  emitCommentLine("WEIGHT:x,y 设置胸腰权重");
-  emitCommentLine("MOTOR_ON / MOTOR_OFF 打开或关闭马达");
-  emitCommentLine("MOTOR_LEFT:0-255 单独驱动左马达");
-  emitCommentLine("MOTOR_RIGHT:0-255 单独驱动右马达");
-  emitCommentLine("MOTOR_BOTH:0-255 同时驱动两个马达");
-  emitCommentLine("MOTOR_STOP 停止手动或自动马达输出");
-  emitCommentLine("MOTOR_PULSE 短振一次");
-  emitCommentLine("PATTERN_ON / PATTERN_OFF 呼吸节奏测试开关");
-  emitCommentLine("POLARITY:LOW / POLARITY:HIGH 切换马达极性");
-  emitCommentLine("RESET 恢复测试默认配置");
+  emitCommentLine("HELP");
+  emitCommentLine("STATUS");
+  emitCommentLine("STREAM_ON");
+  emitCommentLine("STREAM_OFF");
+  emitCommentLine("CAPTURE_BASELINE");
+  emitCommentLine("THRESHOLD:x");
+  emitCommentLine("WEIGHT:x,y");
+  emitCommentLine("MOTOR_ON");
+  emitCommentLine("MOTOR_OFF");
+  emitCommentLine("MOTOR_LEFT:0-255");
+  emitCommentLine("MOTOR_RIGHT:0-255");
+  emitCommentLine("MOTOR_BOTH:0-255");
+  emitCommentLine("MOTOR_STOP");
+  emitCommentLine("MOTOR_PULSE");
+  emitCommentLine("PATTERN_ON");
+  emitCommentLine("PATTERN_OFF");
+  emitCommentLine("POLARITY:LOW");
+  emitCommentLine("POLARITY:HIGH");
+  emitCommentLine("RESET");
 }
 
 void emitStatusLine() {
