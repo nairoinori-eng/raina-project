@@ -21,7 +21,7 @@ const bool MOTOR_ACTIVE_LOW = true;
 
 const float DEFAULT_WEIGHT_CHEST = 0.60f;
 const float DEFAULT_WEIGHT_WAIST = 0.40f;
-const float DEFAULT_THRESHOLD = 600.0f;
+const float DEFAULT_THRESHOLD = 900.0f;
 
 const unsigned int BASELINE_WINDOW_SAMPLES = 90;
 
@@ -37,6 +37,7 @@ const byte MOTOR_CUE_PWM_MAX = 220;
 const unsigned long MOTOR_RAMP_MS = 2000UL;
 const byte MOTOR_REMINDER_PWM = 125;
 
+const bool LOW_BLEND_REMINDER_ENABLED = false;
 const byte LOW_BLEND_THRESHOLD = 30;
 const unsigned long LOW_BLEND_REMINDER_DELAY_MS = 10000UL;
 const unsigned long LOW_BLEND_REMINDER_PULSE_MS = 120UL;
@@ -160,6 +161,7 @@ byte scoreToBlendByte(float adjustedScore) {
   if (normalized >= 1.0f) {
     return 255;
   }
+  normalized = normalized * normalized;
   return (byte)(normalized * 255.0f);
 }
 
@@ -417,7 +419,7 @@ byte breathingCuePwm(unsigned long nowMs) {
 }
 
 void updateLowBlendReminder(unsigned long nowMs) {
-  if (runMode != MODE_RUNNING) {
+  if (!LOW_BLEND_REMINDER_ENABLED || runMode != MODE_RUNNING) {
     lowBlendSinceMs = 0UL;
     reminderUntilMs = 0UL;
     nextReminderEligibleMs = 0UL;
