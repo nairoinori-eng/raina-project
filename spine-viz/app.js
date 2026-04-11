@@ -1404,9 +1404,13 @@ for (const em of DRIFT_LEAF_EMITTERS) {
 
 
 // ── 生成叶子实例数据 ──
-// 每片叶子分组：单叶(60%) / 2片(25%) / 3片(15%)
-const leafInstances = []; // { stemSX, stemSY, stemCX, stemCY, stemParamT, hostVineId, angle, scale, colorType, leafParamT }
+const leafInstances = [];
 let leafGlobalIdx = 0;
+
+// Y密度限制：同一y高度不超过3片叶子
+const Y_DENSITY_WINDOW = 0.18;
+const Y_DENSITY_MAX = 3;
+const placedYs = [];
 
 for (const src of leafSources) {
   // 计算叶柄位置（直立态 / 弯曲态）
@@ -1473,6 +1477,14 @@ for (const src of leafSources) {
     const cy = stemCY + tangentWorldY / outLen * offsetAlongTangent;
     const sParamT = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
 
+    // Y密度检查：同一y高度±0.18内已有3片，跳过
+    let nearbyCount = 0;
+    for (const py of placedYs) {
+      if (Math.abs(py - sy) < Y_DENSITY_WINDOW) nearbyCount++;
+    }
+    if (nearbyCount >= Y_DENSITY_MAX) continue;
+    placedYs.push(sy);
+
     // 叶子朝向角度：(leafOutX, leafOutY) 是叶尖指向
     const angle = Math.atan2(leafOutY, leafOutX) - Math.PI / 2;
 
@@ -1501,8 +1513,8 @@ for (const src of leafSources) {
     // 每片叶子独立 Z 深度
     const leafZ = (Math.random() - 0.5) * 0.10;
 
-    // 轻微卷曲
-    const curlStrength = (Math.random() - 0.5) * 0.12;
+    // 卷曲（加强）
+    const curlStrength = (Math.random() - 0.5) * 0.30;
 
     // 色系
     const colorRoll = Math.random();
@@ -1531,7 +1543,13 @@ for (const src of leafSources) {
 }
 
 const N_LEAVES = leafInstances.length;
-const N_LEAF_TOTAL = N_LEAVES * PARTICLES_PER_LEAF;
+// 每片叶子粒子数随大小缩放：scale 0.08→600, 0.24→1400
+const MIN_SCALE = 0.08, MAX_SCALE = 0.24;
+for (const leaf of leafInstances) {
+  const normScale = Math.max(0, Math.min(1, (leaf.scale - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)));
+  leaf.particleCount = Math.round(500 + normScale * 900); // 500~1400
+}
+const N_LEAF_TOTAL = leafInstances.reduce((s, l) => s + l.particleCount, 0);
 
 // ── 分配粒子属性数组 ──
 const lfStemCurved   = new Float32Array(N_LEAF_TOTAL * 2);
@@ -1549,7 +1567,7 @@ for (const leaf of leafInstances) {
   const cosA = Math.cos(leaf.angle);
   const sinA = Math.sin(leaf.angle);
 
-  for (let p = 0; p < PARTICLES_PER_LEAF; p++) {
+  for (let p = 0; p < leaf.particleCount; p++) {
     const pt = template.points[p % template.points.length];
 
     // 粒子级随机抖动（大幅增加）
