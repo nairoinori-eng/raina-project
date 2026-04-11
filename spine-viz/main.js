@@ -807,7 +807,7 @@ const vineData = VINE_ALL_SEGMENTS.map((segments) => {
 });
 
 // 按弧长比例分配粒子（目标 >= 21000）
-const VINE_TARGET_TOTAL = 80000;
+const VINE_TARGET_TOTAL = 60000;
 const totalArcLen = vineData.reduce((s, vd) =>
   s + vd.lengths.reduce((a, b) => a + b, 0), 0);
 
