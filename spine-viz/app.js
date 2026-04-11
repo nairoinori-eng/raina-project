@@ -1416,29 +1416,32 @@ for (const src of leafSources) {
     // 叶子朝向角度：(leafOutX, leafOutY) 是叶尖指向
     const angle = Math.atan2(leafOutY, leafOutX) - Math.PI / 2;
 
-    // 簇内角度偏移 + 大幅随机旋转抖动
-    const clusterAngle = (g - (groupSize - 1) / 2) * 0.35;
-    // ±60° 大幅抖动，打破"都朝一个方向"
-    const randomAngleJitter = (Math.random() - 0.5) * 2.1;
-    const finalAngle = angle + clusterAngle + randomAngleJitter;
+    // 重力感：叶尖朝下或水平，不能朝上
+    // 根据位置在脊柱哪侧，选择下偏左或下偏右为主方向
+    const side = sideBias;
+    // 右侧叶子：以 -45° (下偏右) 为中心
+    // 左侧叶子：以 -135° (下偏左) 为中心
+    const centerWorldAngle = side > 0 ? -Math.PI * 0.28 : -Math.PI * 0.72;
+    // ±40° 抖动，但保持总体朝下
+    const worldTipAngle = centerWorldAngle + (Math.random() - 0.5) * Math.PI * 0.45;
+    // 簇内微小差异
+    const clusterAngleOffset = (g - (groupSize - 1) / 2) * 0.25;
+    // 模板 y+ → worldTipAngle 方向，所以旋转角 = worldTipAngle - PI/2
+    const finalAngle = worldTipAngle - Math.PI / 2 + clusterAngleOffset;
 
-    // 大小：基础范围大 + 强随机变化，打破"都一样大"
-    // 每片叶子独立大小系数，差别明显
-    const sizeRoll = Math.random();
-    const sizeBase = sizeRoll < 0.25 ? 0.08 + Math.random() * 0.04  // 25% 小叶
-                   : sizeRoll < 0.70 ? 0.14 + Math.random() * 0.06  // 45% 中叶
-                   : 0.20 + Math.random() * 0.08;                    // 30% 大叶
-    const scale = sizeBase * (g === 0 ? 1.0 : 0.65);
+    // 大小：连续随机变化，每片细微差别
+    // 中段略大、两端略小
+    const sizeMod = 0.85 + 0.3 * Math.sin(sParamT * Math.PI);
+    const scale = (0.13 + Math.pow(Math.random(), 1.3) * 0.13) * sizeMod * (g === 0 ? 1.0 : 0.75);
 
-    // 叶子宽度压缩（模拟 3D 倾斜，破平面感）
-    // 部分叶子横向被压扁，像侧视
-    const widthSquash = 0.5 + Math.random() * 0.5; // 0.5~1.0
+    // 叶子宽度：非常轻微的压缩，避免变成线条
+    const widthSquash = 0.88 + Math.random() * 0.12; // 0.88~1.00
 
     // 每片叶子独立 Z 深度
-    const leafZ = (Math.random() - 0.5) * 0.12;
+    const leafZ = (Math.random() - 0.5) * 0.10;
 
-    // 大幅卷曲
-    const curlStrength = (Math.random() - 0.5) * 0.22;
+    // 轻微卷曲
+    const curlStrength = (Math.random() - 0.5) * 0.12;
 
     // 色系
     const colorRoll = Math.random();
