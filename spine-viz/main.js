@@ -1530,10 +1530,13 @@ for (const src of leafSources) {
     if (nearbyCount >= Y_DENSITY_MAX) continue;
 
     // 全局2D距离检查：所有叶子之间距离不能小于0.32
+    // 红框区域 y ∈ [0.2, 0.6] 严格到 0.55，稀释密度
+    const strictRedBox = (sy >= 0.2 && sy <= 0.6);
+    const minDistSq = strictRedBox ? 0.55 * 0.55 : 0.32 * 0.32;
     let tooClose = false;
     for (const [ox, oy] of placedXYs) {
       const dx = ox - sx, dy = oy - sy;
-      if (dx * dx + dy * dy < 0.1024) { // 距离 < 0.32
+      if (dx * dx + dy * dy < minDistSq) {
         tooClose = true;
         break;
       }
