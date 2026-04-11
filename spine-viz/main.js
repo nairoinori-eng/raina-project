@@ -1309,16 +1309,15 @@ function sampleMainTrunkAt(globalT) {
 
 // 沿藤蔓步进，随机间距 0.03~0.18
 function walkVineForLeaves(vineId, sourceArr, maxLeaves) {
-  let t = 0.10 + Math.random() * 0.08;
+  let t = 0.10 + Math.random() * 0.08; // 起点延后，避开最顶端
   let placed = 0;
   let rejected = 0;
   while (t < 0.95 && placed < maxLeaves && rejected < 200) {
     let accepted = true;
     if (vineId === 0) {
-      // 主藤：Z范围很小(±0.06)，基本都能接受
+      // 主藤：Z = tan.x * 0.06，tan.x 大幅负=背后，拒绝
       const { pt, tan } = sampleMainTrunkAt(t);
-      // 只拒绝极端背面
-      if (tan.x < -0.55) {
+      if (tan.x < -0.2) {
         accepted = false;
       } else {
         sourceArr.push({
@@ -1370,22 +1369,6 @@ walkVineForLeaves(0, leafSources, 25); // 主藤：减少数量
 walkVineForLeaves(1, leafSources, 10); // 辅藤A
 walkVineForLeaves(2, leafSources, 8);  // 辅藤B
 
-// 弥散分支上也放少量叶子（从分支尖端往外延伸的地方）
-for (const em of driftEmitters) {
-  const numLeaves = 2 + Math.floor(Math.random() * 2); // 2-3 片/分支
-  for (let i = 0; i < numLeaves; i++) {
-    // 沿分支延伸方向 0.1~0.7 单位
-    const dist = 0.1 + Math.random() * 0.6;
-    const worldX = em.sx + em.dx * dist;
-    const worldY = em.sy + em.dy * dist;
-    leafSources.push({
-      type: 'drift',
-      worldX, worldY,
-      tanX: em.dx, tanY: em.dy,
-    });
-  }
-}
-
 
 // ── 生成叶子实例数据 ──
 // 每片叶子分组：单叶(60%) / 2片(25%) / 3片(15%)
@@ -1405,20 +1388,10 @@ for (const src of leafSources) {
     const spineX = getSpineXAtY(stemSY);
     stemCX = stemSX + spineX;
     stemCY = stemSY;
+    // 切线（世界空间）
     tangentWorldX = src.tanX * VINE_X_SCALE;
     tangentWorldY = src.tanY * VINE_Y_SCALE;
     stemParamT = (vineYMax - stemSY) / vineYRange;
-    hostVineId = 0;
-  } else if (src.type === 'drift') {
-    // 弥散分支：已是世界坐标
-    stemSX = src.worldX;
-    stemSY = src.worldY;
-    const spineX = getSpineXAtY(stemSY);
-    stemCX = stemSX + spineX;
-    stemCY = stemSY;
-    tangentWorldX = src.tanX;
-    tangentWorldY = src.tanY;
-    stemParamT = Math.max(0, Math.min(1, (vineYMax - stemSY) / vineYRange));
     hostVineId = 0;
   } else {
     // 辅藤：螺旋公式
