@@ -21,7 +21,7 @@ const bool MOTOR_ACTIVE_LOW = true;
 
 const float DEFAULT_WEIGHT_CHEST = 0.60f;
 const float DEFAULT_WEIGHT_WAIST = 0.40f;
-const float DEFAULT_THRESHOLD = 200.0f;
+const float DEFAULT_THRESHOLD = 600.0f;
 
 const unsigned int BASELINE_WINDOW_SAMPLES = 90;
 
