@@ -1309,48 +1309,65 @@ function sampleMainTrunkAt(globalT) {
 
 // 沿藤蔓步进，随机间距 0.03~0.18
 function walkVineForLeaves(vineId, sourceArr, maxLeaves) {
-  let t = 0.03 + Math.random() * 0.08; // 起点随机
+  let t = 0.10 + Math.random() * 0.08; // 起点延后，避开最顶端
   let placed = 0;
-  while (t < 0.97 && placed < maxLeaves) {
+  let rejected = 0;
+  while (t < 0.95 && placed < maxLeaves && rejected < 200) {
+    let accepted = true;
     if (vineId === 0) {
-      // 主藤
+      // 主藤：Z = tan.x * 0.06，tan.x 大幅负=背后，拒绝
       const { pt, tan } = sampleMainTrunkAt(t);
-      sourceArr.push({
-        type: 'figma',
-        rawX: pt.x, rawY: pt.y,
-        tanX: tan.x, tanY: tan.y,
-        vineId: 0,
-      });
+      if (tan.x < -0.2) {
+        accepted = false;
+      } else {
+        sourceArr.push({
+          type: 'figma',
+          rawX: pt.x, rawY: pt.y,
+          tanX: tan.x, tanY: tan.y,
+          vineId: 0,
+        });
+      }
     } else {
-      // 辅藤
+      // 辅藤：螺旋 Z = r*cos(theta)，cos<0=背后
       const accent = ACCENT_VINES[vineId - 1];
-      const cpS = curveStraight.getPoint(t);
-      const cpC = curveCurved.getPoint(t);
-      const tanC = curveCurved.getTangent(t);
       const theta = t * Math.PI * accent.freq * 2 + accent.phase;
-      const env = 0.6 + 0.4 * Math.sin(t * Math.PI);
-      const r = accent.radius * env;
-      const helixX = r * Math.sin(theta);
-      sourceArr.push({
-        type: 'accent',
-        vineId,
-        t,
-        helixX,
-        cpSY: cpS.y,
-        cpCX: cpC.x, cpCY: cpC.y,
-        tanCX: tanC.x, tanCY: tanC.y,
-      });
+      const zCos = Math.cos(theta);
+      if (zCos < 0.15) {
+        accepted = false;
+      } else {
+        const cpS = curveStraight.getPoint(t);
+        const cpC = curveCurved.getPoint(t);
+        const tanC = curveCurved.getTangent(t);
+        const env = 0.6 + 0.4 * Math.sin(t * Math.PI);
+        const r = accent.radius * env;
+        const helixX = r * Math.sin(theta);
+        sourceArr.push({
+          type: 'accent',
+          vineId,
+          t,
+          helixX,
+          cpSY: cpS.y,
+          cpCX: cpC.x, cpCY: cpC.y,
+          tanCX: tanC.x, tanCY: tanC.y,
+        });
+      }
     }
-    placed++;
-    // 不规律间距：指数分布让有簇有疏
-    const gap = 0.025 + Math.pow(Math.random(), 1.6) * 0.16;
-    t += gap;
+    if (accepted) {
+      placed++;
+      // 不规律间距：指数分布让有簇有疏
+      const gap = 0.035 + Math.pow(Math.random(), 1.5) * 0.16;
+      t += gap;
+    } else {
+      rejected++;
+      // 前进到可接受位置
+      t += 0.02;
+    }
   }
 }
 
-walkVineForLeaves(0, leafSources, 35); // 主藤
-walkVineForLeaves(1, leafSources, 12); // 辅藤A
-walkVineForLeaves(2, leafSources, 10); // 辅藤B
+walkVineForLeaves(0, leafSources, 25); // 主藤：减少数量
+walkVineForLeaves(1, leafSources, 10); // 辅藤A
+walkVineForLeaves(2, leafSources, 8);  // 辅藤B
 
 
 // ── 生成叶子实例数据 ──
