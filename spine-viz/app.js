@@ -1429,12 +1429,11 @@ for (const src of leafSources) {
     // 模板 y+ → worldTipAngle 方向，所以旋转角 = worldTipAngle - PI/2
     const finalAngle = worldTipAngle - Math.PI / 2 + clusterAngleOffset;
 
-    // 大小：大幅拉开差距——大的缩小，小的更小，差距 4x
-    // 每片叶子都略有不同
+    // 大小：每片都略有不同，差距明显但小叶不要过多
     const sizeMod = 0.85 + 0.3 * Math.sin(sParamT * Math.PI);
-    const sizeRand = Math.pow(Math.random(), 1.6); // 0~1，偏小
-    const scale = (0.05 + sizeRand * 0.16) * sizeMod * (g === 0 ? 1.0 : 0.70);
-    // 范围：最小 ~0.04, 最大 ~0.22, 差距 5x+
+    const sizeRand = Math.pow(Math.random(), 0.85); // 略偏大
+    const scale = (0.09 + sizeRand * 0.15) * sizeMod * (g === 0 ? 1.0 : 0.75);
+    // 范围：最小 ~0.08, 最大 ~0.24, 差距 3x
 
     // 叶子宽度：非常轻微的压缩，避免变成线条
     const widthSquash = 0.88 + Math.random() * 0.12; // 0.88~1.00
