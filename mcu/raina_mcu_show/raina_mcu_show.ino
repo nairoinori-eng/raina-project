@@ -260,12 +260,15 @@ void enterGuideMode() {
 }
 
 void startExperience() {
+  unsigned long nowMs = millis();
   freezeBaselineFromRollingWindow();
   runMode = MODE_RUNNING;
-  runningSinceMs = millis();
+  // Start near the end of the cycle so the first thing the user feels is the
+  // three short prepulses, then the inhale cue begins immediately afterward.
+  runningSinceMs = nowMs - (BREATH_CYCLE_MS - PREPULSE_TOTAL_MS);
   lowBlendSinceMs = 0UL;
   reminderUntilMs = 0UL;
-  nextReminderEligibleMs = runningSinceMs + LOW_BLEND_REMINDER_DELAY_MS;
+  nextReminderEligibleMs = nowMs + LOW_BLEND_REMINDER_DELAY_MS;
   emitCommentLine("RUNNING");
 }
 
