@@ -1369,21 +1369,45 @@ walkVineForLeaves(0, leafSources, 16); // 主藤
 walkVineForLeaves(1, leafSources, 6);  // 辅藤A
 walkVineForLeaves(2, leafSources, 5);  // 辅藤B
 
-// 针对性补充：主藤中段 seg8 少量强制位置
-{
-  const midSeg8 = vineData[0].curves[8];
-  if (midSeg8) {
-    const targetTs = [0.35, 0.60];
-    for (const localT of targetTs) {
-      const pt = midSeg8.getPointAt(localT);
-      const tan = midSeg8.getTangentAt(localT);
-      leafSources.push({
-        type: 'figma',
-        rawX: pt.x, rawY: pt.y,
-        tanX: tan.x, tanY: tan.y,
-        vineId: 0,
-      });
+// 主藤补缺：每隔一段检查是否有叶子，没有则补
+// 先把已有主藤叶子的世界位置收集起来
+const existingMainLeaves = [];
+for (const src of leafSources) {
+  if (src.type === 'figma') {
+    existingMainLeaves.push({
+      sx: src.rawX * VINE_X_SCALE,
+      sy: src.rawY * VINE_Y_SCALE,
+    });
+  } else if (src.type === 'drift') {
+    existingMainLeaves.push({ sx: src.worldX, sy: src.worldY });
+  }
+}
+// 沿主干每 0.12 步长检查，空缺处补叶
+const GAP_CHECK_STEP = 0.12;
+const GAP_CHECK_RADIUS_SQ = 0.30 * 0.30;
+for (let checkT = 0.15; checkT < 0.88; checkT += GAP_CHECK_STEP) {
+  const { pt, tan } = sampleMainTrunkAt(checkT);
+  const csx = pt.x * VINE_X_SCALE;
+  const csy = pt.y * VINE_Y_SCALE;
+  // 拒绝大幅背面
+  if (tan.x < -0.55) continue;
+  // 检查附近是否已有叶子
+  let found = false;
+  for (const ex of existingMainLeaves) {
+    const dx = ex.sx - csx, dy = ex.sy - csy;
+    if (dx * dx + dy * dy < GAP_CHECK_RADIUS_SQ) {
+      found = true;
+      break;
     }
+  }
+  if (!found) {
+    leafSources.push({
+      type: 'figma',
+      rawX: pt.x, rawY: pt.y,
+      tanX: tan.x, tanY: tan.y,
+      vineId: 0,
+    });
+    existingMainLeaves.push({ sx: csx, sy: csy });
   }
 }
 
@@ -1485,8 +1509,9 @@ for (const src of leafSources) {
     }
     if (nearbyCount >= Y_DENSITY_MAX) continue;
 
-    // 针对性：红框区域 y ∈ [0.8, 1.6]，做2D近距检查
-    if (sy >= 0.8 && sy <= 1.6) {
+    // 针对性：上红框 [0.8, 1.6] + 下红框 [-0.9, 0.0]，做2D近距检查
+    const inStrictZone = (sy >= 0.8 && sy <= 1.6) || (sy >= -0.9 && sy <= 0.0);
+    if (inStrictZone) {
       let tooClose = false;
       for (const [ox, oy] of placedXYs) {
         const dx = ox - sx, dy = oy - sy;
