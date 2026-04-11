@@ -1513,8 +1513,10 @@ for (const src of leafSources) {
     // 每片叶子独立 Z 深度
     const leafZ = (Math.random() - 0.5) * 0.10;
 
-    // 卷曲（加强）
-    const curlStrength = (Math.random() - 0.5) * 0.30;
+    // 卷曲（强烈）
+    const curlStrength = (Math.random() - 0.5) * 0.55;
+    // 叶片沿长度方向的整体弯折（叶尖偏向一侧）
+    const bendStrength = (Math.random() - 0.5) * 0.35;
 
     // 色系
     const colorRoll = Math.random();
@@ -1538,6 +1540,7 @@ for (const src of leafSources) {
       leafIdx: leafGlobalIdx++,
       leafZ,
       curlStrength,
+      bendStrength,
     });
   }
 }
@@ -1576,7 +1579,9 @@ for (const leaf of leafInstances) {
     const jy = (Math.random() - 0.5) * jitter;
 
     // 卷曲：沿叶片长度方向的 x 偏移（S 弯）
-    const curlX = Math.sin(pt.y * 2.2) * leaf.curlStrength;
+    // S 弯卷曲 + 整体弯折（叶尖偏向一侧，二次方）
+    const curlX = Math.sin(pt.y * 3.0) * leaf.curlStrength
+                + pt.y * pt.y * leaf.bendStrength;
 
     // 模板坐标 + 卷曲 + 抖动，x 再乘宽度压缩（模拟倾斜）
     const lx = (pt.x * leaf.widthSquash + curlX + jx) * leaf.scale;
@@ -1682,19 +1687,23 @@ const leafVertexShader = /* glsl */`
     float swayBase = 1.0 - stemParamT * 0.3;
     float vineAmp = hostVineId < 0.5 ? 1.0 : (hostVineId < 1.5 ? 1.4 : 0.7);
     float vineFreq = hostVineId < 0.5 ? 1.0 : (hostVineId < 1.5 ? 0.8 : 1.3);
-    float vinePhase = hostVineId < 0.5 ? 0.2 : (hostVineId < 1.5 ? 1.5 : 2.8);
+    // 对齐藤蔓 shader 中 aVinePhase 的实际值
+    // 主藤 pulsePhase = 0.2, 辅藤A = PI*0.35≈1.100, 辅藤B = PI*1.30≈4.084
+    float vinePhase = hostVineId < 0.5 ? 0.2 : (hostVineId < 1.5 ? 1.100 : 4.084);
     float swayX = sin(uTime * 0.35 * vineFreq + stemParamT * 3.0 + vinePhase) * 0.03 * swayBase * vineAmp;
     float swayY = sin(uTime * 0.6 * vineFreq + stemParamT * 8.0 + vinePhase * 2.0) * 0.06 * swayBase * vineAmp
                 + sin(uTime * 1.2 * vineFreq + stemParamT * 14.0) * 0.02 * swayBase * vineAmp;
     stemPos.x += swayX;
     stemPos.y += swayY;
 
-    // 3. 叶身局部摇曳（只影响叶身，叶柄附近不动）
-    float leafSwayAmp = yInLeaf * yInLeaf * 0.025; // 二次方，叶尖最大
+    // 3. 叶身局部摇曳（加强上下飘动）
+    float leafSwayAmp = yInLeaf * yInLeaf * 0.06; // 放大
     float leafPhase = leafIdx * 1.37;
+    // Y 方向主导（上下飘），X 方向次之
     vec2 leafSway = vec2(
-      sin(uTime * 0.9 + leafPhase) * leafSwayAmp,
-      cos(uTime * 1.1 + leafPhase + 0.5) * leafSwayAmp * 0.5
+      sin(uTime * 0.8 + leafPhase) * leafSwayAmp * 0.5,
+      sin(uTime * 1.3 + leafPhase * 1.6) * leafSwayAmp * 1.2
+      + sin(uTime * 2.2 + leafPhase * 0.7) * leafSwayAmp * 0.4
     );
 
     // 4. 连续生长：blend 0.25→0.50，从上到下依次
@@ -1720,10 +1729,11 @@ const leafVertexShader = /* glsl */`
 `;
 
 // ── 叶子颜色：4色系支持绿→金/紫/粉 ──
-const LEAF_BASE = new THREE.Color(0x1a5040); // 基色翡翠绿
-const LEAF_HL   = new THREE.Color(0xb88a3a); // 暖金（highlight）
-const LEAF_AC1  = new THREE.Color(0x6030a0); // 紫（accent1）
-const LEAF_AC2  = new THREE.Color(0xb84878); // 粉/珊瑚（accent2）
+// 叶子色系：和藤蔓同家族，但略有变化
+const LEAF_BASE = new THREE.Color(0x1e5244); // 基色翡翠绿（稍亮于藤蔓）
+const LEAF_HL   = new THREE.Color(0x3a7050); // 亮玉绿 highlight
+const LEAF_AC1  = new THREE.Color(0x556048); // 橄榄暖绿（暖调）
+const LEAF_AC2  = new THREE.Color(0x1e4e58); // 深青绿（冷调）
 
 const leafMat = new THREE.ShaderMaterial({
   vertexShader: leafVertexShader,
