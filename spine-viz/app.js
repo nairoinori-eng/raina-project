@@ -257,7 +257,7 @@ const spColorVars = new Float32Array(N_SPINE);
 // 空心管参数（跟随 SPINE_SCALE 缩放）
 const TUBE_OUTER   = 0.14 * SPINE_SCALE;
 const TUBE_INNER   = 0.055 * SPINE_SCALE;
-const TUBE_Y_SCALE = 1.5;              // Z 方向椭圆截面，增强立体感
+const TUBE_Y_SCALE = 2.4;              // Z 方向椭圆截面，增强立体感
 
 // 管壁宽度沿脊柱变化（模拟真实椎体：颈椎窄→胸椎中→腰椎宽→骶椎收）
 function tubeWidthAt(t) {
@@ -456,7 +456,7 @@ for (let vi = 0; vi < 13; vi++) {
       ? Math.pow(Math.random(), 0.5) * VERT_OUTER
       : VERT_INNER + Math.random() * (VERT_OUTER - VERT_INNER);
     const cosA   = Math.cos(vAngle) * vr;
-    const gz     = Math.sin(vAngle) * vr * 1.5; // Z 方向椭圆，与 TUBE_Y_SCALE 一致
+    const gz     = Math.sin(vAngle) * vr * 2.4; // Z 方向椭圆，与 TUBE_Y_SCALE 一致
     // Y方向扩大分布范围，用 alpha 衰减制造上下渐变（立体感）
     const ySigma = 0.030 * SPINE_SCALE;
     const gy     = gaussRand() * ySigma;
