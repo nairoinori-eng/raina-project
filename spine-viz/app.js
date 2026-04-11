@@ -1129,25 +1129,27 @@ const vineVertexShader = /* glsl */`
   uniform float uBlend;
   uniform float uTime;
   uniform vec3 uVineGrowth;
-  uniform float uSpineXs[13];
-  uniform float uSpineYs[13];
+  uniform float uSpineXs[33];
+  uniform float uSpineYs[33];
   uniform float uSpineHalfW;
+  uniform float uSpineRotY;
 
   varying float vAlpha;
   varying float vColorVar;
 
-  // 查骨骼曲线中心 X（按 y 线性插值 13 个控制点）。
-  // SPINE_CURVED 按 y 降序存储（C7 y=+2.36 → S1 y=-2.36）
+  // 查骨骼曲线中心 X（按 y 线性插值 33 个 catmull-rom 采样点）。
+  // 按 y 降序存储（C7 最高 → S1 最低）。累加器写法避免 loop 里 return。
   float spineCenterXCurved(float y) {
-    for (int i = 0; i < 12; i++) {
+    float result = (y > uSpineYs[0]) ? uSpineXs[0] : uSpineXs[32];
+    for (int i = 0; i < 32; i++) {
       float y0 = uSpineYs[i];       // 上端
       float y1 = uSpineYs[i + 1];   // 下端
       if (y <= y0 && y >= y1) {
         float k = (y - y1) / (y0 - y1 + 1e-6);
-        return mix(uSpineXs[i + 1], uSpineXs[i], k);
+        result = mix(uSpineXs[i + 1], uSpineXs[i], k);
       }
     }
-    return y > uSpineYs[0] ? uSpineXs[0] : uSpineXs[12];
+    return result;
   }
 
   void main() {
@@ -1188,14 +1190,23 @@ const vineVertexShader = /* glsl */`
 
       float endFade = smoothstep(0.0, 0.04, aParamT) * smoothstep(1.0, 0.93, aParamT);
 
-      // 2D 遮挡判定：只有粒子的 x 位置落在骨骼横向占位内才算被骨骼挡住。
-      // 骨骼中心 X 由弯曲控制点曲线插值（直立状态 X=0），乘上 uBlend 做过渡。
-      float spineCx = mix(spineCenterXCurved(pos2d.y), 0.0, uBlend);
-      float dx = abs(pos2d.x - spineCx);
-      // 软过渡 0.04 宽度，避免硬边
-      float xOcclusion = 1.0 - smoothstep(uSpineHalfW - 0.04, uSpineHalfW, dx);
-      // 原来的 z 深度暗化（只对落在骨骼 2D 投影内的粒子生效）
-      float zDepthFade = 0.25 + 0.75 * smoothstep(-0.06, 0.01, aZPos);
+      // 遮挡判定：考虑 spineGroup 的 Y 轴旋转，把 (local x, local z) 转到世界空间再比较。
+      // 骨骼是竖直柱（local z 恒 0），只受 uBlend 混合影响 local x。
+      float spineCxLocal = mix(spineCenterXCurved(pos2d.y), 0.0, uBlend);
+      float cy = cos(uSpineRotY);
+      float sy = sin(uSpineRotY);
+      // 粒子世界 (x, z)
+      float pWorldX =  pos2d.x * cy + aZPos * sy;
+      float pWorldZ = -pos2d.x * sy + aZPos * cy;
+      // 骨骼中心世界 (x, z)（local z=0）
+      float spineWorldX =  spineCxLocal * cy;
+      float spineWorldZ = -spineCxLocal * sy;
+      // 2D 水平距离（世界空间）+ 软过渡
+      float dxWorld = abs(pWorldX - spineWorldX);
+      float xOcclusion = 1.0 - smoothstep(uSpineHalfW - 0.04, uSpineHalfW, dxWorld);
+      // 深度相对：>0 粒子在骨骼前，<0 在骨骼后
+      float zRel = pWorldZ - spineWorldZ;
+      float zDepthFade = 0.25 + 0.75 * smoothstep(-0.06, 0.01, zRel);
       float depthFade = mix(1.0, zDepthFade, xOcclusion);
 
       float effectivePulse = totalPulse * depthFade;
@@ -1218,20 +1229,35 @@ const VINE_A_COLOR = new THREE.Color(0x7a5618);  // 饱和深金基调
 const VINE_A_HL    = new THREE.Color(0x5a4628);  // 闷金脉冲（紫色阶段不刺眼）
 const VINE_A_AC1   = new THREE.Color(0xc8804a);  // 暖琥珀点缀
 const VINE_A_AC2   = new THREE.Color(0x4a2e08);  // 深青铜阴影
-// MID 套（blend=0.5）：翠绿过渡（粉红的对比色）
-const VINE_MID_COLOR = new THREE.Color(0x78c890);  // 翠绿基调
-const VINE_MID_HL    = new THREE.Color(0x406a50);  // 闷翠脉冲（粉色阶段不刺眼）
-const VINE_MID_AC1   = new THREE.Color(0x3a9068);  // 深翡翠点缀
-const VINE_MID_AC2   = new THREE.Color(0x28684a);  // 深墨绿阴影
+// MID 套（blend=0.5）：翠绿过渡（粉红的对比色），高光/暗部都压得更深
+const VINE_MID_COLOR = new THREE.Color(0x78c890);  // 翠绿基调（base 保持）
+const VINE_MID_HL    = new THREE.Color(0x2a4438);  // 深闷翠脉冲（亮部再压暗）
+const VINE_MID_AC1   = new THREE.Color(0x1a3828);  // 深墨翠点缀
+const VINE_MID_AC2   = new THREE.Color(0x081810);  // 近黑暗部
 // B 套（blend=1）：骨骼金时 → 藤蔓花青
 const VINE_B_COLOR = new THREE.Color(0x1a3854);  // 花青基调
 const VINE_B_HL    = new THREE.Color(0x3a5a78);  // 沉花青高光（压低亮度）
 const VINE_B_AC1   = new THREE.Color(0x10243e);  // 深夜蓝
 const VINE_B_AC2   = new THREE.Color(0x244e7c);  // 中花青
 
-// 骨骼曲线控制点打包给 shader 做遮挡判定
-const SPINE_XS_FLAT = SPINE_CURVED.map(p => p.x);
-const SPINE_YS_FLAT = SPINE_CURVED.map(p => p.y);
+// 骨骼曲线采样给 shader 做遮挡判定：
+// 沿 curveCurved 均匀取 33 个点（比直接用 13 控制点插值精度更高，
+// 匹配骨骼粒子实际摆位的 catmull-rom spline）。
+const SPINE_SAMPLE_N = 33;
+const SPINE_XS_FLAT = new Array(SPINE_SAMPLE_N);
+const SPINE_YS_FLAT = new Array(SPINE_SAMPLE_N);
+{
+  const samples = [];
+  for (let i = 0; i < SPINE_SAMPLE_N; i++) {
+    samples.push(curveCurved.getPoint(i / (SPINE_SAMPLE_N - 1)));
+  }
+  // 按 y 从大到小（C7 顶 → S1 底）排序，跟原 13 点顺序一致
+  samples.sort((a, b) => b.y - a.y);
+  for (let i = 0; i < SPINE_SAMPLE_N; i++) {
+    SPINE_XS_FLAT[i] = samples[i].x;
+    SPINE_YS_FLAT[i] = samples[i].y;
+  }
+}
 
 const vineMat = new THREE.ShaderMaterial({
   vertexShader: vineVertexShader, fragmentShader,
@@ -1247,6 +1273,7 @@ const vineMat = new THREE.ShaderMaterial({
     uSpineXs:    { value: SPINE_XS_FLAT },
     uSpineYs:    { value: SPINE_YS_FLAT },
     uSpineHalfW: { value: 0.18 },
+    uSpineRotY:  { value: 0.0 },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -2169,6 +2196,7 @@ function animate() {
   vineMat.uniforms.uVineGrowth.value.set(vineGrowProgress[0], vineGrowProgress[1], vineGrowProgress[2]);
   vineMat.uniforms.uBlend.value = smoothBlend;
   vineMat.uniforms.uTime.value  = time;
+  vineMat.uniforms.uSpineRotY.value = spineGroup.rotation.y;
   // 藤蔓配色跟随 colorBlend（同骨骼），中点用翠绿（粉红的对比色）保饱和度
   lerpMid(vineMat.uniforms.uColor    .value, VINE_A_COLOR, VINE_MID_COLOR, VINE_B_COLOR, colorBlend);
   lerpMid(vineMat.uniforms.uHighlight.value, VINE_A_HL,    VINE_MID_HL,    VINE_B_HL,    colorBlend);
