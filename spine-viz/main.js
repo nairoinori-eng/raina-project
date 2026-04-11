@@ -1171,10 +1171,11 @@ const vineVertexShader = /* glsl */`
 `;
 
 // 藤蔓固定配色（绿色系立体感）
-const VINE_COLOR = new THREE.Color(0x1a5040);   // 翡翠绿（基色）
-const VINE_HL    = new THREE.Color(0x1c4838);   // 玉色高光（进一步压暗）
-const VINE_AC1   = new THREE.Color(0x3a7848);   // 苔藓暖绿
-const VINE_AC2   = new THREE.Color(0x186058);   // 深青绿（冷调）
+// 藤蔓色系：与叶子同家族，略暗作为支撑结构
+const VINE_COLOR = new THREE.Color(0x1a4a3a);   // 翡翠绿（基色，稍暗于叶子）
+const VINE_HL    = new THREE.Color(0x4a5a2c);   // 暗金橄榄（与叶HL同调但更暗）
+const VINE_AC1   = new THREE.Color(0x4a2e40);   // 暗紫红（与叶AC1同调但更暗）
+const VINE_AC2   = new THREE.Color(0x183e52);   // 深青蓝（与叶AC2同调但更暗）
 
 const vineMat = new THREE.ShaderMaterial({
   vertexShader: vineVertexShader, fragmentShader,
