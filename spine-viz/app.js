@@ -1365,16 +1365,15 @@ function walkVineForLeaves(vineId, sourceArr, maxLeaves) {
   }
 }
 
-walkVineForLeaves(0, leafSources, 25); // 主藤：减少数量
-walkVineForLeaves(1, leafSources, 10); // 辅藤A
-walkVineForLeaves(2, leafSources, 8);  // 辅藤B
+walkVineForLeaves(0, leafSources, 16); // 主藤
+walkVineForLeaves(1, leafSources, 6);  // 辅藤A
+walkVineForLeaves(2, leafSources, 5);  // 辅藤B
 
-// 针对性补充：主藤中段前面
-// 主藤 seg 8 是长的中段，手动采样几个点放叶子
+// 针对性补充：主藤中段 seg8 少量强制位置
 {
-  const midSeg8 = vineData[0].curves[8]; // seg 8
+  const midSeg8 = vineData[0].curves[8];
   if (midSeg8) {
-    const targetTs = [0.25, 0.40, 0.55, 0.70];
+    const targetTs = [0.35, 0.60];
     for (const localT of targetTs) {
       const pt = midSeg8.getPointAt(localT);
       const tan = midSeg8.getTangentAt(localT);
@@ -1388,12 +1387,10 @@ walkVineForLeaves(2, leafSources, 8);  // 辅藤B
   }
 }
 
-// 针对性补充：弥散分支上的叶子（上右 seg9 + 下左 seg12）
-const DRIFT_LEAF_EMITTERS = [driftEmitters[1], driftEmitters[2]]; // seg9 中右 + seg12 下左
+// 针对性补充：弥散分支上的叶子（中右 seg9 + 下左 seg12 各 2 片）
+const DRIFT_LEAF_EMITTERS = [driftEmitters[1], driftEmitters[2]];
 for (const em of DRIFT_LEAF_EMITTERS) {
-  // 每条分支 2-3 片，沿延伸方向
-  const n = 2 + Math.floor(Math.random() * 2);
-  for (let i = 0; i < n; i++) {
+  for (let i = 0; i < 2; i++) {
     const dist = 0.15 + Math.random() * 0.55;
     const worldX = em.sx + em.dx * dist;
     const worldY = em.sy + em.dy * dist;
