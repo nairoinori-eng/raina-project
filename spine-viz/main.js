@@ -1214,7 +1214,7 @@ const vineGrowProgress  = [0, 0, 0];
 //
 
 // ── 叶子形状数据预处理：采样模板内部点 ──
-const PARTICLES_PER_LEAF = 120;
+const PARTICLES_PER_LEAF = 280;
 
 // Poisson-disk 风格：在轮廓内用网格+随机采样
 function pointInPolygon(px, py, polygon) {
@@ -1278,59 +1278,80 @@ function sampleLeafTemplate(shape) {
 
 const LEAF_TEMPLATES = LEAF_SHAPES.map(shape => sampleLeafTemplate(shape));
 
-// ── 叶子放置采样 ──
-// 主藤 20片，辅藤A 6片，辅藤B 5片
-const LEAF_COUNTS = [20, 6, 5]; // 每根藤蔓的叶子数
-const leafSources = []; // 每片叶子的来源信息
+// ── 叶子放置采样（沿藤蔓自然步进，不规律间距）──
+const leafSources = [];
 
-// 主藤（vineData[0]的主干段）
+// 主藤主干段
 const trunkSegs = [];
 for (let si = 0; si < vineData[0].topo.length; si++) {
   if (vineData[0].topo[si].depth === 0) trunkSegs.push(si);
 }
+// 主干总长度
+const trunkLens = trunkSegs.map(si => vineData[0].lengths[si]);
+const trunkTotalLen = trunkLens.reduce((a, b) => a + b, 0);
 
-function sampleLeafOnVine(vineId, sourceArr) {
-  if (vineId === 0) {
-    // 主藤：在主干段上采样
-    const si = trunkSegs[Math.floor(Math.random() * trunkSegs.length)];
-    const curve = vineData[0].curves[si];
-    const t = 0.1 + Math.random() * 0.8;
-    const pt = curve.getPointAt(t);
-    const tan = curve.getTangentAt(t);
-    sourceArr.push({
-      type: 'figma',
-      rawX: pt.x, rawY: pt.y,
-      tanX: tan.x, tanY: tan.y,
-    });
-  } else {
-    // 辅藤：用螺旋公式采样
-    const accent = ACCENT_VINES[vineId - 1];
-    const t = 0.1 + Math.random() * 0.8;
-    const cpS = curveStraight.getPoint(t);
-    const cpC = curveCurved.getPoint(t);
-    const tanC = curveCurved.getTangent(t);
-    const theta = t * Math.PI * accent.freq * 2 + accent.phase;
-    const env = 0.6 + 0.4 * Math.sin(t * Math.PI);
-    const r = accent.radius * env;
-    const helixX = r * Math.sin(theta);
-    // 辅藤的straight位置（figma坐标系）
-    sourceArr.push({
-      type: 'accent',
-      vineId,
-      t,
-      helixX,
-      cpSY: cpS.y, // 直立态y
-      cpCX: cpC.x, cpCY: cpC.y, // 弯曲态位置
-      tanCX: tanC.x, tanCY: tanC.y,
-    });
+function sampleMainTrunkAt(globalT) {
+  // globalT (0~1) → 哪一段哪个t
+  let accum = 0;
+  for (let i = 0; i < trunkSegs.length; i++) {
+    const segLen = trunkLens[i];
+    const segEnd = accum + segLen;
+    if (globalT * trunkTotalLen <= segEnd || i === trunkSegs.length - 1) {
+      const localT = (globalT * trunkTotalLen - accum) / segLen;
+      const curve = vineData[0].curves[trunkSegs[i]];
+      const pt = curve.getPointAt(Math.max(0.01, Math.min(0.99, localT)));
+      const tan = curve.getTangentAt(Math.max(0.01, Math.min(0.99, localT)));
+      return { pt, tan };
+    }
+    accum = segEnd;
   }
 }
 
-for (let vi = 0; vi < 3; vi++) {
-  for (let i = 0; i < LEAF_COUNTS[vi]; i++) {
-    sampleLeafOnVine(vi, leafSources);
+// 沿藤蔓步进，随机间距 0.03~0.18
+function walkVineForLeaves(vineId, sourceArr, maxLeaves) {
+  let t = 0.03 + Math.random() * 0.08; // 起点随机
+  let placed = 0;
+  while (t < 0.97 && placed < maxLeaves) {
+    if (vineId === 0) {
+      // 主藤
+      const { pt, tan } = sampleMainTrunkAt(t);
+      sourceArr.push({
+        type: 'figma',
+        rawX: pt.x, rawY: pt.y,
+        tanX: tan.x, tanY: tan.y,
+        vineId: 0,
+      });
+    } else {
+      // 辅藤
+      const accent = ACCENT_VINES[vineId - 1];
+      const cpS = curveStraight.getPoint(t);
+      const cpC = curveCurved.getPoint(t);
+      const tanC = curveCurved.getTangent(t);
+      const theta = t * Math.PI * accent.freq * 2 + accent.phase;
+      const env = 0.6 + 0.4 * Math.sin(t * Math.PI);
+      const r = accent.radius * env;
+      const helixX = r * Math.sin(theta);
+      sourceArr.push({
+        type: 'accent',
+        vineId,
+        t,
+        helixX,
+        cpSY: cpS.y,
+        cpCX: cpC.x, cpCY: cpC.y,
+        tanCX: tanC.x, tanCY: tanC.y,
+      });
+    }
+    placed++;
+    // 不规律间距：指数分布让有簇有疏
+    const gap = 0.025 + Math.pow(Math.random(), 1.6) * 0.16;
+    t += gap;
   }
 }
+
+walkVineForLeaves(0, leafSources, 35); // 主藤
+walkVineForLeaves(1, leafSources, 12); // 辅藤A
+walkVineForLeaves(2, leafSources, 10); // 辅藤B
+
 
 // ── 生成叶子实例数据 ──
 // 每片叶子分组：单叶(60%) / 2片(25%) / 3片(15%)
@@ -1393,16 +1414,22 @@ for (const src of leafSources) {
     const sParamT = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
 
     // 叶子朝向角度：(leafOutX, leafOutY) 是叶尖指向
-    // 叶子模板坐标系：y+ 是叶尖方向，所以旋转角度让模板 y+ 对齐 leafOut
     const angle = Math.atan2(leafOutY, leafOutX) - Math.PI / 2;
 
-    // 簇内小角度偏移（扇形）
+    // 簇内小角度偏移 + 随机旋转抖动（增加有机感）
     const clusterAngle = (g - (groupSize - 1) / 2) * 0.25;
-    const finalAngle = angle + clusterAngle;
+    const randomAngleJitter = (Math.random() - 0.5) * 0.7; // ±0.35 rad
+    const finalAngle = angle + clusterAngle + randomAngleJitter;
 
     // 大小：中段大、两端小
-    const sizeMod = 0.7 + 0.6 * Math.sin(sParamT * Math.PI);
-    const scale = (0.25 + Math.random() * 0.12) * sizeMod * (g === 0 ? 1.0 : 0.75);
+    const sizeMod = 0.65 + 0.5 * Math.sin(sParamT * Math.PI);
+    const scale = (0.10 + Math.random() * 0.06) * sizeMod * (g === 0 ? 1.0 : 0.75);
+
+    // 每片叶子独立 Z 深度（避免所有叶子在同一平面）
+    const leafZ = (Math.random() - 0.5) * 0.08;
+
+    // 叶子卷曲强度（轻微 S 弯）
+    const curlStrength = (Math.random() - 0.5) * 0.08;
 
     // 色系
     const colorRoll = Math.random();
@@ -1418,9 +1445,11 @@ for (const src of leafSources) {
       angle: finalAngle,
       scale,
       colorType,
-      leafParamT: sParamT, // 用位置决定生长顺序
+      leafParamT: sParamT,
       templateIdx,
       leafIdx: leafGlobalIdx++,
+      leafZ,
+      curlStrength,
     });
   }
 }
@@ -1433,7 +1462,7 @@ const lfStemCurved   = new Float32Array(N_LEAF_TOTAL * 2);
 const lfStemStraight = new Float32Array(N_LEAF_TOTAL * 2);
 const lfLocal        = new Float32Array(N_LEAF_TOTAL * 2); // 局部坐标（已按叶角度旋转）
 const lfStemInfo     = new Float32Array(N_LEAF_TOTAL * 2); // (stemParamT, hostVineId)
-const lfLeafInfo     = new Float32Array(N_LEAF_TOTAL * 3); // (leafParamT, leafIdx, leafT=距叶柄距离比)
+const lfLeafInfo     = new Float32Array(N_LEAF_TOTAL * 4); // (leafParamT, leafIdx, yNormInLeaf, leafZ)
 const lfSizes        = new Float32Array(N_LEAF_TOTAL);
 const lfAlphas       = new Float32Array(N_LEAF_TOTAL);
 const lfColorVars    = new Float32Array(N_LEAF_TOTAL);
@@ -1447,12 +1476,19 @@ for (const leaf of leafInstances) {
   for (let p = 0; p < PARTICLES_PER_LEAF; p++) {
     const pt = template.points[p % template.points.length];
 
-    // 旋转局部坐标：模板坐标 → 世界方向（但未加叶柄位置）
-    const lx = pt.x * leaf.scale;
-    const ly = pt.y * leaf.scale;
-    // 模板 y+ 是叶尖方向，但世界角度已用 angle 表示
-    // 模板 (x, y) 旋转到世界: (x*cosA - y*sinA, x*sinA + y*cosA)
-    // 但我们希望模板 y+ 对齐 leafOut，所以angle = Math.atan2(leafOutY, leafOutX) - PI/2
+    // 粒子级随机抖动（打破模板规律）
+    const jitter = 0.03;
+    const jx = (Math.random() - 0.5) * jitter;
+    const jy = (Math.random() - 0.5) * jitter;
+
+    // 卷曲：沿叶片长度方向的 x 偏移（S 弯）
+    const curlX = Math.sin(pt.y * 2.2) * leaf.curlStrength;
+
+    // 模板坐标 + 卷曲 + 抖动
+    const lx = (pt.x + curlX + jx) * leaf.scale;
+    const ly = (pt.y + jy) * leaf.scale;
+
+    // 旋转到世界方向
     const wx = lx * cosA - ly * sinA;
     const wy = lx * sinA + ly * cosA;
 
@@ -1464,9 +1500,10 @@ for (const leaf of leafInstances) {
     lfLocal[lfIdx * 2 + 1] = wy;
     lfStemInfo[lfIdx * 2]     = leaf.stemParamT;
     lfStemInfo[lfIdx * 2 + 1] = leaf.hostVineId;
-    lfLeafInfo[lfIdx * 3]     = leaf.leafParamT;
-    lfLeafInfo[lfIdx * 3 + 1] = leaf.leafIdx;
-    lfLeafInfo[lfIdx * 3 + 2] = pt.yNorm; // 0=叶柄端, 1=叶尖端
+    lfLeafInfo[lfIdx * 4]     = leaf.leafParamT;
+    lfLeafInfo[lfIdx * 4 + 1] = leaf.leafIdx;
+    lfLeafInfo[lfIdx * 4 + 2] = pt.yNorm; // 0=叶柄端, 1=叶尖端
+    lfLeafInfo[lfIdx * 4 + 3] = leaf.leafZ;
 
     // 粒子大小：叶脉亮，边缘稍大，内部中等
     let baseSize;
@@ -1514,7 +1551,7 @@ leafGeo.setAttribute('aStemCurved',   new THREE.BufferAttribute(lfStemCurved, 2)
 leafGeo.setAttribute('aStemStraight', new THREE.BufferAttribute(lfStemStraight, 2));
 leafGeo.setAttribute('aLocal',        new THREE.BufferAttribute(lfLocal, 2));
 leafGeo.setAttribute('aStemInfo',     new THREE.BufferAttribute(lfStemInfo, 2));
-leafGeo.setAttribute('aLeafInfo',     new THREE.BufferAttribute(lfLeafInfo, 3));
+leafGeo.setAttribute('aLeafInfo',     new THREE.BufferAttribute(lfLeafInfo, 4));
 leafGeo.setAttribute('aSize',         new THREE.BufferAttribute(lfSizes, 1));
 leafGeo.setAttribute('aAlpha',        new THREE.BufferAttribute(lfAlphas, 1));
 leafGeo.setAttribute('aColorVar',     new THREE.BufferAttribute(lfColorVars, 1));
@@ -1525,7 +1562,7 @@ const leafVertexShader = /* glsl */`
   attribute vec2 aStemStraight;
   attribute vec2 aLocal;
   attribute vec2 aStemInfo;   // (stemParamT, hostVineId)
-  attribute vec3 aLeafInfo;   // (leafParamT, leafIdx, yNormInLeaf)
+  attribute vec4 aLeafInfo;   // (leafParamT, leafIdx, yNormInLeaf, leafZ)
   attribute float aSize;
   attribute float aAlpha;
   attribute float aColorVar;
@@ -1574,7 +1611,7 @@ const leafVertexShader = /* glsl */`
 
     // 5. 最终位置
     vec2 pos2d = stemPos + aLocal * sizeGrow + leafSway * sizeGrow;
-    vec3 pos = vec3(pos2d.x, pos2d.y, 0.0);
+    vec3 pos = vec3(pos2d.x, pos2d.y, aLeafInfo.w);
 
     float alpha = aAlpha * leafGrow;
     float sz = aSize * sizeGrow;
