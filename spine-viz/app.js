@@ -382,17 +382,17 @@ for (let i = 0; i < N_BONE; i++) {
   // colorVar：Z靠前→高光(正值)，对比色粒子更大更亮才能突出
   const zDepth = Math.abs(bZ[i]) / Math.max(effectiveOuter * TUBE_Y_SCALE, 0.01);
   const acRoll = Math.random();
-  if (acRoll < 0.10) {
-    spColorVars[i] = -(0.25 + Math.random() * 0.25);   // 暖对比色
-    bBaseA[i] *= 3.5;
-  } else if (acRoll < 0.18) {
-    spColorVars[i] = -(0.55 + Math.random() * 0.40);   // 冷对比色
-    bBaseA[i] *= 3.5;
-  } else if (acRoll < 0.28) {
-    spColorVars[i] = 0.6 + Math.random() * 0.4;        // 强高光粒子
-    bBaseA[i] *= 2.5;
+  if (acRoll < 0.03) {
+    spColorVars[i] = -(0.20 + Math.random() * 0.20);   // 暖对比色（减少）
+    bBaseA[i] *= 2.2;
+  } else if (acRoll < 0.06) {
+    spColorVars[i] = -(0.55 + Math.random() * 0.30);   // 冷对比色（减少）
+    bBaseA[i] *= 2.2;
+  } else if (acRoll < 0.12) {
+    spColorVars[i] = 0.5 + Math.random() * 0.3;        // 高光粒子
+    bBaseA[i] *= 1.8;
   } else {
-    spColorVars[i] = (1 - zDepth) * 0.4 + (Math.random() - 0.5) * 0.1;
+    spColorVars[i] = (1 - zDepth) * 0.35 + (Math.random() - 0.5) * 0.08;
   }
   spPositions[i*3]   = cpx + bOffCurvedX[i];
   spPositions[i*3+1] = cpy + bOffCurvedY[i];
@@ -498,17 +498,17 @@ for (let vi = 0; vi < 13; vi++) {
     spAlphas[gi]        = vBaseAlph[idx];
     const vzDepth = Math.abs(gz) / Math.max(VERT_OUTER, 0.01);
     const vacRoll = Math.random();
-    if (vacRoll < 0.10) {
-      spColorVars[gi] = -(0.25 + Math.random() * 0.25);
-      vBaseAlph[idx] *= 3.5;
-    } else if (vacRoll < 0.18) {
-      spColorVars[gi] = -(0.55 + Math.random() * 0.40);
-      vBaseAlph[idx] *= 3.5;
-    } else if (vacRoll < 0.28) {
-      spColorVars[gi] = 0.6 + Math.random() * 0.4;
-      vBaseAlph[idx] *= 2.5;
+    if (vacRoll < 0.03) {
+      spColorVars[gi] = -(0.20 + Math.random() * 0.20);
+      vBaseAlph[idx] *= 2.2;
+    } else if (vacRoll < 0.06) {
+      spColorVars[gi] = -(0.55 + Math.random() * 0.30);
+      vBaseAlph[idx] *= 2.2;
+    } else if (vacRoll < 0.12) {
+      spColorVars[gi] = 0.5 + Math.random() * 0.3;
+      vBaseAlph[idx] *= 1.8;
     } else {
-      spColorVars[gi] = (1 - vzDepth) * 0.4 + (Math.random() - 0.5) * 0.12;
+      spColorVars[gi] = (1 - vzDepth) * 0.35 + (Math.random() - 0.5) * 0.08;
     }
   }
 }
