@@ -1431,29 +1431,21 @@ for (let checkT = 0.15; checkT < 0.88; checkT += GAP_CHECK_STEP) {
 
 // 弥散分支上不放叶子（drift粒子sway相位随机，叶柄会脱离）
 
-// 补充右侧叶子：辅藤 A 在 t=0.15 和 t=0.55 时 helixX > 0（右侧）
+// 补充屏幕右侧叶子：主藤 seg 8 中段 x 明显为正（右）的位置
 {
-  const accent = ACCENT_VINES[0]; // 辅藤 A
-  const rightSideTs = [0.15, 0.55];
-  for (const t of rightSideTs) {
-    const theta = t * Math.PI * accent.freq * 2 + accent.phase;
-    const env = 0.6 + 0.4 * Math.sin(t * Math.PI);
-    const r = accent.radius * env;
-    const helixX = r * Math.sin(theta);
-    // 只保留右侧（helixX > 0）
-    if (helixX <= 0) continue;
-    const cpS = curveStraight.getPoint(t);
-    const cpC = curveCurved.getPoint(t);
-    const tanC = curveCurved.getTangent(t);
-    leafSources.push({
-      type: 'accent',
-      vineId: 1,
-      t,
-      helixX,
-      cpSY: cpS.y,
-      cpCX: cpC.x, cpCY: cpC.y,
-      tanCX: tanC.x, tanCY: tanC.y,
-    });
+  const seg8 = vineData[0].curves[8];
+  if (seg8) {
+    const rightTs = [0.32, 0.42];
+    for (const t of rightTs) {
+      const pt = seg8.getPointAt(t);
+      const tan = seg8.getTangentAt(t);
+      leafSources.push({
+        type: 'figma',
+        rawX: pt.x, rawY: pt.y,
+        tanX: tan.x, tanY: tan.y,
+        vineId: 0,
+      });
+    }
   }
 }
 
