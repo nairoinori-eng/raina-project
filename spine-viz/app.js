@@ -71,22 +71,22 @@ const N_AMB   = 300;                   // Layer E
 // ============================================================
 
 const COLOR_DARK = new THREE.Color(0x3a2d6e);  // 深蓝紫（压暗回来）
-const COLOR_MID  = new THREE.Color(0x5c527a);  // 灰紫过渡
+const COLOR_MID  = new THREE.Color(0xd87890);  // 粉红过渡（饱和的中间色，不再灰）
 const COLOR_GOLD = new THREE.Color(0xc4a882);  // 灰金色
 
 // 高光色（接近白色的高亮，强烈正面光感）
 const HL_DARK = new THREE.Color(0xc0b0f0);   // 亮白紫
-const HL_MID  = new THREE.Color(0xe0d0c0);   // 亮白金
+const HL_MID  = new THREE.Color(0xffc8d8);   // 亮粉高光
 const HL_GOLD = new THREE.Color(0xfff0d8);   // 近白暖光
 
 // 对比色1：暖色系（高饱和）
 const AC1_DARK = new THREE.Color(0xff6840);  // 鲜橘红
-const AC1_MID  = new THREE.Color(0xf0a030);  // 鲜琥珀
+const AC1_MID  = new THREE.Color(0xff4878);  // 玫红（粉色系暖点缀）
 const AC1_GOLD = new THREE.Color(0xff3090);  // 亮品红（在金色中极醒目）
 
 // 对比色2：冷色系（高饱和）
 const AC2_DARK = new THREE.Color(0x20e0c0);  // 鲜翡翠
-const AC2_MID  = new THREE.Color(0x30d870);  // 鲜翠绿
+const AC2_MID  = new THREE.Color(0xe06090);  // 珊瑚玫（粉色系饱和点缀）
 const AC2_GOLD = new THREE.Color(0x2868ff);  // 亮宝蓝（金色的互补色）
 
 
@@ -138,6 +138,12 @@ function getAccent2Color(blend) {
   if (blend < 0.5) c.lerpColors(AC2_DARK, AC2_MID, blend * 2);
   else c.lerpColors(AC2_MID, AC2_GOLD, (blend - 0.5) * 2);
   return c;
+}
+
+/** piecewise 3 段插值：blend<0.5 从 A→MID，blend≥0.5 从 MID→B。写回 out。 */
+function lerpMid(out, A, MID, B, t) {
+  if (t < 0.5) out.lerpColors(A, MID, t * 2);
+  else         out.lerpColors(MID, B, (t - 0.5) * 2);
 }
 
 
@@ -1172,15 +1178,20 @@ const vineVertexShader = /* glsl */`
   }
 `;
 
-// 藤蔓配色：与骨骼互补反相（骨骼冷→藤蔓暖；骨骼暖→藤蔓冷）
+// 藤蔓配色：与骨骼互补反相 + 饱和中点（每档都有色相，不走灰）
 // A 套（blend=0）：骨骼深紫时 → 藤蔓金
-const VINE_A_COLOR = new THREE.Color(0x5a4418);  // 暗金基调
-const VINE_A_HL    = new THREE.Color(0xd4a860);  // 亮金
-const VINE_A_AC1   = new THREE.Color(0x9c7428);  // 真金点缀
-const VINE_A_AC2   = new THREE.Color(0x3a2810);  // 暗金阴影
+const VINE_A_COLOR = new THREE.Color(0x7a5618);  // 饱和深金基调
+const VINE_A_HL    = new THREE.Color(0x8a6e40);  // 沉金高光（压低亮度）
+const VINE_A_AC1   = new THREE.Color(0xc8804a);  // 暖琥珀点缀
+const VINE_A_AC2   = new THREE.Color(0x4a2e08);  // 深青铜阴影
+// MID 套（blend=0.5）：翠绿过渡（粉红的对比色）
+const VINE_MID_COLOR = new THREE.Color(0x78c890);  // 翠绿基调
+const VINE_MID_HL    = new THREE.Color(0x68a078);  // 沉翠高光（压低亮度）
+const VINE_MID_AC1   = new THREE.Color(0x3a9068);  // 深翡翠点缀
+const VINE_MID_AC2   = new THREE.Color(0x28684a);  // 深墨绿阴影
 // B 套（blend=1）：骨骼金时 → 藤蔓花青
 const VINE_B_COLOR = new THREE.Color(0x1a3854);  // 花青基调
-const VINE_B_HL    = new THREE.Color(0x4a7aa0);  // 亮花青
+const VINE_B_HL    = new THREE.Color(0x3a5a78);  // 沉花青高光（压低亮度）
 const VINE_B_AC1   = new THREE.Color(0x10243e);  // 深夜蓝
 const VINE_B_AC2   = new THREE.Color(0x244e7c);  // 中花青
 
@@ -1867,17 +1878,22 @@ const leafVertexShader = /* glsl */`
   }
 `;
 
-// ── 叶子颜色：与藤蔓同族但更亮一档 ──
-// A 套（blend=0）：骨骼深紫时 → 叶子金
-const LEAF_A_COLOR = new THREE.Color(0x8a6628);  // 金基色（比藤蔓亮）
+// ── 叶子颜色：与藤蔓同族但更亮一档 + 色彩反差更强（不再单一色系）──
+// A 套（blend=0）：骨骼深紫时 → 叶子金（带橘红+焦糖点缀）
+const LEAF_A_COLOR = new THREE.Color(0x8a6628);  // 金基色
 const LEAF_A_HL    = new THREE.Color(0xf0c878);  // 亮金高光
-const LEAF_A_AC1   = new THREE.Color(0xc4a078);  // 暖金点缀
-const LEAF_A_AC2   = new THREE.Color(0x4a3418);  // 金阴影
-// B 套（blend=1）：骨骼金时 → 叶子花青
+const LEAF_A_AC1   = new THREE.Color(0xc85830);  // 暖橘红点缀（跳色）
+const LEAF_A_AC2   = new THREE.Color(0x5a2818);  // 焦糖深栗
+// MID 套（blend=0.5）：嫩翠绿过渡
+const LEAF_MID_COLOR = new THREE.Color(0x9ae0a8);  // 嫩翠基色
+const LEAF_MID_HL    = new THREE.Color(0xc8f0d0);  // 亮嫩绿高光
+const LEAF_MID_AC1   = new THREE.Color(0x4ab078);  // 深翡翠点缀
+const LEAF_MID_AC2   = new THREE.Color(0x2e7848);  // 深墨翠阴影
+// B 套（blend=1）：骨骼金时 → 叶子花青（带翡翠+夜紫点缀）
 const LEAF_B_COLOR = new THREE.Color(0x244e7c);  // 花青基色
 const LEAF_B_HL    = new THREE.Color(0x6a9ac0);  // 亮花青高光
-const LEAF_B_AC1   = new THREE.Color(0x183458);  // 深蓝点缀
-const LEAF_B_AC2   = new THREE.Color(0x3a6a96);  // 中花青
+const LEAF_B_AC1   = new THREE.Color(0x2e7a5a);  // 翡翠绿点缀（跳色）
+const LEAF_B_AC2   = new THREE.Color(0x2a1e5a);  // 深紫罗兰
 
 const leafMat = new THREE.ShaderMaterial({
   vertexShader: leafVertexShader,
@@ -2070,11 +2086,11 @@ function animate() {
   vineMat.uniforms.uVineGrowth.value.set(vineGrowProgress[0], vineGrowProgress[1], vineGrowProgress[2]);
   vineMat.uniforms.uBlend.value = smoothBlend;
   vineMat.uniforms.uTime.value  = time;
-  // 藤蔓配色跟随 blend 反相切换（骨骼冷→藤蔓暖，骨骼暖→藤蔓冷）
-  vineMat.uniforms.uColor    .value.lerpColors(VINE_A_COLOR, VINE_B_COLOR, smoothBlend);
-  vineMat.uniforms.uHighlight.value.lerpColors(VINE_A_HL,    VINE_B_HL,    smoothBlend);
-  vineMat.uniforms.uAccent1  .value.lerpColors(VINE_A_AC1,   VINE_B_AC1,   smoothBlend);
-  vineMat.uniforms.uAccent2  .value.lerpColors(VINE_A_AC2,   VINE_B_AC2,   smoothBlend);
+  // 藤蔓配色跟随 blend 反相切换，中点用翠绿（粉红的对比色）保饱和度
+  lerpMid(vineMat.uniforms.uColor    .value, VINE_A_COLOR, VINE_MID_COLOR, VINE_B_COLOR, smoothBlend);
+  lerpMid(vineMat.uniforms.uHighlight.value, VINE_A_HL,    VINE_MID_HL,    VINE_B_HL,    smoothBlend);
+  lerpMid(vineMat.uniforms.uAccent1  .value, VINE_A_AC1,   VINE_MID_AC1,   VINE_B_AC1,   smoothBlend);
+  lerpMid(vineMat.uniforms.uAccent2  .value, VINE_A_AC2,   VINE_MID_AC2,   VINE_B_AC2,   smoothBlend);
 
   // 叶子 uniforms
   // 叶子分组触发式生长（4组独立动画）
@@ -2099,11 +2115,11 @@ function animate() {
   );
   leafMat.uniforms.uBlend.value = smoothBlend;
   leafMat.uniforms.uTime.value  = time;
-  // 叶子配色跟随 blend 反相切换
-  leafMat.uniforms.uColor    .value.lerpColors(LEAF_A_COLOR, LEAF_B_COLOR, smoothBlend);
-  leafMat.uniforms.uHighlight.value.lerpColors(LEAF_A_HL,    LEAF_B_HL,    smoothBlend);
-  leafMat.uniforms.uAccent1  .value.lerpColors(LEAF_A_AC1,   LEAF_B_AC1,   smoothBlend);
-  leafMat.uniforms.uAccent2  .value.lerpColors(LEAF_A_AC2,   LEAF_B_AC2,   smoothBlend);
+  // 叶子配色跟随 blend 反相切换，中点用嫩翠保饱和度
+  lerpMid(leafMat.uniforms.uColor    .value, LEAF_A_COLOR, LEAF_MID_COLOR, LEAF_B_COLOR, smoothBlend);
+  lerpMid(leafMat.uniforms.uHighlight.value, LEAF_A_HL,    LEAF_MID_HL,    LEAF_B_HL,    smoothBlend);
+  lerpMid(leafMat.uniforms.uAccent1  .value, LEAF_A_AC1,   LEAF_MID_AC1,   LEAF_B_AC1,   smoothBlend);
+  lerpMid(leafMat.uniforms.uAccent2  .value, LEAF_A_AC2,   LEAF_MID_AC2,   LEAF_B_AC2,   smoothBlend);
 
 
   // ── Layer C：贝塞尔弧线粒子流────────────────────────────────
