@@ -1388,7 +1388,18 @@ const WAVE = 0.28;
 let guideStartTime = 0;       // 引导开始的绝对时间(秒)
 let guideElapsed   = 0;       // 引导已经过的秒数
 
-const overlays = new IntroOverlays();
+// 把胸椎/腰椎峰值 3D 点传给 overlays 用于屏幕投影
+const THORACIC_PEAK_WORLD = SPINE_CURVED[4].clone();   // 最右凸
+const LUMBAR_PEAK_WORLD   = SPINE_CURVED[9].clone();   // 最左凸
+
+const overlays = new IntroOverlays({
+  camera,
+  spineGroup,
+  anchors: {
+    thoracic: THORACIC_PEAK_WORLD,
+    lumbar:   LUMBAR_PEAK_WORLD,
+  },
+});
 
 
 // ============================================================

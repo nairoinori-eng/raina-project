@@ -19,13 +19,14 @@ const TEXT_SCHEDULE = [
     start: 15, group: 'A' },
   { text: '它已经这样，陪我十年了。',                      start: 21, group: 'A' },
 
-  // 组 B：病理解释 (27-40s) - 紧贴脊柱峰值，红箭头方向
-  // 胸椎峰值向右凸 → 字幕紧贴右侧（箭头从峰指向字幕）
-  // 腰椎峰值向左凸 → 字幕紧贴左侧
+  // 组 B：病理解释 (27-40s) - 锚定到脊柱三维峰值点，每帧投影到屏幕
+  // anchor: 'thoracic' → SPINE_CURVED[4] 胸椎最右凸点
+  // anchor: 'lumbar'   → SPINE_CURVED[9] 腰椎最左凸点
+  // side: 字幕相对锚点的方向，'right' = 锚点右侧、'left' = 锚点左侧
   { text: '凸起的那一侧，肋骨被撑得太开；',
-    start: 27, group: 'B', pos: { top: '45%', left: '62%' } },
+    start: 27, group: 'B', anchor: 'thoracic', side: 'right' },
   { text: '凹陷的那一侧，肋骨被挤在一起。',
-    start: 33, group: 'B', pos: { top: '74%', left: '5%' } },
+    start: 33, group: 'B', anchor: 'lumbar',   side: 'left' },
 
   // 组 C：呼吸原理 (45-64s)
   { text: '有一种呼吸，专门送气到凹陷的那一边，',           start: 45, group: 'C' },
@@ -47,9 +48,12 @@ const PACER_START = 64, PACER_END = 76;
 const BREATH_CYCLE = 6, INHALE = 3, HOLD = 1.5;
 
 export class IntroOverlays {
-  constructor() {
-    this._lines = [];        // [{p, start, groupEnd}]
+  constructor({ camera, spineGroup, anchors } = {}) {
+    this._lines = [];        // [{p, start, groupEnd, anchor?, side?}]
     this._lastCdText = null;
+    this._camera = camera || null;
+    this._spineGroup = spineGroup || null;
+    this._anchors = anchors || null;  // { thoracic: Vector3, lumbar: Vector3 }
     this._createDOM();
   }
 
@@ -76,8 +80,12 @@ export class IntroOverlays {
       p.className = 'intro-line';
       p.innerHTML = entry.text;
 
-      if (entry.pos) {
-        // 独立定位：直接挂到 body 上，用 fixed 定位
+      if (entry.anchor) {
+        // 三维锚定：每帧从 3D 点投影到屏幕，fixed 定位
+        p.classList.add('intro-line-fixed');
+        document.body.appendChild(p);
+      } else if (entry.pos) {
+        // 固定百分比定位（legacy）
         p.classList.add('intro-line-fixed');
         p.style.top  = entry.pos.top;
         p.style.left = entry.pos.left;
@@ -97,6 +105,8 @@ export class IntroOverlays {
         p,
         start: entry.start,
         groupEnd: GROUP_ENDS[entry.group],
+        anchor: entry.anchor || null,
+        side: entry.side || null,
       });
     });
     document.body.appendChild(this.$text);
@@ -175,11 +185,14 @@ export class IntroOverlays {
   // ── 叙事字幕（组内堆叠）+ 倒数（居中）──
   _updateText(t) {
     // 叙事行：独立显示/淡出
-    for (const { p, start, groupEnd } of this._lines) {
+    for (const line of this._lines) {
+      const { p, start, groupEnd } = line;
       if (t >= start && t < groupEnd) {
         p.classList.add('vis');
         const rem = groupEnd - t;
         p.style.opacity = rem < 0.8 ? Math.max(0, rem / 0.8) : '';
+        // 三维锚定的字幕：每帧把锚点投影到屏幕
+        if (line.anchor) this._positionAnchored(line);
       } else {
         p.classList.remove('vis');
         p.style.opacity = '';
@@ -203,6 +216,36 @@ export class IntroOverlays {
       this.$countdown.classList.remove('vis');
       this._lastCdText = null;
     }
+  }
+
+  // ── 三维锚定字幕：把 3D 点投影到屏幕，贴着骨骼 ──
+  _positionAnchored(line) {
+    if (!this._camera || !this._spineGroup || !this._anchors) return;
+    const anchor3D = this._anchors[line.anchor];
+    if (!anchor3D) return;
+
+    // 1. 本地 → 世界（跟随 spineGroup 的旋转/位移）
+    const world = anchor3D.clone();
+    this._spineGroup.localToWorld(world);
+    // 2. 世界 → NDC（-1..1）
+    world.project(this._camera);
+    // 3. NDC → 屏幕像素
+    const sx = (world.x * 0.5 + 0.5) * window.innerWidth;
+    const sy = (-world.y * 0.5 + 0.5) * window.innerHeight;
+
+    // 4. 根据 side 计算偏移。右侧：锚点右 +40px；左侧：文字右缘在锚点左 -40px
+    const GAP = 40;
+    const p = line.p;
+    if (line.side === 'right') {
+      p.style.left = `${sx + GAP}px`;
+    } else {
+      // 先测量文字宽度（offsetWidth 在 vis 状态下有效）
+      const w = p.offsetWidth || 300;
+      p.style.left = `${sx - GAP - w}px`;
+    }
+    // 垂直方向：让文字中线对齐锚点 y
+    const h = p.offsetHeight || 24;
+    p.style.top = `${sy - h * 0.5}px`;
   }
 
   // ── 人体（教学段 44-76s）──
