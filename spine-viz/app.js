@@ -187,12 +187,12 @@ const fragmentShader = /* glsl */`
   uniform vec3 uHighlight;
   uniform vec3 uAccent1;
   uniform vec3 uAccent2;
+  uniform float uAlphaBoost; // 高清模式亮度补偿
   varying float vAlpha;
   varying float vColorVar;
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
-    // colorVar > 0: 高光，-0.5~0: 暖对比色，< -0.5: 冷对比色
     vec3 c;
     if (vColorVar > 0.0) {
       c = mix(uColor, uHighlight, clamp(vColorVar, 0.0, 1.0));
@@ -204,7 +204,7 @@ const fragmentShader = /* glsl */`
     c = clamp(c, 0.0, 0.88);
     float core  = exp(-d * d * 24.0);
     float halo  = exp(-d * d * 10.0) * 0.12;
-    float alpha = (core + halo) * vAlpha;
+    float alpha = (core + halo) * vAlpha * uAlphaBoost;
     gl_FragColor = vec4(c, alpha);
   }
 `;
@@ -574,6 +574,7 @@ const spineMat = new THREE.ShaderMaterial({
     uHighlight:     { value: HL_DARK.clone() },
     uAccent1:       { value: AC1_DARK.clone() },
     uAccent2:       { value: AC2_DARK.clone() },
+    uAlphaBoost:    { value: 1.0 },
     uBlend:         { value: 0.0 },
     uBreatheExpand: { value: 1.0 },
     uBreathe:       { value: 0.0 },
@@ -702,6 +703,7 @@ const diffuseMat = new THREE.ShaderMaterial({
     uHighlight: { value: HL_DARK.clone() },
     uAccent1:   { value: AC1_DARK.clone() },
     uAccent2:   { value: AC2_DARK.clone() },
+    uAlphaBoost: { value: 1.0 },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -1183,6 +1185,7 @@ const vineMat = new THREE.ShaderMaterial({
     uHighlight: { value: VINE_HL },
     uAccent1:   { value: VINE_AC1 },
     uAccent2:   { value: VINE_AC2 },
+    uAlphaBoost: { value: 1.0 },
     uBlend:      { value: 0.0 },
     uTime:       { value: 0.0 },
     uVineGrowth: { value: new THREE.Vector3(0, 0, 0) },
@@ -1873,6 +1876,7 @@ const leafMat = new THREE.ShaderMaterial({
     uHighlight: { value: LEAF_HL },
     uAccent1:   { value: LEAF_AC1 },
     uAccent2:   { value: LEAF_AC2 },
+    uAlphaBoost: { value: 1.0 },
     uBlend: { value: 0.0 },
     uTime:  { value: 0.0 },
     uLeafGrowths: { value: new THREE.Vector4(0, 0, 0, 0) },
@@ -1940,6 +1944,7 @@ const ambMat = new THREE.ShaderMaterial({
     uHighlight: { value: new THREE.Color(0x18102e) },
     uAccent1:   { value: new THREE.Color(0x18102e) },
     uAccent2:   { value: new THREE.Color(0x18102e) },
+    uAlphaBoost: { value: 1.0 },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -2185,6 +2190,13 @@ pixelRatioSlider.addEventListener('input', () => {
   pixelRatioVal.textContent = userPixelRatio.toFixed(1);
   renderer.setPixelRatio(userPixelRatio);
   composer.setPixelRatio(userPixelRatio);
+  // 高分辨率下粒子视觉变小，用 alpha 补偿保持亮度
+  const boost = Math.max(1.0, userPixelRatio / 1.5);
+  spineMat.uniforms.uAlphaBoost.value = boost;
+  diffuseMat.uniforms.uAlphaBoost.value = boost;
+  vineMat.uniforms.uAlphaBoost.value = boost;
+  leafMat.uniforms.uAlphaBoost.value = boost;
+  ambMat.uniforms.uAlphaBoost.value = boost;
 });
 
 // 边缘物理泛光（bloom strength 0.0~2.0，覆盖animate里的breath调制）
