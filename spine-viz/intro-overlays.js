@@ -1,36 +1,70 @@
 /**
- * IntroOverlays — 60s 认知引导的 HTML/CSS 叠加层管理
- * 控制：叙事文字、个人数据、人体剪影、呼吸节拍器、IDLE UI
+ * IntroOverlays — 86s 认知引导的 HTML/CSS 叠加层管理
+ * 控制：叙事文字（左侧艺术排布）、人体剪影、呼吸节拍器、IDLE UI
  */
 
 // ── 文字时间表 ──
-// ── 文字时间表（总长 86s）──
+// 字段说明：
+//   text   - 文字内容（支持 HTML，例如 <span class="hl-o">）
+//   start/end - 显示时间段（秒）
+//   pos    - { top, left } 位置（相对于屏幕），支持 center: true
+//   big    - 大字号（倒数用）
 const TEXT_SCHEDULE = [
-  // 第一段：情感开场 (0-30s, 第一人称)
-  { text: '这是我的脊柱。',                            start: 5,    end: 12 },
-  { text: '十五岁那年，医生说它弯了。',                  start: 12,   end: 18 },
-  { text: '胸椎向右 28 度，腰椎向左 18 度。',            start: 18,   end: 24 },
-  { text: '它已经这样，陪我十年了。',                    start: 24,   end: 30 },
+  // ── 情感叙事段（3-26s，左侧艺术排布）──
+  { text: '这是我的脊柱。',
+    start: 4,  end: 9,
+    pos: { top: '30%', left: '13%' } },
 
-  // 第二段：病理解释 (30-44s)
-  { text: '凸起的那一侧，肋骨被撑得太开；',              start: 30,   end: 37 },
-  { text: '凹陷的那一侧，肋骨被挤在一起。',              start: 37,   end: 44 },
+  { text: '十五岁那年，医生说它弯了。',
+    start: 9,  end: 15,
+    pos: { top: '43%', left: '18%' } },
 
-  // 第三段：呼吸原理 (44-58s)
-  { text: '有一种呼吸，专门送气到凹陷的那一边，',         start: 44,   end: 52 },
-  { text: '把被挤扁的肋骨，重新撑开。',                   start: 52,   end: 58 },
+  { text: '胸椎向右 <span class="hl-o">28</span> 度，腰椎向左 <span class="hl-c">18</span> 度。',
+    start: 15, end: 21,
+    pos: { top: '57%', left: '11%' } },
 
-  // 第四段：跟我一起 (58-64s)
-  { text: '跟我一起试试。',                              start: 58,   end: 64 },
+  { text: '它已经这样，陪我十年了。',
+    start: 21, end: 26,
+    pos: { top: '71%', left: '16%' } },
 
-  // 64-76s: 呼吸节拍器 × 2 循环（无主文字，由节拍器自己显示标签）
+  // ── 病理解释段（26-40s，配合段高亮）──
+  { text: '凸起的那一侧，肋骨被撑得太开；',
+    start: 27, end: 33,
+    pos: { top: '36%', left: '13%' } },
 
-  // 第五段：换你 + 倒数 (76-86s)
-  { text: '现在，换你试试。',                            start: 76,   end: 80 },
-  { text: '3',                                           start: 80,   end: 81 },
-  { text: '2',                                           start: 81,   end: 82 },
-  { text: '1',                                           start: 82,   end: 83 },
-  { text: '开始。',                                       start: 83,   end: 86 },
+  { text: '凹陷的那一侧，肋骨被挤在一起。',
+    start: 33, end: 40,
+    pos: { top: '52%', left: '18%' } },
+
+  // ── 呼吸原理段（44-64s，配合人体轮廓）──
+  { text: '有一种呼吸，专门送气到凹陷的那一边，',
+    start: 45, end: 52,
+    pos: { top: '30%', left: '11%' } },
+
+  { text: '把被挤扁的肋骨，重新撑开。',
+    start: 52, end: 58,
+    pos: { top: '44%', left: '16%' } },
+
+  { text: '跟我一起试试。',
+    start: 58, end: 64,
+    pos: { top: '70%', left: '18%' } },
+
+  // 64-76s：呼吸节拍器 × 2 循环（无主文字）
+
+  // ── 换你 + 倒数（76-86s，居中）──
+  { text: '现在，换你试试。',
+    start: 76, end: 79,
+    pos: { top: '42%', left: '50%', center: true } },
+
+  { text: '3', start: 79, end: 80,
+    pos: { top: '50%', left: '50%', center: true }, big: true },
+  { text: '2', start: 80, end: 81,
+    pos: { top: '50%', left: '50%', center: true }, big: true },
+  { text: '1', start: 81, end: 82,
+    pos: { top: '50%', left: '50%', center: true }, big: true },
+
+  { text: '开始。', start: 82, end: 86,
+    pos: { top: '50%', left: '50%', center: true } },
 ];
 
 // 呼吸节拍器：64-76s (12s = 2 x 6s 循环)
@@ -39,7 +73,6 @@ const BREATH_CYCLE = 6, INHALE = 3, HOLD = 1.5;
 
 export class IntroOverlays {
   constructor() {
-    // 动态创建引导叠加层
     this._createDOM();
     this._lastTextIdx = -1;
   }
@@ -55,42 +88,27 @@ export class IntroOverlays {
     `;
     document.body.appendChild(this.$idle);
 
-    // ── 引导文字 ──
+    // ── 引导文字（动态定位）──
     this.$text = document.createElement('div');
     this.$text.id = 'intro-text';
     document.body.appendChild(this.$text);
-
-    // ── 数据展示 ──
-    this.$data = document.createElement('div');
-    this.$data.id = 'intro-data';
-    this.$data.innerHTML = '我的脊柱：胸椎右凸 <span class="hl-o">28°</span> / 腰椎左凸 <span class="hl-c">18°</span>';
-    document.body.appendChild(this.$data);
 
     // ── 人体剪影 ──
     this.$body = document.createElement('div');
     this.$body.id = 'intro-body';
     this.$body.innerHTML = `
       <svg viewBox="0 0 240 500" class="body-svg">
-        <!-- 头 -->
         <ellipse cx="120" cy="32" rx="18" ry="22"/>
-        <!-- 颈 -->
         <line x1="120" y1="54" x2="120" y2="72"/>
-        <!-- 肩 -->
         <path d="M110 72 C100 72, 72 78, 58 95"/>
         <path d="M130 72 C140 72, 168 78, 182 95"/>
-        <!-- 手臂 -->
         <path d="M58 95 Q50 145, 44 200 Q40 230, 38 260"/>
         <path d="M182 95 Q190 145, 196 200 Q200 230, 202 260"/>
-        <!-- 躯干左侧 -->
         <path d="M65 95 C68 140, 70 185, 72 230 C74 260, 78 290, 82 310"/>
-        <!-- 躯干右侧 -->
         <path d="M175 95 C172 140, 170 185, 168 230 C166 260, 162 290, 158 310"/>
-        <!-- 脊柱 S 弯 -->
         <path d="M120 72 C120 110, 132 155, 128 205 C124 255, 112 290, 116 325" stroke-dasharray="5,5" class="spine-line"/>
-        <!-- 骨盆 -->
         <path d="M82 310 C78 320, 80 335, 88 345"/>
         <path d="M158 310 C162 320, 160 335, 152 345"/>
-        <!-- 腿 -->
         <path d="M88 345 C86 375, 84 410, 82 450 L80 480"/>
         <path d="M152 345 C154 375, 156 410, 158 450 L160 480"/>
       </svg>
@@ -114,11 +132,11 @@ export class IntroOverlays {
   }
 
   hideIdleUI() { this.$idle.classList.add('out'); }
+
   showIdleUI() {
     this.$idle.classList.remove('out');
     this.$text.classList.remove('vis');
-    this.$text.textContent = '';
-    this.$data.classList.remove('vis');
+    this.$text.innerHTML = '';
     this.$body.classList.remove('vis');
     this.$pacer.classList.remove('vis');
     this._lastTextIdx = -1;
@@ -126,41 +144,51 @@ export class IntroOverlays {
 
   updateGuide(e) {
     this._updateText(e);
-    this._updateData(e);
     this._updateBody(e);
     this._updatePacer(e);
   }
 
   clearAll() {
-    this.$text.classList.remove('vis'); this.$text.textContent = '';
-    this.$data.classList.remove('vis');
+    this.$text.classList.remove('vis');
+    this.$text.innerHTML = '';
     this.$body.classList.remove('vis');
     this.$pacer.classList.remove('vis');
     this.$idle.classList.add('out');
   }
 
-  // ── 文字 ──
+  // ── 文字（动态位置）──
   _updateText(t) {
     let found = -1;
     for (let i = 0; i < TEXT_SCHEDULE.length; i++) {
       if (t >= TEXT_SCHEDULE[i].start && t < TEXT_SCHEDULE[i].end) { found = i; break; }
     }
-    if (found === -1) { this.$text.classList.remove('vis'); this._lastTextIdx = -1; return; }
+    if (found === -1) {
+      this.$text.classList.remove('vis');
+      this._lastTextIdx = -1;
+      return;
+    }
+    const entry = TEXT_SCHEDULE[found];
     if (found !== this._lastTextIdx) {
+      // 先设置新内容和位置（不带 vis class），再触发渐入
+      this.$text.innerHTML = entry.text;
+      if (entry.pos) {
+        this.$text.style.top  = entry.pos.top;
+        this.$text.style.left = entry.pos.left;
+        this.$text.style.transform = entry.pos.center
+          ? 'translate(-50%, -50%)'
+          : 'translate(0, -50%)';
+      }
+      this.$text.classList.toggle('big', !!entry.big);
+
+      // 强制重排然后触发渐入
       this.$text.classList.remove('vis');
       void this.$text.offsetWidth;
-      this.$text.textContent = TEXT_SCHEDULE[found].text;
       this.$text.classList.add('vis');
       this._lastTextIdx = found;
     }
-    const rem = TEXT_SCHEDULE[found].end - t;
+    // 临近结束时渐出
+    const rem = entry.end - t;
     this.$text.style.opacity = rem < 0.6 ? Math.max(0, rem / 0.6) : '';
-  }
-
-  // ── 数据（与 "胸椎28°" 文字同步，18-24s）──
-  _updateData(t) {
-    if (t >= 18 && t < 24) this.$data.classList.add('vis');
-    else this.$data.classList.remove('vis');
   }
 
   // ── 人体（教学段 44-76s）──
@@ -173,11 +201,8 @@ export class IntroOverlays {
     const chest = this.$body.querySelector('.chest-exp');
     const rib   = this.$body.querySelector('.rib-half');
 
-    // 发光圆点：标记凹陷侧 (44.5-58s)
     if (t >= 44.5 && t < 58) dot.classList.add('vis'); else dot.classList.remove('vis');
-    // 箭头：从凸起指向凹陷 (52-58s)
-    if (t >= 52 && t < 58) arrow.classList.add('vis'); else arrow.classList.remove('vis');
-    // 胸廓膨胀动画：跟做段 (58-76s)
+    if (t >= 52 && t < 58)   arrow.classList.add('vis'); else arrow.classList.remove('vis');
     if (t >= 58 && t < 76) { chest.classList.add('vis'); rib.classList.add('anim'); }
     else { chest.classList.remove('vis'); rib.classList.remove('anim'); }
   }

@@ -198,31 +198,37 @@ body {
   color: rgba(180, 170, 220, 0.35); letter-spacing: 0.1em;
 }
 
-/* ── 引导文字 ── */
+/* ── 引导文字（动态定位，左侧艺术排布）── */
 #intro-text {
-  position: fixed; bottom: 10%; left: 50%; transform: translateX(-50%);
-  width: 80%; max-width: 700px; text-align: center;
-  font-size: clamp(1rem, 2vw, 1.5rem); font-weight: 300;
-  line-height: 1.8; letter-spacing: 0.08em;
-  color: rgba(220, 215, 245, 0.9);
+  position: fixed;
+  top: 50%;
+  left: 13%;
+  max-width: 44vw;
+  font-size: clamp(1.1rem, 2vw, 1.55rem);
+  font-weight: 300;
+  line-height: 1.75;
+  letter-spacing: 0.12em;
+  color: rgba(220, 215, 245, 0.92);
   white-space: nowrap;
-  opacity: 0; transition: opacity 0.6s ease;
-  pointer-events: none; z-index: 20;
-  text-shadow: 0 0 18px rgba(120, 80, 200, 0.5);
+  opacity: 0;
+  transition: opacity 0.7s ease;
+  pointer-events: none;
+  z-index: 20;
+  text-shadow: 0 0 24px rgba(120, 80, 200, 0.45), 0 0 8px rgba(40, 20, 80, 0.6);
+  transform: translate(0, -50%);
 }
 #intro-text.vis { opacity: 1; }
 
-/* ── 数据展示 ── */
-#intro-data {
-  position: fixed; bottom: 22%; left: 50%; transform: translateX(-50%);
-  font-size: clamp(0.9rem, 1.6vw, 1.25rem); font-weight: 400;
-  letter-spacing: 0.06em; color: rgba(255,255,255,0.85);
-  opacity: 0; transition: opacity 0.8s ease;
-  pointer-events: none; z-index: 20;
+/* 倒数大字 */
+#intro-text.big {
+  font-size: clamp(4rem, 10vw, 8rem);
+  font-weight: 200;
+  letter-spacing: 0.05em;
 }
-#intro-data.vis { opacity: 1; }
-.hl-o { color: #ff9944; font-weight: 500; }
-.hl-c { color: #44ccdd; font-weight: 500; }
+
+/* 高亮数据颜色 */
+.hl-o { color: #ffa255; font-weight: 500; letter-spacing: 0.05em; }
+.hl-c { color: #55cde0; font-weight: 500; letter-spacing: 0.05em; }
 
 /* ── 人体剪影 ── */
 #intro-body {

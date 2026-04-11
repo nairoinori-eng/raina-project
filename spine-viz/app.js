@@ -228,6 +228,7 @@ const spineVertexShader = /* glsl */`
   uniform float uGuideAlpha;   // overall alpha multiplier (0 during teaching)
   varying float vAlpha;
   varying float vColorVar;
+  varying float vParamT;
   void main() {
     // ── Formed position (normal spine) ──
     float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
@@ -236,37 +237,80 @@ const spineVertexShader = /* glsl */`
     vec3 formedPos = vec3(center.x + off.x * uBreatheExpand, center.y + off.y, aZPos);
 
     // ── Scattered position (IDLE star dust) ──
-    float seed = aPhase + aParamT * 137.0 + aColorVar * 43.0;
-    float rx = fract(sin(seed * 12.9898) * 43758.5453) * 2.0 - 1.0;
-    float ry = fract(sin(seed * 78.233 + 0.5) * 43758.5453) * 2.0 - 1.0;
-    float rz = fract(sin(seed * 45.164 + 1.0) * 43758.5453) * 2.0 - 1.0;
-    vec3 scatterPos = vec3(rx * 4.5, ry * 3.2, rz * 1.2);
+    // Use per-axis independent seeds to avoid correlation
+    float sX = aPhase * 2.7 + aParamT * 13.1 + aColorVar * 7.3;
+    float sY = aPhase * 5.1 + aParamT * 3.7  + aColorVar * 11.9;
+    float sZ = aPhase * 3.9 + aParamT * 19.7 + aColorVar * 2.3;
+    float rx = fract(sin(sX * 12.9898) * 43758.5453) * 2.0 - 1.0;
+    float ry = fract(sin(sY * 78.233)  * 43758.5453) * 2.0 - 1.0;
+    float rz = fract(sin(sZ * 45.164)  * 43758.5453) * 2.0 - 1.0;
+    // Large spread across full screen (camera z=5 FOV 60, visible ~±2.9)
+    vec3 scatterPos = vec3(rx * 7.5, ry * 5.0, rz * 2.5);
     // Per-particle drift speed for organic floating
-    float driftSpd = 0.06 + fract(seed * 1.23) * 0.14;
-    scatterPos.x += sin(uTime * driftSpd + seed * 6.28) * 0.55;
-    scatterPos.y += cos(uTime * driftSpd * 0.75 + seed * 4.0) * 0.38;
-    scatterPos.x += sin(uTime * 0.05 + seed * 2.0) * 0.18;
+    float driftSpd = 0.06 + fract(sX * 1.23) * 0.14;
+    scatterPos.x += sin(uTime * driftSpd + sX * 6.28) * 0.6;
+    scatterPos.y += cos(uTime * driftSpd * 0.75 + sY * 4.0) * 0.42;
+    scatterPos.x += sin(uTime * 0.05 + sZ * 2.0) * 0.22;
 
     // ── Blend between scatter and formed ──
     vec3 pos = mix(scatterPos, formedPos, uFormation);
 
     // ── Size: varied dust in IDLE (small + large mix), normal when formed ──
-    float sizeRand = fract(seed * 3.14);
+    float sizeRand = fract(sX * 3.14);
     float idleSize = 0.015 + sizeRand * sizeRand * 0.09;
     float formedSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
     float size = mix(idleSize, formedSize, uFormation);
 
     // ── Alpha: scattered particles visible in IDLE (~30% visible) ──
-    float idleVisible = step(0.70, fract(seed * 0.618));
-    float idleAlpha = (0.15 + fract(seed * 2.71) * 0.20) * idleVisible;
+    float idleVisible = step(0.70, fract(sY * 0.618));
+    float idleAlpha = (0.15 + fract(sZ * 2.71) * 0.20) * idleVisible;
     float formedAlpha = aAlpha * (0.55 + uBreathe * 0.45);
     float alpha = mix(idleAlpha, formedAlpha, uFormation) * uGuideAlpha;
 
     vAlpha = alpha;
     vColorVar = aColorVar;
+    vParamT = aParamT;
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_PointSize = size * (300.0 / -mv.z);
     gl_Position = projectionMatrix * mv;
+  }
+`;
+
+// Spine-specific fragment shader with segment highlighting support
+const spineFragmentShader = /* glsl */`
+  uniform vec3 uColor;
+  uniform vec3 uHighlight;
+  uniform vec3 uAccent1;
+  uniform vec3 uAccent2;
+  uniform float uSegmentHighlight;  // 0 = normal, 1 = thoracic orange + lumbar cyan
+  varying float vAlpha;
+  varying float vColorVar;
+  varying float vParamT;
+  void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    vec3 c;
+    if (vColorVar > 0.0) {
+      c = mix(uColor, uHighlight, clamp(vColorVar, 0.0, 1.0));
+    } else if (vColorVar > -0.5) {
+      c = mix(uColor, uAccent1, clamp(-vColorVar * 2.0, 0.0, 1.0));
+    } else {
+      c = mix(uColor, uAccent2, clamp((-vColorVar - 0.5) * 2.0, 0.0, 1.0));
+    }
+    c = clamp(c, 0.0, 0.88);
+    // Segment highlight: thoracic (t<0.5) → orange, lumbar (t>=0.5) → cyan
+    if (uSegmentHighlight > 0.0) {
+      vec3 thoracicCol = vec3(1.0, 0.5, 0.15);
+      vec3 lumbarCol   = vec3(0.15, 0.75, 0.90);
+      float lumbMix = smoothstep(0.45, 0.55, vParamT);
+      vec3 segColor = mix(thoracicCol, lumbarCol, lumbMix);
+      // Subtle pulse
+      c = mix(c, segColor * 1.3, uSegmentHighlight);
+    }
+    float core  = exp(-d * d * 24.0);
+    float halo  = exp(-d * d * 10.0) * 0.12;
+    float alpha = (core + halo) * vAlpha;
+    gl_FragColor = vec4(c, alpha);
   }
 `;
 
@@ -597,18 +641,19 @@ spineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(gpuParamT, 1));
 spineGeo.setAttribute('aPhase',       new THREE.BufferAttribute(gpuPhase, 1));
 
 const spineMat = new THREE.ShaderMaterial({
-  vertexShader: spineVertexShader, fragmentShader,
+  vertexShader: spineVertexShader, fragmentShader: spineFragmentShader,
   uniforms: {
-    uColor:         { value: COLOR_DARK.clone() },
-    uHighlight:     { value: HL_DARK.clone() },
-    uAccent1:       { value: AC1_DARK.clone() },
-    uAccent2:       { value: AC2_DARK.clone() },
-    uBlend:         { value: 0.0 },
-    uBreatheExpand: { value: 1.0 },
-    uBreathe:       { value: 0.0 },
-    uTime:          { value: 0.0 },
-    uFormation:     { value: 0.0 },   // 0=scattered, 1=formed
-    uGuideAlpha:    { value: 1.0 },   // overall alpha (0 during teaching)
+    uColor:             { value: COLOR_DARK.clone() },
+    uHighlight:         { value: HL_DARK.clone() },
+    uAccent1:           { value: AC1_DARK.clone() },
+    uAccent2:           { value: AC2_DARK.clone() },
+    uBlend:             { value: 0.0 },
+    uBreatheExpand:     { value: 1.0 },
+    uBreathe:           { value: 0.0 },
+    uTime:              { value: 0.0 },
+    uFormation:         { value: 0.0 },   // 0=scattered, 1=formed
+    uGuideAlpha:        { value: 1.0 },   // overall alpha (0 during teaching)
+    uSegmentHighlight:  { value: 0.0 },   // 0=normal, 1=thoracic/lumbar highlight
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -617,6 +662,26 @@ const spineMat = new THREE.ShaderMaterial({
 const spinePoints = new THREE.Points(spineGeo, spineMat);
 spinePoints.frustumCulled = false;
 spineGroup.add(spinePoints);
+
+// ── 正常直脊柱对比线（虚线，教学段使用）──
+const comparisonPoints = [];
+for (let i = 0; i <= 80; i++) {
+  comparisonPoints.push(curveStraight.getPoint(i / 80));
+}
+const comparisonGeo = new THREE.BufferGeometry().setFromPoints(comparisonPoints);
+const comparisonMat = new THREE.LineDashedMaterial({
+  color: 0xbbbbcc,
+  transparent: true,
+  opacity: 0,
+  dashSize: 0.12,
+  gapSize: 0.10,
+  linewidth: 1,
+});
+const comparisonLine = new THREE.Line(comparisonGeo, comparisonMat);
+comparisonLine.computeLineDistances();
+comparisonLine.position.x = 0.6;  // offset to right, so curved spine is clearly on the left
+comparisonLine.position.z = -0.1;
+spineGroup.add(comparisonLine);
 
 
 // ============================================================
@@ -1408,6 +1473,8 @@ function updateIdle(t) {
   spineMat.uniforms.uBreatheExpand.value = 1.0;
   spineMat.uniforms.uBreathe.value    = 0.0;
   spineMat.uniforms.uTime.value       = t;
+  spineMat.uniforms.uSegmentHighlight.value = 0.0;
+  comparisonMat.opacity = 0;
   vineMat.uniforms.uFormation.value   = 0.0;
   vineMat.uniforms.uTime.value        = t;
 
@@ -1461,48 +1528,66 @@ function updateGuide(t) {
 
   const e = guideElapsed;
 
-  if (e < 5) {
-    // ─── 0-5s：粒子凝聚成脊柱 ───
-    const formation = e / 5;
-    spineMat.uniforms.uFormation.value  = formation;
-    spineMat.uniforms.uGuideAlpha.value = 1.0;
-    spineMat.uniforms.uBreathe.value    = 0.0;
-    spineMat.uniforms.uBreatheExpand.value = 1.0;
+  // 默认重置段相关 uniform
+  spineMat.uniforms.uBreatheExpand.value = 1.0;
+
+  if (e < 3) {
+    // ─── 0-3s：粒子快速凝聚成脊柱 ───
+    const formation = e / 3;
+    spineMat.uniforms.uFormation.value        = formation;
+    spineMat.uniforms.uGuideAlpha.value       = 1.0;
+    spineMat.uniforms.uBreathe.value          = 0.0;
+    spineMat.uniforms.uSegmentHighlight.value = 0.0;
+    comparisonMat.opacity = 0;
     bloomPass.strength = 0.08 + formation * 0.08;
 
-  } else if (e < 30) {
-    // ─── 5-30s：情感叙事 "这是我的脊柱" → "陪我十年" ───
-    const pulse = smoothstep(0, 1, (e - 5) / 3) * 0.35;
-    spineMat.uniforms.uFormation.value  = 1.0;
-    spineMat.uniforms.uGuideAlpha.value = 1.0;
-    spineMat.uniforms.uBreathe.value    = pulse;
-    spineMat.uniforms.uBreatheExpand.value = 1.0;
+  } else if (e < 26) {
+    // ─── 3-26s：情感叙事段，脊柱正常展示 ───
+    const pulse = smoothstep(0, 1, (e - 4) / 3) * 0.35;
+    spineMat.uniforms.uFormation.value        = 1.0;
+    spineMat.uniforms.uGuideAlpha.value       = 1.0;
+    spineMat.uniforms.uBreathe.value          = pulse;
+    spineMat.uniforms.uSegmentHighlight.value = 0.0;
+    comparisonMat.opacity = 0;
     bloomPass.strength = 0.16;
+
+  } else if (e < 40) {
+    // ─── 26-40s：病理解释（胸椎橙 / 腰椎青高亮 + 正常脊柱对比线）───
+    // 段高亮在 26-28s 内淡入，38-40s 淡出
+    let segHL = 1.0;
+    if (e < 28) segHL = (e - 26) / 2;
+    else if (e > 38) segHL = (40 - e) / 2;
+    // 对比线在 28-32s 淡入，36-40s 淡出
+    let lineOp = 0;
+    if (e >= 28 && e < 32) lineOp = ((e - 28) / 4) * 0.45;
+    else if (e >= 32 && e < 36) lineOp = 0.45;
+    else if (e >= 36 && e < 40) lineOp = (1 - (e - 36) / 4) * 0.45;
+
+    spineMat.uniforms.uFormation.value        = 1.0;
+    spineMat.uniforms.uGuideAlpha.value       = 1.0;
+    spineMat.uniforms.uBreathe.value          = 0.35;
+    spineMat.uniforms.uSegmentHighlight.value = segHL;
+    comparisonMat.opacity = lineOp;
+    bloomPass.strength = 0.18;
 
   } else if (e < 44) {
-    // ─── 30-44s：病理解释（凸起被撑开 / 凹陷被挤压）───
-    spineMat.uniforms.uFormation.value  = 1.0;
-    spineMat.uniforms.uGuideAlpha.value = 1.0;
-    spineMat.uniforms.uBreathe.value    = 0.35;
-    spineMat.uniforms.uBreatheExpand.value = 1.0;
-    bloomPass.strength = 0.16;
-
-  } else if (e < 58) {
-    // ─── 44-58s：呼吸原理 + 人体轮廓登场，脊柱淡出 ───
-    const segT = (e - 44) / 14;
-    const guideAlpha = Math.max(0, 1 - segT * 3.0);
-    spineMat.uniforms.uFormation.value  = 1.0;
-    spineMat.uniforms.uGuideAlpha.value = guideAlpha;
-    spineMat.uniforms.uBreathe.value    = 0.2 * guideAlpha;
-    spineMat.uniforms.uBreatheExpand.value = 1.0;
-    bloomPass.strength = 0.16 * guideAlpha + 0.04;
+    // ─── 40-44s：脊柱淡出，准备进入教学 ───
+    const segT = (e - 40) / 4;
+    const guideAlpha = Math.max(0, 1 - segT * 1.2);
+    spineMat.uniforms.uFormation.value        = 1.0;
+    spineMat.uniforms.uGuideAlpha.value       = guideAlpha;
+    spineMat.uniforms.uBreathe.value          = 0.35 * guideAlpha;
+    spineMat.uniforms.uSegmentHighlight.value = 0.0;
+    comparisonMat.opacity = 0;
+    bloomPass.strength = 0.18 * guideAlpha + 0.04;
 
   } else if (e < 76) {
-    // ─── 58-76s："跟我一起试试" + 呼吸节拍器（脊柱隐藏）───
-    spineMat.uniforms.uFormation.value  = 1.0;
-    spineMat.uniforms.uGuideAlpha.value = 0.0;
-    spineMat.uniforms.uBreathe.value    = 0.0;
-    spineMat.uniforms.uBreatheExpand.value = 1.0;
+    // ─── 44-76s：人体轮廓教学段 + 呼吸节拍器（脊柱隐藏）───
+    spineMat.uniforms.uFormation.value        = 1.0;
+    spineMat.uniforms.uGuideAlpha.value       = 0.0;
+    spineMat.uniforms.uBreathe.value          = 0.0;
+    spineMat.uniforms.uSegmentHighlight.value = 0.0;
+    comparisonMat.opacity = 0;
     bloomPass.strength = 0.04;
 
   } else {
@@ -1511,10 +1596,12 @@ function updateGuide(t) {
     const guideAlpha = Math.min(1, segT * 3.0);
     const breathe = guideAlpha * breatheCurve(t) * 0.5;
 
-    spineMat.uniforms.uFormation.value  = 1.0;
-    spineMat.uniforms.uGuideAlpha.value = guideAlpha;
-    spineMat.uniforms.uBreathe.value    = breathe;
-    spineMat.uniforms.uBreatheExpand.value = 1 + breathe * 0.1;
+    spineMat.uniforms.uFormation.value        = 1.0;
+    spineMat.uniforms.uGuideAlpha.value       = guideAlpha;
+    spineMat.uniforms.uBreathe.value          = breathe;
+    spineMat.uniforms.uBreatheExpand.value    = 1 + breathe * 0.1;
+    spineMat.uniforms.uSegmentHighlight.value = 0.0;
+    comparisonMat.opacity = 0;
     bloomPass.strength = 0.04 + guideAlpha * 0.14;
   }
 }
@@ -1532,12 +1619,13 @@ function updateExperience(t) {
   if (!branchEditMode) spineGroup.rotation.y = Math.sin(t * 0.52) * 0.35;
 
   // Layer A + B
-  spineMat.uniforms.uFormation.value     = 1.0;
-  spineMat.uniforms.uGuideAlpha.value    = 1.0;
-  spineMat.uniforms.uBlend.value         = smoothBlend;
-  spineMat.uniforms.uBreatheExpand.value = breatheExpand;
-  spineMat.uniforms.uBreathe.value       = breathe;
-  spineMat.uniforms.uTime.value          = t;
+  spineMat.uniforms.uFormation.value        = 1.0;
+  spineMat.uniforms.uGuideAlpha.value       = 1.0;
+  spineMat.uniforms.uSegmentHighlight.value = 0.0;
+  spineMat.uniforms.uBlend.value            = smoothBlend;
+  spineMat.uniforms.uBreatheExpand.value    = breatheExpand;
+  spineMat.uniforms.uBreathe.value          = breathe;
+  spineMat.uniforms.uTime.value             = t;
 
   const blendColor = getBlendColor(smoothBlend);
   const hlColor    = getHighlightColor(smoothBlend);
