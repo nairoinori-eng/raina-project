@@ -1571,7 +1571,7 @@ for (const src of leafSources) {
     const widthSquash = 0.88 + Math.random() * 0.12; // 0.88~1.00
 
     // 每片叶子独立 Z 深度
-    const leafZ = (Math.random() - 0.5) * 0.10;
+    const leafZ = (Math.random() - 0.5) * 0.18;
 
     // 卷曲（强烈）
     const curlStrength = (Math.random() - 0.5) * 0.55;
@@ -1633,7 +1633,7 @@ for (const src of leafSources) {
           leafParamT: sParamT,
           templateIdx: extraTemplate,
           leafIdx: leafGlobalIdx++,
-          leafZ: (Math.random() - 0.5) * 0.10,
+          leafZ: (Math.random() - 0.5) * 0.18,
           curlStrength: (Math.random() - 0.5) * 0.55,
           bendStrength: (Math.random() - 0.5) * 0.35,
         });
@@ -1643,11 +1643,11 @@ for (const src of leafSources) {
 }
 
 const N_LEAVES = leafInstances.length;
-// 每片叶子粒子数随大小缩放：scale 0.08→600, 0.24→1400
+// 每片叶子粒子数随大小缩放：更高密度强化3D效果
 const MIN_SCALE = 0.08, MAX_SCALE = 0.24;
 for (const leaf of leafInstances) {
   const normScale = Math.max(0, Math.min(1, (leaf.scale - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)));
-  leaf.particleCount = Math.round(500 + normScale * 900); // 500~1400
+  leaf.particleCount = Math.round(900 + normScale * 1700); // 900~2600
 }
 const N_LEAF_TOTAL = leafInstances.reduce((s, l) => s + l.particleCount, 0);
 
@@ -1765,6 +1765,7 @@ const leafVertexShader = /* glsl */`
 
   uniform float uBlend;
   uniform float uTime;
+  uniform float uLeafGrowth;
 
   varying float vAlpha;
   varying float vColorVar;
@@ -1803,10 +1804,10 @@ const leafVertexShader = /* glsl */`
       + sin(uTime * 2.2 + leafPhase * 0.7) * leafSwayAmp * 0.4
     );
 
-    // 4. 连续生长：blend 0.25→0.50，从上到下依次
-    float globalProgress = smoothstep(0.25, 0.50, uBlend);
-    // 每片叶子的生长窗口：早长的叶子窗口在前面
-    float leafGrow = smoothstep(leafParamT - 0.05, leafParamT + 0.12, globalProgress * 1.15);
+    // 4. 触发式生长：uLeafGrowth 由 JS 侧动画推进（达到阈值后2-3秒内长完）
+    // 从上到下依次展开
+    float growFront = uLeafGrowth * 1.15;
+    float leafGrow = smoothstep(growFront + 0.05, growFront - 0.15, leafParamT);
     float sizeGrow = leafGrow;
 
     // 5. 最终位置
@@ -1842,11 +1843,19 @@ const leafMat = new THREE.ShaderMaterial({
     uAccent2:   { value: LEAF_AC2 },
     uBlend: { value: 0.0 },
     uTime:  { value: 0.0 },
+    uLeafGrowth: { value: 0.0 },
   },
   transparent: true,
   blending: THREE.AdditiveBlending,
   depthWrite: false,
 });
+
+// 叶子生长状态（JS侧管理，触发式动画）
+const LEAF_GROW_THRESHOLD = 0.30;
+const LEAF_GROW_DURATION = 3.0;
+let leafGrowTriggered = false;
+let leafGrowStartTime = -10;
+let leafGrowProgress = 0;
 
 const leafPoints = new THREE.Points(leafGeo, leafMat);
 leafPoints.frustumCulled = false;
@@ -2011,6 +2020,22 @@ function animate() {
   vineMat.uniforms.uTime.value  = time;
 
   // 叶子 uniforms
+  // 叶子触发式生长
+  if (!leafGrowTriggered && smoothBlend >= LEAF_GROW_THRESHOLD) {
+    leafGrowTriggered = true;
+    leafGrowStartTime = time;
+  }
+  if (leafGrowTriggered && smoothBlend < LEAF_GROW_THRESHOLD - 0.05) {
+    leafGrowTriggered = false;
+    leafGrowStartTime = time - (1.0 - leafGrowProgress) * LEAF_GROW_DURATION;
+  }
+  if (leafGrowTriggered) {
+    leafGrowProgress = Math.min(1.0, (time - leafGrowStartTime) / LEAF_GROW_DURATION);
+  } else {
+    const elapsed = time - leafGrowStartTime;
+    leafGrowProgress = Math.max(0.0, 1.0 - elapsed / LEAF_GROW_DURATION);
+  }
+  leafMat.uniforms.uLeafGrowth.value = leafGrowProgress;
   leafMat.uniforms.uBlend.value = smoothBlend;
   leafMat.uniforms.uTime.value  = time;
 
