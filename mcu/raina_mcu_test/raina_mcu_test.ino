@@ -20,7 +20,7 @@ bool motorActiveLow = true;
 
 const float DEFAULT_WEIGHT_CHEST = 0.60f;
 const float DEFAULT_WEIGHT_WAIST = 0.40f;
-const float DEFAULT_THRESHOLD = 900.0f;
+const float DEFAULT_THRESHOLD = 1400.0f;
 
 const unsigned int BASELINE_WINDOW_SAMPLES = 90;
 
@@ -146,7 +146,6 @@ byte scoreToBlendByte(float adjustedScore) {
   if (normalized >= 1.0f) {
     return 255;
   }
-  normalized = normalized * normalized;
   return (byte)(normalized * 255.0f);
 }
 
