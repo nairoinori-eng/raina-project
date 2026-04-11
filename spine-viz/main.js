@@ -1657,6 +1657,7 @@ const lfStemStraight = new Float32Array(N_LEAF_TOTAL * 2);
 const lfLocal        = new Float32Array(N_LEAF_TOTAL * 2); // 局部坐标（已按叶角度旋转）
 const lfStemInfo     = new Float32Array(N_LEAF_TOTAL * 2); // (stemParamT, hostVineId)
 const lfLeafInfo     = new Float32Array(N_LEAF_TOTAL * 4); // (leafParamT, leafIdx, yNormInLeaf, leafZ)
+const lfGrowGroup    = new Float32Array(N_LEAF_TOTAL);     // 0-3 组别
 const lfSizes        = new Float32Array(N_LEAF_TOTAL);
 const lfAlphas       = new Float32Array(N_LEAF_TOTAL);
 const lfColorVars    = new Float32Array(N_LEAF_TOTAL);
@@ -1700,6 +1701,8 @@ for (const leaf of leafInstances) {
     lfLeafInfo[lfIdx * 4 + 1] = leaf.leafIdx;
     lfLeafInfo[lfIdx * 4 + 2] = pt.yNorm; // 0=叶柄端, 1=叶尖端
     lfLeafInfo[lfIdx * 4 + 3] = leaf.leafZ;
+    // 按 leafParamT 分 4 组：0-0.25→0, 0.25-0.5→1, 0.5-0.75→2, 0.75-1→3
+    lfGrowGroup[lfIdx] = Math.min(3, Math.floor(leaf.leafParamT * 4));
 
     // 粒子大小：叶脉亮，边缘稍大，内部中等
     let baseSize;
@@ -1748,6 +1751,7 @@ leafGeo.setAttribute('aStemStraight', new THREE.BufferAttribute(lfStemStraight, 
 leafGeo.setAttribute('aLocal',        new THREE.BufferAttribute(lfLocal, 2));
 leafGeo.setAttribute('aStemInfo',     new THREE.BufferAttribute(lfStemInfo, 2));
 leafGeo.setAttribute('aLeafInfo',     new THREE.BufferAttribute(lfLeafInfo, 4));
+leafGeo.setAttribute('aGrowGroup',    new THREE.BufferAttribute(lfGrowGroup, 1));
 leafGeo.setAttribute('aSize',         new THREE.BufferAttribute(lfSizes, 1));
 leafGeo.setAttribute('aAlpha',        new THREE.BufferAttribute(lfAlphas, 1));
 leafGeo.setAttribute('aColorVar',     new THREE.BufferAttribute(lfColorVars, 1));
@@ -1763,9 +1767,11 @@ const leafVertexShader = /* glsl */`
   attribute float aAlpha;
   attribute float aColorVar;
 
+  attribute float aGrowGroup;
+
   uniform float uBlend;
   uniform float uTime;
-  uniform float uLeafGrowth;
+  uniform vec4 uLeafGrowths; // 4 组生长进度
 
   varying float vAlpha;
   varying float vColorVar;
@@ -1804,10 +1810,12 @@ const leafVertexShader = /* glsl */`
       + sin(uTime * 2.2 + leafPhase * 0.7) * leafSwayAmp * 0.4
     );
 
-    // 4. 触发式生长：uLeafGrowth 由 JS 侧动画推进（达到阈值后2-3秒内长完）
-    // 从上到下依次展开
-    float growFront = uLeafGrowth * 1.15;
-    float leafGrow = smoothstep(growFront + 0.05, growFront - 0.15, leafParamT);
+    // 4. 分组触发式生长：叶子按位置分4组，每组独立触发
+    float myGrowth = aGrowGroup < 0.5 ? uLeafGrowths.x
+                   : aGrowGroup < 1.5 ? uLeafGrowths.y
+                   : aGrowGroup < 2.5 ? uLeafGrowths.z
+                   : uLeafGrowths.w;
+    float leafGrow = smoothstep(0.0, 1.0, myGrowth);
     float sizeGrow = leafGrow;
 
     // 5. 最终位置
@@ -1843,19 +1851,23 @@ const leafMat = new THREE.ShaderMaterial({
     uAccent2:   { value: LEAF_AC2 },
     uBlend: { value: 0.0 },
     uTime:  { value: 0.0 },
-    uLeafGrowth: { value: 0.0 },
+    uLeafGrowths: { value: new THREE.Vector4(0, 0, 0, 0) },
   },
   transparent: true,
   blending: THREE.AdditiveBlending,
   depthWrite: false,
 });
 
-// 叶子生长状态（JS侧管理，触发式动画）
-const LEAF_GROW_THRESHOLD = 0.30;
-const LEAF_GROW_DURATION = 3.0;
-let leafGrowTriggered = false;
-let leafGrowStartTime = -10;
-let leafGrowProgress = 0;
+// 叶子分组触发式生长：4组独立阈值
+// 组 0: 顶部 (paramT 0-0.25) → blend 0.22
+// 组 1: 上中 (paramT 0.25-0.5) → blend 0.30
+// 组 2: 下中 (paramT 0.5-0.75) → blend 0.38
+// 组 3: 底部 (paramT 0.75-1.0) → blend 0.46
+const LEAF_GROW_THRESHOLDS = [0.22, 0.30, 0.38, 0.46];
+const LEAF_GROW_DURATION = 2.0; // 每组 2 秒长完
+const leafGrowTriggered = [false, false, false, false];
+const leafGrowStartTime = [-10, -10, -10, -10];
+const leafGrowProgress = [0, 0, 0, 0];
 
 const leafPoints = new THREE.Points(leafGeo, leafMat);
 leafPoints.frustumCulled = false;
@@ -2020,22 +2032,26 @@ function animate() {
   vineMat.uniforms.uTime.value  = time;
 
   // 叶子 uniforms
-  // 叶子触发式生长
-  if (!leafGrowTriggered && smoothBlend >= LEAF_GROW_THRESHOLD) {
-    leafGrowTriggered = true;
-    leafGrowStartTime = time;
+  // 叶子分组触发式生长（4组独立动画）
+  for (let g = 0; g < 4; g++) {
+    if (!leafGrowTriggered[g] && smoothBlend >= LEAF_GROW_THRESHOLDS[g]) {
+      leafGrowTriggered[g] = true;
+      leafGrowStartTime[g] = time;
+    }
+    if (leafGrowTriggered[g] && smoothBlend < LEAF_GROW_THRESHOLDS[g] - 0.05) {
+      leafGrowTriggered[g] = false;
+      leafGrowStartTime[g] = time - (1.0 - leafGrowProgress[g]) * LEAF_GROW_DURATION;
+    }
+    if (leafGrowTriggered[g]) {
+      leafGrowProgress[g] = Math.min(1.0, (time - leafGrowStartTime[g]) / LEAF_GROW_DURATION);
+    } else {
+      const elapsed = time - leafGrowStartTime[g];
+      leafGrowProgress[g] = Math.max(0.0, 1.0 - elapsed / LEAF_GROW_DURATION);
+    }
   }
-  if (leafGrowTriggered && smoothBlend < LEAF_GROW_THRESHOLD - 0.05) {
-    leafGrowTriggered = false;
-    leafGrowStartTime = time - (1.0 - leafGrowProgress) * LEAF_GROW_DURATION;
-  }
-  if (leafGrowTriggered) {
-    leafGrowProgress = Math.min(1.0, (time - leafGrowStartTime) / LEAF_GROW_DURATION);
-  } else {
-    const elapsed = time - leafGrowStartTime;
-    leafGrowProgress = Math.max(0.0, 1.0 - elapsed / LEAF_GROW_DURATION);
-  }
-  leafMat.uniforms.uLeafGrowth.value = leafGrowProgress;
+  leafMat.uniforms.uLeafGrowths.value.set(
+    leafGrowProgress[0], leafGrowProgress[1], leafGrowProgress[2], leafGrowProgress[3]
+  );
   leafMat.uniforms.uBlend.value = smoothBlend;
   leafMat.uniforms.uTime.value  = time;
 
