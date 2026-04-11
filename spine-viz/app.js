@@ -1579,6 +1579,43 @@ for (const src of leafSources) {
       curlStrength,
       bendStrength,
     });
+
+    // 叠加组合叶：30%的概率再加1-2片叠在同一位置，角度明显错开
+    if (Math.random() < 0.30) {
+      const extraCount = 1 + (Math.random() < 0.3 ? 1 : 0); // 大多只加1片，少数加2片
+      for (let ex = 0; ex < extraCount; ex++) {
+        // 角度错开 ±0.4~0.8 rad（清晰可辨是两片）
+        const extraAngleOffset = (Math.random() < 0.5 ? 1 : -1) * (0.4 + Math.random() * 0.4);
+        // 稍微缩小，错落有致
+        const extraScale = scale * (0.70 + Math.random() * 0.25);
+        // 不同模板
+        const exTRoll = Math.random();
+        const extraTemplate = exTRoll < 0.10 ? 0 : exTRoll < 0.50 ? 1 : 2;
+        // 颜色稍微不同
+        const exCRoll = Math.random();
+        const extraColorType = exCRoll < 0.70 ? 0 : exCRoll < 0.85 ? 1 : 2;
+        // 轻微位置偏移（0.02）让两片不完全重合
+        const jx = (Math.random() - 0.5) * 0.03;
+        const jy = (Math.random() - 0.5) * 0.03;
+
+        leafInstances.push({
+          stemSX: sx + jx, stemSY: sy + jy,
+          stemCX: cx + jx, stemCY: cy + jy,
+          stemParamT: sParamT,
+          hostVineId,
+          angle: finalAngle + extraAngleOffset,
+          scale: extraScale,
+          widthSquash: 0.88 + Math.random() * 0.12,
+          colorType: extraColorType,
+          leafParamT: sParamT,
+          templateIdx: extraTemplate,
+          leafIdx: leafGlobalIdx++,
+          leafZ: (Math.random() - 0.5) * 0.10,
+          curlStrength: (Math.random() - 0.5) * 0.55,
+          bendStrength: (Math.random() - 0.5) * 0.35,
+        });
+      }
+    }
   }
 }
 
