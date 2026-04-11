@@ -4,67 +4,33 @@
  */
 
 // ── 文字时间表 ──
-// 字段说明：
-//   text   - 文字内容（支持 HTML，例如 <span class="hl-o">）
-//   start/end - 显示时间段（秒）
-//   pos    - { top, left } 位置（相对于屏幕），支持 center: true
-//   big    - 大字号（倒数用）
+// 所有叙事字幕用 CSS 默认位置（左对齐在左侧）；只有倒数用 pos 覆盖到中间
 const TEXT_SCHEDULE = [
-  // ── 情感叙事段（3-26s，左侧艺术排布）──
-  { text: '这是我的脊柱。',
-    start: 4,  end: 9,
-    pos: { top: '30%', left: '13%' } },
-
-  { text: '十五岁那年，医生说它弯了。',
-    start: 9,  end: 15,
-    pos: { top: '43%', left: '18%' } },
-
+  // ── 情感叙事段（4-26s）──
+  { text: '这是我的脊柱。',                              start: 4,  end: 9  },
+  { text: '十五岁那年，医生说它弯了。',                    start: 9,  end: 15 },
   { text: '胸椎向右 <span class="hl-o">28</span> 度，腰椎向左 <span class="hl-c">18</span> 度。',
-    start: 15, end: 21,
-    pos: { top: '57%', left: '11%' } },
+    start: 15, end: 21 },
+  { text: '它已经这样，陪我十年了。',                      start: 21, end: 26 },
 
-  { text: '它已经这样，陪我十年了。',
-    start: 21, end: 26,
-    pos: { top: '71%', left: '16%' } },
+  // ── 病理解释段（27-40s，配合段高亮）──
+  { text: '凸起的那一侧，肋骨被撑得太开；',                start: 27, end: 33 },
+  { text: '凹陷的那一侧，肋骨被挤在一起。',                start: 33, end: 40 },
 
-  // ── 病理解释段（26-40s，配合段高亮）──
-  { text: '凸起的那一侧，肋骨被撑得太开；',
-    start: 27, end: 33,
-    pos: { top: '36%', left: '13%' } },
-
-  { text: '凹陷的那一侧，肋骨被挤在一起。',
-    start: 33, end: 40,
-    pos: { top: '52%', left: '18%' } },
-
-  // ── 呼吸原理段（44-64s，配合人体轮廓）──
-  { text: '有一种呼吸，专门送气到凹陷的那一边，',
-    start: 45, end: 52,
-    pos: { top: '30%', left: '11%' } },
-
-  { text: '把被挤扁的肋骨，重新撑开。',
-    start: 52, end: 58,
-    pos: { top: '44%', left: '16%' } },
-
-  { text: '跟我一起试试。',
-    start: 58, end: 64,
-    pos: { top: '70%', left: '18%' } },
+  // ── 呼吸原理段（45-64s，配合人体轮廓）──
+  { text: '有一种呼吸，专门送气到凹陷的那一边，',           start: 45, end: 52 },
+  { text: '把被挤扁的肋骨，重新撑开。',                    start: 52, end: 58 },
+  { text: '跟我一起试试。',                               start: 58, end: 64 },
 
   // 64-76s：呼吸节拍器 × 2 循环（无主文字）
 
-  // ── 换你 + 倒数（76-86s，居中）──
+  // ── 换你 + 倒数（76-86s，居中大字）──
   { text: '现在，换你试试。',
-    start: 76, end: 79,
-    pos: { top: '42%', left: '50%', center: true } },
-
-  { text: '3', start: 79, end: 80,
-    pos: { top: '50%', left: '50%', center: true }, big: true },
-  { text: '2', start: 80, end: 81,
-    pos: { top: '50%', left: '50%', center: true }, big: true },
-  { text: '1', start: 81, end: 82,
-    pos: { top: '50%', left: '50%', center: true }, big: true },
-
-  { text: '开始。', start: 82, end: 86,
-    pos: { top: '50%', left: '50%', center: true } },
+    start: 76, end: 79, pos: { top: '42%', left: '50%', center: true } },
+  { text: '3', start: 79, end: 80, pos: { top: '50%', left: '50%', center: true }, big: true },
+  { text: '2', start: 80, end: 81, pos: { top: '50%', left: '50%', center: true }, big: true },
+  { text: '1', start: 81, end: 82, pos: { top: '50%', left: '50%', center: true }, big: true },
+  { text: '开始。', start: 82, end: 86, pos: { top: '50%', left: '50%', center: true } },
 ];
 
 // 呼吸节拍器：64-76s (12s = 2 x 6s 循环)
@@ -169,7 +135,7 @@ export class IntroOverlays {
     }
     const entry = TEXT_SCHEDULE[found];
     if (found !== this._lastTextIdx) {
-      // 先设置新内容和位置（不带 vis class），再触发渐入
+      // 先设置新内容和位置
       this.$text.innerHTML = entry.text;
       if (entry.pos) {
         this.$text.style.top  = entry.pos.top;
@@ -177,6 +143,11 @@ export class IntroOverlays {
         this.$text.style.transform = entry.pos.center
           ? 'translate(-50%, -50%)'
           : 'translate(0, -50%)';
+      } else {
+        // 默认：恢复到 CSS 默认（左侧固定位置）
+        this.$text.style.top  = '';
+        this.$text.style.left = '';
+        this.$text.style.transform = '';
       }
       this.$text.classList.toggle('big', !!entry.big);
 

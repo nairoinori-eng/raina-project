@@ -198,12 +198,13 @@ body {
   color: rgba(180, 170, 220, 0.35); letter-spacing: 0.1em;
 }
 
-/* ── 引导文字（动态定位，左侧艺术排布）── */
+/* ── 引导文字（默认：左对齐固定在屏幕左侧）── */
 #intro-text {
   position: fixed;
-  top: 50%;
-  left: 13%;
-  max-width: 44vw;
+  top: 48%;
+  left: 7%;
+  max-width: 35vw;
+  text-align: left;
   font-size: clamp(1.1rem, 2vw, 1.55rem);
   font-weight: 300;
   line-height: 1.75;

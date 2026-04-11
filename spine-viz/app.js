@@ -298,14 +298,20 @@ const spineFragmentShader = /* glsl */`
       c = mix(uColor, uAccent2, clamp((-vColorVar - 0.5) * 2.0, 0.0, 1.0));
     }
     c = clamp(c, 0.0, 0.88);
-    // Segment highlight: thoracic (t<0.5) → orange, lumbar (t>=0.5) → cyan
+    // Segment highlight: 只高亮弯曲最严重的区域
+    // 胸椎峰值 @ t ≈ 0.33 (T7)，腰椎峰值 @ t ≈ 0.75 (L3)
     if (uSegmentHighlight > 0.0) {
-      vec3 thoracicCol = vec3(1.0, 0.5, 0.15);
-      vec3 lumbarCol   = vec3(0.15, 0.75, 0.90);
-      float lumbMix = smoothstep(0.45, 0.55, vParamT);
-      vec3 segColor = mix(thoracicCol, lumbarCol, lumbMix);
-      // Subtle pulse
-      c = mix(c, segColor * 1.3, uSegmentHighlight);
+      vec3 thoracicCol = vec3(1.0, 0.55, 0.18);
+      vec3 lumbarCol   = vec3(0.18, 0.75, 0.92);
+      // 胸椎区域：t 从 0.12 升起，0.33 峰值，0.52 落下
+      float thorZone = smoothstep(0.12, 0.28, vParamT)
+                     * (1.0 - smoothstep(0.38, 0.52, vParamT));
+      // 腰椎区域：t 从 0.58 升起，0.75 峰值，0.95 落下
+      float lumbZone = smoothstep(0.58, 0.72, vParamT)
+                     * (1.0 - smoothstep(0.82, 0.95, vParamT));
+      vec3 hlColor = thoracicCol * thorZone + lumbarCol * lumbZone;
+      float hlStrength = max(thorZone, lumbZone);
+      c = mix(c, hlColor * 1.5, hlStrength * uSegmentHighlight);
     }
     float core  = exp(-d * d * 24.0);
     float halo  = exp(-d * d * 10.0) * 0.12;
@@ -679,7 +685,7 @@ const comparisonMat = new THREE.LineDashedMaterial({
 });
 const comparisonLine = new THREE.Line(comparisonGeo, comparisonMat);
 comparisonLine.computeLineDistances();
-comparisonLine.position.x = 0.6;  // offset to right, so curved spine is clearly on the left
+// 放在脊柱中线（x=0），代表"如果没弯曲应该在哪里"
 comparisonLine.position.z = -0.1;
 spineGroup.add(comparisonLine);
 
