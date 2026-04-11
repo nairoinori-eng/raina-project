@@ -1411,6 +1411,7 @@ let leafGlobalIdx = 0;
 const Y_DENSITY_WINDOW = 0.18;
 const Y_DENSITY_MAX = 3;
 const placedYs = [];
+const placedXYs = [];
 
 for (const src of leafSources) {
   // 计算叶柄位置（直立态 / 弯曲态）
@@ -1483,6 +1484,20 @@ for (const src of leafSources) {
       if (Math.abs(py - sy) < Y_DENSITY_WINDOW) nearbyCount++;
     }
     if (nearbyCount >= Y_DENSITY_MAX) continue;
+
+    // 针对性：红框区域 y ∈ [0.8, 1.6]，做2D近距检查
+    if (sy >= 0.8 && sy <= 1.6) {
+      let tooClose = false;
+      for (const [ox, oy] of placedXYs) {
+        const dx = ox - sx, dy = oy - sy;
+        if (dx * dx + dy * dy < 0.09) { // 距离 < 0.30
+          tooClose = true;
+          break;
+        }
+      }
+      if (tooClose) continue;
+    }
+    placedXYs.push([sx, sy]);
     placedYs.push(sy);
 
     // 叶子朝向角度：(leafOutX, leafOutY) 是叶尖指向
@@ -1730,10 +1745,10 @@ const leafVertexShader = /* glsl */`
 
 // ── 叶子颜色：4色系支持绿→金/紫/粉 ──
 // 叶子色系：和藤蔓同家族，但略有变化
-const LEAF_BASE = new THREE.Color(0x1e5244); // 基色翡翠绿（稍亮于藤蔓）
-const LEAF_HL   = new THREE.Color(0x3a7050); // 亮玉绿 highlight
-const LEAF_AC1  = new THREE.Color(0x556048); // 橄榄暖绿（暖调）
-const LEAF_AC2  = new THREE.Color(0x1e4e58); // 深青绿（冷调）
+const LEAF_BASE = new THREE.Color(0x1e5244); // 基色翡翠绿
+const LEAF_HL   = new THREE.Color(0x6e7238); // 暗金橄榄（暖调）
+const LEAF_AC1  = new THREE.Color(0x6a4258); // 暗紫红（暖冷过渡）
+const LEAF_AC2  = new THREE.Color(0x1e5870); // 深青蓝（冷调）
 
 const leafMat = new THREE.ShaderMaterial({
   vertexShader: leafVertexShader,
