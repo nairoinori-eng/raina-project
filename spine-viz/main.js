@@ -1214,7 +1214,7 @@ const vineGrowProgress  = [0, 0, 0];
 //
 
 // ── 叶子形状数据预处理：采样模板内部点 ──
-const PARTICLES_PER_LEAF = 280;
+const PARTICLES_PER_LEAF = 600;
 
 // Poisson-disk 风格：在轮廓内用网格+随机采样
 function pointInPolygon(px, py, polygon) {
