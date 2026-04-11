@@ -20,10 +20,12 @@ const TEXT_SCHEDULE = [
   { text: '它已经这样，陪我十年了。',                      start: 21, group: 'A' },
 
   // 组 B：病理解释 (27-40s) - 分别定位在对应脊柱高亮处旁边
+  // "凸起" → 胸椎橙高亮右侧（上半部分，脊柱的右侧）
+  // "凹陷" → 腰椎青高亮左侧（下半部分，脊柱的左侧）
   { text: '凸起的那一侧，肋骨被撑得太开；',
-    start: 27, group: 'B', pos: { top: '30%', left: '6%' } },
+    start: 27, group: 'B', pos: { top: '50%', left: '58%' } },
   { text: '凹陷的那一侧，肋骨被挤在一起。',
-    start: 33, group: 'B', pos: { top: '66%', left: '6%' } },
+    start: 33, group: 'B', pos: { top: '78%', left: '28%' } },
 
   // 组 C：呼吸原理 (45-64s)
   { text: '有一种呼吸，专门送气到凹陷的那一边，',           start: 45, group: 'C' },
