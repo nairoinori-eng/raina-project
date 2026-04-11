@@ -1129,9 +1129,26 @@ const vineVertexShader = /* glsl */`
   uniform float uBlend;
   uniform float uTime;
   uniform vec3 uVineGrowth;
+  uniform float uSpineXs[13];
+  uniform float uSpineYs[13];
+  uniform float uSpineHalfW;
 
   varying float vAlpha;
   varying float vColorVar;
+
+  // 查骨骼曲线中心 X（按 y 线性插值 13 个控制点）。
+  // SPINE_CURVED 按 y 降序存储（C7 y=+2.36 → S1 y=-2.36）
+  float spineCenterXCurved(float y) {
+    for (int i = 0; i < 12; i++) {
+      float y0 = uSpineYs[i];       // 上端
+      float y1 = uSpineYs[i + 1];   // 下端
+      if (y <= y0 && y >= y1) {
+        float k = (y - y1) / (y0 - y1 + 1e-6);
+        return mix(uSpineXs[i + 1], uSpineXs[i], k);
+      }
+    }
+    return y > uSpineYs[0] ? uSpineXs[0] : uSpineXs[12];
+  }
 
   void main() {
     float alpha;
@@ -1170,7 +1187,16 @@ const vineVertexShader = /* glsl */`
       float totalPulse = pulse + pulse2;
 
       float endFade = smoothstep(0.0, 0.04, aParamT) * smoothstep(1.0, 0.93, aParamT);
-      float depthFade = 0.25 + 0.75 * smoothstep(-0.06, 0.01, aZPos);
+
+      // 2D 遮挡判定：只有粒子的 x 位置落在骨骼横向占位内才算被骨骼挡住。
+      // 骨骼中心 X 由弯曲控制点曲线插值（直立状态 X=0），乘上 uBlend 做过渡。
+      float spineCx = mix(spineCenterXCurved(pos2d.y), 0.0, uBlend);
+      float dx = abs(pos2d.x - spineCx);
+      // 软过渡 0.04 宽度，避免硬边
+      float xOcclusion = 1.0 - smoothstep(uSpineHalfW - 0.04, uSpineHalfW, dx);
+      // 原来的 z 深度暗化（只对落在骨骼 2D 投影内的粒子生效）
+      float zDepthFade = 0.25 + 0.75 * smoothstep(-0.06, 0.01, aZPos);
+      float depthFade = mix(1.0, zDepthFade, xOcclusion);
 
       float effectivePulse = totalPulse * depthFade;
       alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * 0.45);
@@ -1203,6 +1229,10 @@ const VINE_B_HL    = new THREE.Color(0x3a5a78);  // 沉花青高光（压低亮�
 const VINE_B_AC1   = new THREE.Color(0x10243e);  // 深夜蓝
 const VINE_B_AC2   = new THREE.Color(0x244e7c);  // 中花青
 
+// 骨骼曲线控制点打包给 shader 做遮挡判定
+const SPINE_XS_FLAT = SPINE_CURVED.map(p => p.x);
+const SPINE_YS_FLAT = SPINE_CURVED.map(p => p.y);
+
 const vineMat = new THREE.ShaderMaterial({
   vertexShader: vineVertexShader, fragmentShader,
   uniforms: {
@@ -1214,6 +1244,9 @@ const vineMat = new THREE.ShaderMaterial({
     uBlend:      { value: 0.0 },
     uTime:       { value: 0.0 },
     uVineGrowth: { value: new THREE.Vector3(0, 0, 0) },
+    uSpineXs:    { value: SPINE_XS_FLAT },
+    uSpineYs:    { value: SPINE_YS_FLAT },
+    uSpineHalfW: { value: 0.18 },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
