@@ -4,24 +4,37 @@
  */
 
 // ── 文字时间表 ──
+// ── 文字时间表（总长 86s）──
 const TEXT_SCHEDULE = [
-  { text: '这是我的脊柱。',                                              start: 4,  end: 8  },
-  { text: '15岁那年，我发现它弯了。',                                      start: 8,  end: 12 },
-  { text: '脊柱不该弯的地方弯了。凸起的一侧肋骨被挤在一起，凹陷的一侧被拉开。',
-                                                                         start: 12, end: 17 },
-  { text: '身体一直在代偿这个不平衡。看起来站直了，其实里面是歪的。',
-                                                                         start: 17, end: 22 },
-  { text: '首先，找到你背部凸起的那一侧。',                                start: 22, end: 27 },
-  { text: '等一下，你要把气吸到这一边——凸起来的这边。',                     start: 27, end: 32 },
-  { text: '吸气的时候，不要让胸部整体鼓起来。想象只用凸起这一侧的肺在呼吸。',
-                                                                         start: 32, end: 37 },
-  { text: '接下来，你要做的就是这个动作。',                                start: 45, end: 50 },
-  { text: '你的每一次呼吸，都会改变它的形状。',                            start: 50, end: 55 },
-  { text: '准备好了吗？',                                                 start: 55, end: 58 },
-  { text: '开始。',                                                       start: 58, end: 60 },
+  // 第一段：情感开场 (0-30s, 第一人称)
+  { text: '这是我的脊柱。',                            start: 5,    end: 12 },
+  { text: '十五岁那年，医生说它弯了。',                  start: 12,   end: 18 },
+  { text: '胸椎向右 28 度，腰椎向左 18 度。',            start: 18,   end: 24 },
+  { text: '它已经这样，陪我十年了。',                    start: 24,   end: 30 },
+
+  // 第二段：病理解释 (30-44s)
+  { text: '凸起的那一侧，肋骨被撑得太开；',              start: 30,   end: 37 },
+  { text: '凹陷的那一侧，肋骨被挤在一起。',              start: 37,   end: 44 },
+
+  // 第三段：呼吸原理 (44-58s)
+  { text: '有一种呼吸，专门送气到凹陷的那一边，',         start: 44,   end: 52 },
+  { text: '把被挤扁的肋骨，重新撑开。',                   start: 52,   end: 58 },
+
+  // 第四段：跟我一起 (58-64s)
+  { text: '跟我一起试试。',                              start: 58,   end: 64 },
+
+  // 64-76s: 呼吸节拍器 × 2 循环（无主文字，由节拍器自己显示标签）
+
+  // 第五段：换你 + 倒数 (76-86s)
+  { text: '现在，换你试试。',                            start: 76,   end: 80 },
+  { text: '3',                                           start: 80,   end: 81 },
+  { text: '2',                                           start: 81,   end: 82 },
+  { text: '1',                                           start: 82,   end: 83 },
+  { text: '开始。',                                       start: 83,   end: 86 },
 ];
 
-const PACER_START = 37, PACER_END = 44;
+// 呼吸节拍器：64-76s (12s = 2 x 6s 循环)
+const PACER_START = 64, PACER_END = 76;
 const BREATH_CYCLE = 6, INHALE = 3, HOLD = 1.5;
 
 export class IntroOverlays {
@@ -144,15 +157,15 @@ export class IntroOverlays {
     this.$text.style.opacity = rem < 0.6 ? Math.max(0, rem / 0.6) : '';
   }
 
-  // ── 数据 ──
+  // ── 数据（与 "胸椎28°" 文字同步，18-24s）──
   _updateData(t) {
-    if (t >= 19.5 && t < 22) this.$data.classList.add('vis');
+    if (t >= 18 && t < 24) this.$data.classList.add('vis');
     else this.$data.classList.remove('vis');
   }
 
-  // ── 人体 ──
+  // ── 人体（教学段 44-76s）──
   _updateBody(t) {
-    if (t >= 22 && t < 44) this.$body.classList.add('vis');
+    if (t >= 44 && t < 76) this.$body.classList.add('vis');
     else this.$body.classList.remove('vis');
 
     const dot = this.$body.querySelector('.glow-dot');
@@ -160,9 +173,12 @@ export class IntroOverlays {
     const chest = this.$body.querySelector('.chest-exp');
     const rib   = this.$body.querySelector('.rib-half');
 
-    if (t >= 22.5 && t < 32) dot.classList.add('vis'); else dot.classList.remove('vis');
-    if (t >= 27 && t < 32) arrow.classList.add('vis'); else arrow.classList.remove('vis');
-    if (t >= 32 && t < 44) { chest.classList.add('vis'); rib.classList.add('anim'); }
+    // 发光圆点：标记凹陷侧 (44.5-58s)
+    if (t >= 44.5 && t < 58) dot.classList.add('vis'); else dot.classList.remove('vis');
+    // 箭头：从凸起指向凹陷 (52-58s)
+    if (t >= 52 && t < 58) arrow.classList.add('vis'); else arrow.classList.remove('vis');
+    // 胸廓膨胀动画：跟做段 (58-76s)
+    if (t >= 58 && t < 76) { chest.classList.add('vis'); rib.classList.add('anim'); }
     else { chest.classList.remove('vis'); rib.classList.remove('anim'); }
   }
 
@@ -173,7 +189,7 @@ export class IntroOverlays {
     const ct = (t - PACER_START) % BREATH_CYCLE;
     let scale, label;
     if (ct < INHALE) { scale = 0.5 + (ct / INHALE) * 0.8; label = '吸气'; }
-    else if (ct < INHALE + HOLD) { scale = 1.3; label = '停'; }
+    else if (ct < INHALE + HOLD) { scale = 1.3; label = '撑开'; }
     else { scale = 1.3 - ((ct - INHALE - HOLD) / (BREATH_CYCLE - INHALE - HOLD)) * 0.8; label = '呼气'; }
     this.$ring.style.transform = `scale(${scale})`;
     this.$label.textContent = label;

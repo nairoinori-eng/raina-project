@@ -1427,8 +1427,8 @@ function updateIdle(t) {
 function updateGuide(t) {
   guideElapsed = performance.now() / 1000 - guideStartTime;
 
-  // 检查结束
-  if (guideElapsed >= 60) {
+  // 检查结束（86s 完整引导）
+  if (guideElapsed >= 86) {
     enterExperience();
     return;
   }
@@ -1461,64 +1461,61 @@ function updateGuide(t) {
 
   const e = guideElapsed;
 
-  if (e < 12) {
-    // ─── 第一段："我的脊柱"（0-12s）—— 粒子凝聚成脊柱 ───
-    const formation = Math.min(1, e / 5);          // 5s 内完成凝聚
-    const breathe   = smoothstep(0, 1, (e - 3) / 4) * 0.3; // 3s后开始微弱呼吸脉动
-
+  if (e < 5) {
+    // ─── 0-5s：粒子凝聚成脊柱 ───
+    const formation = e / 5;
     spineMat.uniforms.uFormation.value  = formation;
     spineMat.uniforms.uGuideAlpha.value = 1.0;
-    spineMat.uniforms.uBreathe.value    = breathe;
+    spineMat.uniforms.uBreathe.value    = 0.0;
     spineMat.uniforms.uBreatheExpand.value = 1.0;
-
     bloomPass.strength = 0.08 + formation * 0.08;
 
-  } else if (e < 22) {
-    // ─── 第二段："什么是脊柱侧弯"（12-22s）—— 脊柱展示 ───
+  } else if (e < 30) {
+    // ─── 5-30s：情感叙事 "这是我的脊柱" → "陪我十年" ───
+    const pulse = smoothstep(0, 1, (e - 5) / 3) * 0.35;
     spineMat.uniforms.uFormation.value  = 1.0;
     spineMat.uniforms.uGuideAlpha.value = 1.0;
-    spineMat.uniforms.uBreathe.value    = 0.3;
+    spineMat.uniforms.uBreathe.value    = pulse;
     spineMat.uniforms.uBreatheExpand.value = 1.0;
     bloomPass.strength = 0.16;
 
-  } else if (e < 32) {
-    // ─── 第三段a："找到凸起侧"（22-32s）—— 脊柱淡出 ───
-    const segT = (e - 22) / 10;
-    const guideAlpha = Math.max(0, 1 - segT * 2.5); // 4s 内淡出
+  } else if (e < 44) {
+    // ─── 30-44s：病理解释（凸起被撑开 / 凹陷被挤压）───
+    spineMat.uniforms.uFormation.value  = 1.0;
+    spineMat.uniforms.uGuideAlpha.value = 1.0;
+    spineMat.uniforms.uBreathe.value    = 0.35;
+    spineMat.uniforms.uBreatheExpand.value = 1.0;
+    bloomPass.strength = 0.16;
 
+  } else if (e < 58) {
+    // ─── 44-58s：呼吸原理 + 人体轮廓登场，脊柱淡出 ───
+    const segT = (e - 44) / 14;
+    const guideAlpha = Math.max(0, 1 - segT * 3.0);
     spineMat.uniforms.uFormation.value  = 1.0;
     spineMat.uniforms.uGuideAlpha.value = guideAlpha;
     spineMat.uniforms.uBreathe.value    = 0.2 * guideAlpha;
     spineMat.uniforms.uBreatheExpand.value = 1.0;
     bloomPass.strength = 0.16 * guideAlpha + 0.04;
 
-  } else if (e < 45) {
-    // ─── 第三段b："演示+跟做"（32-45s）—— 脊柱隐藏，教学 ───
+  } else if (e < 76) {
+    // ─── 58-76s："跟我一起试试" + 呼吸节拍器（脊柱隐藏）───
     spineMat.uniforms.uFormation.value  = 1.0;
     spineMat.uniforms.uGuideAlpha.value = 0.0;
     spineMat.uniforms.uBreathe.value    = 0.0;
     spineMat.uniforms.uBreatheExpand.value = 1.0;
     bloomPass.strength = 0.04;
 
-  } else if (e < 55) {
-    // ─── 第三段c："预告"（45-55s）—— 脊柱回归，微微偏暖 ───
-    const segT = (e - 45) / 10;
-    const guideAlpha = Math.min(1, segT * 2.5);     // 渐入
-    const breathe = guideAlpha * 0.35;
+  } else {
+    // ─── 76-86s："现在换你试试" + 3-2-1-开始 → 过渡 ───
+    const segT = (e - 76) / 10;
+    const guideAlpha = Math.min(1, segT * 3.0);
+    const breathe = guideAlpha * breatheCurve(t) * 0.5;
 
     spineMat.uniforms.uFormation.value  = 1.0;
     spineMat.uniforms.uGuideAlpha.value = guideAlpha;
     spineMat.uniforms.uBreathe.value    = breathe;
-    spineMat.uniforms.uBreatheExpand.value = 1.0;
-    bloomPass.strength = 0.04 + guideAlpha * 0.12;
-
-  } else {
-    // ─── 第四段："开始"（55-60s）—— 过渡到体验 ───
-    spineMat.uniforms.uFormation.value  = 1.0;
-    spineMat.uniforms.uGuideAlpha.value = 1.0;
-    spineMat.uniforms.uBreathe.value    = breatheCurve(t) * 0.4;
-    spineMat.uniforms.uBreatheExpand.value = 1 + breatheCurve(t) * 0.10;
-    bloomPass.strength = 0.12 + breatheCurve(t) * 0.04;
+    spineMat.uniforms.uBreatheExpand.value = 1 + breathe * 0.1;
+    bloomPass.strength = 0.04 + guideAlpha * 0.14;
   }
 }
 
