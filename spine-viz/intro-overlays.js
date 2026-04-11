@@ -23,9 +23,9 @@ const TEXT_SCHEDULE = [
   // 胸椎峰值向右凸 → 字幕紧贴右侧（箭头从峰指向字幕）
   // 腰椎峰值向左凸 → 字幕紧贴左侧
   { text: '凸起的那一侧，肋骨被撑得太开；',
-    start: 27, group: 'B', pos: { top: '42%', left: '47%' } },
+    start: 27, group: 'B', pos: { top: '45%', left: '62%' } },
   { text: '凹陷的那一侧，肋骨被挤在一起。',
-    start: 33, group: 'B', pos: { top: '80%', left: '3%' } },
+    start: 33, group: 'B', pos: { top: '74%', left: '5%' } },
 
   // 组 C：呼吸原理 (45-64s)
   { text: '有一种呼吸，专门送气到凹陷的那一边，',           start: 45, group: 'C' },
