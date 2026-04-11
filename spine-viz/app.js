@@ -70,14 +70,14 @@ const N_AMB   = 300;                   // Layer E
 // 3. 颜色（低饱和度，优雅克制）
 // ============================================================
 
-const COLOR_DARK = new THREE.Color(0x4a1e9a);  // 饱和深紫
+const COLOR_DARK = new THREE.Color(0x3f2a82);  // 中等饱和深紫
 const COLOR_MID  = new THREE.Color(0xd87890);  // 粉红过渡（饱和的中间色，不再灰）
-const COLOR_GOLD = new THREE.Color(0xe8a038);  // 饱和暖金（不再灰金）
+const COLOR_GOLD = new THREE.Color(0xd49c58);  // 中等饱和暖金
 
 // 高光色（接近白色的高亮，强烈正面光感）
-const HL_DARK = new THREE.Color(0xd080ff);   // 亮紫高光（加饱和）
+const HL_DARK = new THREE.Color(0xc8a0f4);   // 柔和亮紫
 const HL_MID  = new THREE.Color(0xffd8e8);   // 亮粉高光
-const HL_GOLD = new THREE.Color(0xffd060);   // 亮金高光（加饱和）
+const HL_GOLD = new THREE.Color(0xffe0a0);   // 柔和亮金
 
 // 对比色1：暖色系（高饱和）
 const AC1_DARK = new THREE.Color(0xff6840);  // 鲜橘红
@@ -1258,6 +1258,16 @@ function pointInPolygon(px, py, polygon) {
   return inside;
 }
 
+// 鞋带公式：闭合多边形面积（取绝对值）
+function polygonArea(polygon) {
+  let a = 0;
+  const n = polygon.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    a += (polygon[j][0] + polygon[i][0]) * (polygon[j][1] - polygon[i][1]);
+  }
+  return Math.abs(a) * 0.5;
+}
+
 // 为每个叶子模板预计算粒子偏移点（局部坐标）
 function sampleLeafTemplate(shape) {
   const contour = shape.contour;
@@ -1301,10 +1311,18 @@ function sampleLeafTemplate(shape) {
     const yNorm = (c[1] - minY) / leafHeight;
     points.push({ x: c[0], y: c[1], yNorm, isVein: false, isEdge: true });
   }
-  return { points, minY, maxY };
+  // 随机洗牌，这样 instance 取前 N 个也能拿到 fill/vein/edge 均匀混合
+  for (let i = points.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [points[i], points[j]] = [points[j], points[i]];
+  }
+  return { points, minY, maxY, area: polygonArea(contour) };
 }
 
 const LEAF_TEMPLATES = LEAF_SHAPES.map(shape => sampleLeafTemplate(shape));
+
+// 参考面积：3 个模板里最大的那个（用于归一化粒子数）
+const LEAF_REF_AREA = Math.max(...LEAF_TEMPLATES.map(t => t.area));
 
 // ── 叶子放置采样（沿藤蔓自然步进，不规律间距）──
 const leafSources = [];
@@ -1695,11 +1713,17 @@ for (const src of leafSources) {
 }
 
 const N_LEAVES = leafInstances.length;
-// 每片叶子粒子数随大小缩放：更高密度强化3D效果
+// 每片叶子粒子数：按"渲染世界面积 = 模板面积 × scale²"驱动，
+// 保证每片叶子的粒子密度（per 单位渲染面积）一致。
+// 校准：最大叶子（面积最大模板 × MAX_SCALE）保持 2600 粒子，
+// 与原公式的上限持平，质感保留。
 const MIN_SCALE = 0.08, MAX_SCALE = 0.24;
+const LEAF_MAX_PARTICLES = 2600;
+const LEAF_DENSITY = LEAF_MAX_PARTICLES / (LEAF_REF_AREA * MAX_SCALE * MAX_SCALE);
 for (const leaf of leafInstances) {
-  const normScale = Math.max(0, Math.min(1, (leaf.scale - MIN_SCALE) / (MAX_SCALE - MIN_SCALE)));
-  leaf.particleCount = Math.round(900 + normScale * 1700); // 900~2600
+  const t = LEAF_TEMPLATES[leaf.templateIdx];
+  const worldArea = t.area * leaf.scale * leaf.scale;
+  leaf.particleCount = Math.max(150, Math.round(LEAF_DENSITY * worldArea));
 }
 const N_LEAF_TOTAL = leafInstances.reduce((s, l) => s + l.particleCount, 0);
 
@@ -1715,10 +1739,14 @@ const lfAlphas       = new Float32Array(N_LEAF_TOTAL);
 const lfColorVars    = new Float32Array(N_LEAF_TOTAL);
 
 let lfIdx = 0;
+// 粒子大小参考：scale = MAX_SCALE 时保持当前 baseSize，小叶子等比缩小
+const LEAF_SIZE_REF_SCALE = MAX_SCALE;
 for (const leaf of leafInstances) {
   const template = LEAF_TEMPLATES[leaf.templateIdx];
   const cosA = Math.cos(leaf.angle);
   const sinA = Math.sin(leaf.angle);
+  // 粒子大小乘数：大叶 1.0，小叶（MIN_SCALE/MAX_SCALE = 0.33）
+  const sizeMult = leaf.scale / LEAF_SIZE_REF_SCALE;
 
   for (let p = 0; p < leaf.particleCount; p++) {
     const pt = template.points[p % template.points.length];
@@ -1756,12 +1784,12 @@ for (const leaf of leafInstances) {
     // 按 leafParamT 分 4 组：0-0.25→0, 0.25-0.5→1, 0.5-0.75→2, 0.75-1→3
     lfGrowGroup[lfIdx] = Math.min(3, Math.floor(leaf.leafParamT * 4));
 
-    // 粒子大小：叶脉亮，边缘稍大，内部中等
+    // 粒子大小：叶脉亮，边缘稍大，内部中等；整体乘 sizeMult 让小叶子等比缩小
     let baseSize;
     if (pt.isVein) baseSize = 0.028 + Math.random() * 0.008;
     else if (pt.isEdge) baseSize = 0.026 + Math.random() * 0.008;
     else baseSize = 0.022 + Math.random() * 0.010;
-    lfSizes[lfIdx] = baseSize;
+    lfSizes[lfIdx] = baseSize * sizeMult;
 
     // alpha：叶脉更亮
     lfAlphas[lfIdx] = (pt.isVein ? 0.75 : 0.50) + Math.random() * 0.12;
