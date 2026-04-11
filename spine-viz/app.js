@@ -1214,7 +1214,7 @@ const vineGrowProgress  = [0, 0, 0];
 //
 
 // ── 叶子形状数据预处理：采样模板内部点 ──
-const PARTICLES_PER_LEAF = 600;
+const PARTICLES_PER_LEAF = 1000;
 
 // Poisson-disk 风格：在轮廓内用网格+随机采样
 function pointInPolygon(px, py, polygon) {
@@ -1429,10 +1429,12 @@ for (const src of leafSources) {
     // 模板 y+ → worldTipAngle 方向，所以旋转角 = worldTipAngle - PI/2
     const finalAngle = worldTipAngle - Math.PI / 2 + clusterAngleOffset;
 
-    // 大小：连续随机变化，每片细微差别
-    // 中段略大、两端略小
+    // 大小：大幅拉开差距——大的缩小，小的更小，差距 4x
+    // 每片叶子都略有不同
     const sizeMod = 0.85 + 0.3 * Math.sin(sParamT * Math.PI);
-    const scale = (0.13 + Math.pow(Math.random(), 1.3) * 0.13) * sizeMod * (g === 0 ? 1.0 : 0.75);
+    const sizeRand = Math.pow(Math.random(), 1.6); // 0~1，偏小
+    const scale = (0.05 + sizeRand * 0.16) * sizeMod * (g === 0 ? 1.0 : 0.70);
+    // 范围：最小 ~0.04, 最大 ~0.22, 差距 5x+
 
     // 叶子宽度：非常轻微的压缩，避免变成线条
     const widthSquash = 0.88 + Math.random() * 0.12; // 0.88~1.00
