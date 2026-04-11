@@ -19,9 +19,11 @@ const TEXT_SCHEDULE = [
     start: 15, group: 'A' },
   { text: '它已经这样，陪我十年了。',                      start: 21, group: 'A' },
 
-  // 组 B：病理解释 (27-40s)
-  { text: '凸起的那一侧，肋骨被撑得太开；',                start: 27, group: 'B' },
-  { text: '凹陷的那一侧，肋骨被挤在一起。',                start: 33, group: 'B' },
+  // 组 B：病理解释 (27-40s) - 分别定位在对应脊柱高亮处旁边
+  { text: '凸起的那一侧，肋骨被撑得太开；',
+    start: 27, group: 'B', pos: { top: '30%', left: '6%' } },
+  { text: '凹陷的那一侧，肋骨被挤在一起。',
+    start: 33, group: 'B', pos: { top: '66%', left: '6%' } },
 
   // 组 C：呼吸原理 (45-64s)
   { text: '有一种呼吸，专门送气到凹陷的那一边，',           start: 45, group: 'C' },
@@ -68,16 +70,27 @@ export class IntroOverlays {
     const groupDivs = {};
     TEXT_SCHEDULE.forEach(entry => {
       if (entry.countdown) return;
-      if (!groupDivs[entry.group]) {
-        const g = document.createElement('div');
-        g.className = 'intro-group';
-        this.$text.appendChild(g);
-        groupDivs[entry.group] = g;
-      }
       const p = document.createElement('p');
       p.className = 'intro-line';
       p.innerHTML = entry.text;
-      groupDivs[entry.group].appendChild(p);
+
+      if (entry.pos) {
+        // 独立定位：直接挂到 body 上，用 fixed 定位
+        p.classList.add('intro-line-fixed');
+        p.style.top  = entry.pos.top;
+        p.style.left = entry.pos.left;
+        document.body.appendChild(p);
+      } else {
+        // 堆叠：放进分组容器
+        if (!groupDivs[entry.group]) {
+          const g = document.createElement('div');
+          g.className = 'intro-group';
+          this.$text.appendChild(g);
+          groupDivs[entry.group] = g;
+        }
+        groupDivs[entry.group].appendChild(p);
+      }
+
       this._lines.push({
         p,
         start: entry.start,

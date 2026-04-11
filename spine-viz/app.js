@@ -1509,8 +1509,13 @@ function updateGuide(t) {
   // 更新叠加层
   overlays.updateGuide(guideElapsed);
 
-  // 缓慢摆动
-  if (!branchEditMode) spineGroup.rotation.y = Math.sin(t * 0.52) * 0.35;
+  // 脊柱旋转：病理解释段 (26-40s) 冻结，其余阶段正常摆动
+  const inPathology = (guideElapsed >= 26 && guideElapsed < 40);
+  if (!branchEditMode) {
+    const rotTarget = inPathology ? 0 : Math.sin(t * 0.52) * 0.35;
+    // 平滑过渡避免跳变
+    spineGroup.rotation.y += (rotTarget - spineGroup.rotation.y) * 0.08;
+  }
 
   // 时间总是同步
   spineMat.uniforms.uTime.value = t;
