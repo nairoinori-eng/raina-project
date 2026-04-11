@@ -1369,6 +1369,42 @@ walkVineForLeaves(0, leafSources, 25); // 主藤：减少数量
 walkVineForLeaves(1, leafSources, 10); // 辅藤A
 walkVineForLeaves(2, leafSources, 8);  // 辅藤B
 
+// 针对性补充：主藤中段前面
+// 主藤 seg 8 是长的中段，手动采样几个点放叶子
+{
+  const midSeg8 = vineData[0].curves[8]; // seg 8
+  if (midSeg8) {
+    const targetTs = [0.25, 0.40, 0.55, 0.70];
+    for (const localT of targetTs) {
+      const pt = midSeg8.getPointAt(localT);
+      const tan = midSeg8.getTangentAt(localT);
+      leafSources.push({
+        type: 'figma',
+        rawX: pt.x, rawY: pt.y,
+        tanX: tan.x, tanY: tan.y,
+        vineId: 0,
+      });
+    }
+  }
+}
+
+// 针对性补充：弥散分支上的叶子（上右 seg9 + 下左 seg12）
+const DRIFT_LEAF_EMITTERS = [driftEmitters[1], driftEmitters[2]]; // seg9 中右 + seg12 下左
+for (const em of DRIFT_LEAF_EMITTERS) {
+  // 每条分支 2-3 片，沿延伸方向
+  const n = 2 + Math.floor(Math.random() * 2);
+  for (let i = 0; i < n; i++) {
+    const dist = 0.15 + Math.random() * 0.55;
+    const worldX = em.sx + em.dx * dist;
+    const worldY = em.sy + em.dy * dist;
+    leafSources.push({
+      type: 'drift',
+      worldX, worldY,
+      tanX: em.dx, tanY: em.dy,
+    });
+  }
+}
+
 
 // ── 生成叶子实例数据 ──
 // 每片叶子分组：单叶(60%) / 2片(25%) / 3片(15%)
@@ -1388,10 +1424,20 @@ for (const src of leafSources) {
     const spineX = getSpineXAtY(stemSY);
     stemCX = stemSX + spineX;
     stemCY = stemSY;
-    // 切线（世界空间）
     tangentWorldX = src.tanX * VINE_X_SCALE;
     tangentWorldY = src.tanY * VINE_Y_SCALE;
     stemParamT = (vineYMax - stemSY) / vineYRange;
+    hostVineId = 0;
+  } else if (src.type === 'drift') {
+    // 弥散分支：已是世界坐标
+    stemSX = src.worldX;
+    stemSY = src.worldY;
+    const spineX = getSpineXAtY(stemSY);
+    stemCX = stemSX + spineX;
+    stemCY = stemSY;
+    tangentWorldX = src.tanX;
+    tangentWorldY = src.tanY;
+    stemParamT = Math.max(0, Math.min(1, (vineYMax - stemSY) / vineYRange));
     hostVineId = 0;
   } else {
     // 辅藤：螺旋公式
@@ -1466,7 +1512,9 @@ for (const src of leafSources) {
     const colorType = colorRoll < 0.70 ? 0 : colorRoll < 0.85 ? 1 : 2;
 
     // 模板选择
-    const templateIdx = Math.floor(Math.random() * LEAF_TEMPLATES.length);
+    // 模板权重：柳叶形(0) 10%，中型(1) 40%，心形(2) 50%
+    const tRoll = Math.random();
+    const templateIdx = tRoll < 0.10 ? 0 : tRoll < 0.50 ? 1 : 2;
 
     leafInstances.push({
       stemSX: sx, stemSY: sy, stemCX: cx, stemCY: cy,
