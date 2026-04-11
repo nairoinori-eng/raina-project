@@ -1365,9 +1365,9 @@ function walkVineForLeaves(vineId, sourceArr, maxLeaves) {
   }
 }
 
-walkVineForLeaves(0, leafSources, 16); // 主藤
-walkVineForLeaves(1, leafSources, 6);  // 辅藤A
-walkVineForLeaves(2, leafSources, 5);  // 辅藤B
+walkVineForLeaves(0, leafSources, 12); // 主藤
+walkVineForLeaves(1, leafSources, 4);  // 辅藤A
+walkVineForLeaves(2, leafSources, 3);  // 辅藤B
 
 // 主藤补缺：每隔一段检查是否有叶子，没有则补
 // 先把已有主藤叶子的世界位置收集起来
@@ -1382,9 +1382,9 @@ for (const src of leafSources) {
     existingMainLeaves.push({ sx: src.worldX, sy: src.worldY });
   }
 }
-// 沿主干每 0.12 步长检查，空缺处补叶
-const GAP_CHECK_STEP = 0.12;
-const GAP_CHECK_RADIUS_SQ = 0.30 * 0.30;
+// 沿主干检查，空缺处补叶
+const GAP_CHECK_STEP = 0.18;
+const GAP_CHECK_RADIUS_SQ = 0.45 * 0.45;
 for (let checkT = 0.15; checkT < 0.88; checkT += GAP_CHECK_STEP) {
   const { pt, tan } = sampleMainTrunkAt(checkT);
   const csx = pt.x * VINE_X_SCALE;
@@ -1509,19 +1509,16 @@ for (const src of leafSources) {
     }
     if (nearbyCount >= Y_DENSITY_MAX) continue;
 
-    // 针对性：上红框 [0.8, 1.6] + 下红框 [-0.9, 0.0]，做2D近距检查
-    const inStrictZone = (sy >= 0.8 && sy <= 1.6) || (sy >= -0.9 && sy <= 0.0);
-    if (inStrictZone) {
-      let tooClose = false;
-      for (const [ox, oy] of placedXYs) {
-        const dx = ox - sx, dy = oy - sy;
-        if (dx * dx + dy * dy < 0.09) { // 距离 < 0.30
-          tooClose = true;
-          break;
-        }
+    // 全局2D距离检查：所有叶子之间距离不能小于0.32
+    let tooClose = false;
+    for (const [ox, oy] of placedXYs) {
+      const dx = ox - sx, dy = oy - sy;
+      if (dx * dx + dy * dy < 0.1024) { // 距离 < 0.32
+        tooClose = true;
+        break;
       }
-      if (tooClose) continue;
     }
+    if (tooClose) continue;
     placedXYs.push([sx, sy]);
     placedYs.push(sy);
 
