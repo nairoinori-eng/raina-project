@@ -28,7 +28,9 @@ const unsigned int BASELINE_WINDOW_SAMPLES = 90;
 const unsigned long INHALE_MS = 4000UL;
 const unsigned long HOLD_MS = 2000UL;
 const unsigned long EXHALE_MS = 4000UL;
-const unsigned long BREATH_CYCLE_MS = INHALE_MS + HOLD_MS + EXHALE_MS;
+const unsigned long CYCLE_GAP_MS = 2000UL;
+const unsigned long BREATH_CYCLE_MS =
+  INHALE_MS + HOLD_MS + EXHALE_MS + CYCLE_GAP_MS;
 
 const byte MOTOR_INHALE_PWM = 165;
 const byte MOTOR_REMINDER_PWM = 125;
