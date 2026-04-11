@@ -1411,11 +1411,13 @@ for (let checkT = 0.15; checkT < 0.88; checkT += GAP_CHECK_STEP) {
   }
 }
 
-// 针对性补充：弥散分支上的叶子（中右 seg9 + 下左 seg12 各 2 片）
+// 针对性补充：弥散分支上的叶子（中右 seg9 + 下左 seg12 各 1-2 片）
+// 距离收短避免偏离实际分支路径
 const DRIFT_LEAF_EMITTERS = [driftEmitters[1], driftEmitters[2]];
 for (const em of DRIFT_LEAF_EMITTERS) {
-  for (let i = 0; i < 2; i++) {
-    const dist = 0.15 + Math.random() * 0.55;
+  const n = 1 + Math.floor(Math.random() * 2); // 1-2片
+  for (let i = 0; i < n; i++) {
+    const dist = 0.05 + Math.random() * 0.15; // 0.05-0.20，靠近分支尖端
     const worldX = em.sx + em.dx * dist;
     const worldY = em.sy + em.dy * dist;
     leafSources.push({
