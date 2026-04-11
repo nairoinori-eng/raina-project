@@ -32,7 +32,9 @@ const unsigned long CYCLE_GAP_MS = 2000UL;
 const unsigned long BREATH_CYCLE_MS =
   INHALE_MS + HOLD_MS + EXHALE_MS + CYCLE_GAP_MS;
 
-const byte MOTOR_INHALE_PWM = 165;
+const byte MOTOR_CUE_PWM_MIN = 115;
+const byte MOTOR_CUE_PWM_MAX = 185;
+const unsigned long MOTOR_RAMP_MS = 2000UL;
 const byte MOTOR_REMINDER_PWM = 125;
 
 const byte LOW_BLEND_THRESHOLD = 30;
@@ -180,6 +182,16 @@ void setMotorPwm(byte pin, byte pwm) {
 void stopAllMotors() {
   setMotorPwm(MOTOR_LEFT_PIN, 0);
   setMotorPwm(MOTOR_RIGHT_PIN, 0);
+}
+
+byte interpolatePwm(byte startPwm, byte endPwm, unsigned long elapsedMs, unsigned long durationMs) {
+  if (durationMs == 0UL || elapsedMs >= durationMs) {
+    return endPwm;
+  }
+
+  long delta = (long)endPwm - (long)startPwm;
+  long step = ((long)elapsedMs * delta) / (long)durationMs;
+  return (byte)((long)startPwm + step);
 }
 
 const char *modeName(RunMode mode) {
@@ -378,7 +390,10 @@ byte breathingCuePwm(unsigned long nowMs) {
   unsigned long exhaleEndMs = holdEndMs + EXHALE_MS;
 
   if (cycleMs < inhaleEndMs) {
-    return MOTOR_INHALE_PWM;
+    if (cycleMs < MOTOR_RAMP_MS) {
+      return interpolatePwm(MOTOR_CUE_PWM_MIN, MOTOR_CUE_PWM_MAX, cycleMs, MOTOR_RAMP_MS);
+    }
+    return MOTOR_CUE_PWM_MAX;
   }
 
   if (cycleMs < holdEndMs) {
@@ -386,7 +401,16 @@ byte breathingCuePwm(unsigned long nowMs) {
   }
 
   if (cycleMs < exhaleEndMs) {
-    return MOTOR_INHALE_PWM;
+    unsigned long exhalePhaseMs = cycleMs - holdEndMs;
+    if (exhalePhaseMs < MOTOR_RAMP_MS) {
+      return MOTOR_CUE_PWM_MAX;
+    }
+    return interpolatePwm(
+      MOTOR_CUE_PWM_MAX,
+      MOTOR_CUE_PWM_MIN,
+      exhalePhaseMs - MOTOR_RAMP_MS,
+      EXHALE_MS - MOTOR_RAMP_MS
+    );
   }
 
   return 0;
