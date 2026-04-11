@@ -1449,6 +1449,24 @@ for (let checkT = 0.15; checkT < 0.88; checkT += GAP_CHECK_STEP) {
   }
 }
 
+// 补充 seg 9 分支交叉处叶子（seg 10 起点即交叉点 [0.289,-0.619]）
+{
+  const seg10 = vineData[0].curves[10];
+  if (seg10) {
+    const junctionTs = [0.02, 0.06];
+    for (const t of junctionTs) {
+      const pt = seg10.getPointAt(t);
+      const tan = seg10.getTangentAt(t);
+      leafSources.push({
+        type: 'figma',
+        rawX: pt.x, rawY: pt.y,
+        tanX: tan.x, tanY: tan.y,
+        vineId: 0,
+      });
+    }
+  }
+}
+
 
 // ── 生成叶子实例数据 ──
 const leafInstances = [];
