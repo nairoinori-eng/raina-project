@@ -3,7 +3,7 @@
 
 /*
   raina_mcu_show.ino
-  正式展出版固件。
+  Production firmware for exhibition use.
 */
 
 const unsigned long SERIAL_BAUD = 115200UL;
@@ -16,9 +16,8 @@ const byte SENSOR_PINS[SENSOR_COUNT] = {A0, A1, A2, A3};
 const byte MOTOR_LEFT_PIN = 5;
 const byte MOTOR_RIGHT_PIN = 6;
 const bool MOTOR_ACTIVE_LOW = true;
+// S9012 is a PNP transistor, so the motor driver is active-low.
 
-// S9012 是 PNP，高边驱动默认使用低电平导通。
-const bool MOTOR_ACTIVE_LOW = true;
 
 const float DEFAULT_WEIGHT_CHEST = 0.60f;
 const float DEFAULT_WEIGHT_WAIST = 0.40f;
