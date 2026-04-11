@@ -47,6 +47,15 @@
     </div>
 
     <div class="debug-section">
+      <label for="pixel-ratio-slider">高清粒子精度 (<span id="pixel-ratio-val">1.5</span>)：</label>
+      <input type="range" id="pixel-ratio-slider" min="10" max="40" value="15" />
+      <label for="bloom-slider">边缘物理泛光 (<span id="bloom-val">0.12</span>)：</label>
+      <input type="range" id="bloom-slider" min="0" max="200" value="12" />
+      <label for="exposure-slider">电影级曝光率 (<span id="exposure-val">1.00</span>)：</label>
+      <input type="range" id="exposure-slider" min="20" max="300" value="100" />
+    </div>
+
+    <div class="debug-section">
       <button id="btn-start">▶ 按钮：开始体验</button>
       <button id="btn-reset">↺ 按钮：重置</button>
     </div>

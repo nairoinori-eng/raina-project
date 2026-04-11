@@ -2132,7 +2132,7 @@ function animate() {
   ambGeo.attributes.position.needsUpdate = true;
 
   // Bloom 随呼吸调整（blend 高时反而收敛，防过曝）
-  bloomPass.strength = 0.12 + breathe * 0.06 - smoothBlend * 0.03;
+  bloomPass.strength = userBloomStrength + breathe * 0.06 - smoothBlend * 0.03;
 
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
 
@@ -2174,6 +2174,35 @@ const blendSlider = document.getElementById('blend-slider');
 blendSlider.addEventListener('input', () => {
   targetBlend = blendSlider.value / 100;   // 本地直接生效，无需 Flask
   socket.emit('set_blend', { value: targetBlend });
+});
+
+// 高清粒子精度（pixel ratio 1.0~4.0）
+const pixelRatioSlider = document.getElementById('pixel-ratio-slider');
+const pixelRatioVal = document.getElementById('pixel-ratio-val');
+let userPixelRatio = 1.5;
+pixelRatioSlider.addEventListener('input', () => {
+  userPixelRatio = pixelRatioSlider.value / 10;
+  pixelRatioVal.textContent = userPixelRatio.toFixed(1);
+  renderer.setPixelRatio(userPixelRatio);
+  composer.setPixelRatio(userPixelRatio);
+});
+
+// 边缘物理泛光（bloom strength 0.0~2.0，覆盖animate里的breath调制）
+const bloomSlider = document.getElementById('bloom-slider');
+const bloomVal = document.getElementById('bloom-val');
+let userBloomStrength = 0.12;
+bloomSlider.addEventListener('input', () => {
+  userBloomStrength = bloomSlider.value / 100;
+  bloomVal.textContent = userBloomStrength.toFixed(2);
+});
+
+// 电影级曝光率（toneMappingExposure 0.2~3.0）
+const exposureSlider = document.getElementById('exposure-slider');
+const exposureVal = document.getElementById('exposure-val');
+exposureSlider.addEventListener('input', () => {
+  const exp = exposureSlider.value / 100;
+  exposureVal.textContent = exp.toFixed(2);
+  renderer.toneMappingExposure = exp;
 });
 
 document.getElementById('btn-start').addEventListener('click', () => socket.emit('button_press'));
