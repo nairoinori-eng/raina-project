@@ -2681,6 +2681,10 @@ socket.on('state_change', (data) => {
   if (data.mode === 'IDLE') { resetToIdle(); return; }
   currentMode = data.mode;
   if (data.blend !== undefined) mergeIncomingBlend(data.blend);
+  if (data.threshold !== undefined && thresholdSlider && thresholdVal) {
+    thresholdSlider.value = String(data.threshold);
+    thresholdVal.textContent = String(data.threshold);
+  }
   updateDebugUI();
   console.log(`[状态] → ${currentMode}`);
 });
@@ -2698,11 +2702,19 @@ const debugPanel  = document.getElementById('debug-panel');
 const debugState  = document.getElementById('debug-state');
 const debugBlend  = document.getElementById('debug-blend');
 const blendSlider = document.getElementById('blend-slider');
+const thresholdSlider = document.getElementById('threshold-slider');
+const thresholdVal = document.getElementById('threshold-val');
 const skipGuideButton = document.getElementById('btn-skip-guide');
 
 blendSlider.addEventListener('input', () => {
   targetBlend = blendSlider.value / 100;   // 本地直接生效，无需 Flask
   socket.emit('set_blend', { value: targetBlend });
+});
+
+thresholdSlider.addEventListener('input', () => {
+  const threshold = Number(thresholdSlider.value);
+  thresholdVal.textContent = String(threshold);
+  socket.emit('set_threshold', { threshold });
 });
 
 // 高清粒子精度（pixel ratio 1.0~4.0）

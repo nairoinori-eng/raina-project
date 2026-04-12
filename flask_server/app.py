@@ -82,7 +82,7 @@ RESET_COMMAND = os.getenv("ARDUINO_RESET_COMMAND", "RESET")
 
 ALLOWED_UPLOAD_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
 SERIAL_LINE_PATTERN = re.compile(r"([A-Za-z0-9_]+):([-+]?\d+(?:\.\d+)?)")
-DEFAULT_STATE_PAYLOAD_FIELDS = ("mode", "session_id", "blend", "serial_connected", "serial_port")
+DEFAULT_STATE_PAYLOAD_FIELDS = ("mode", "session_id", "blend", "serial_connected", "serial_port", "threshold")
 
 
 logging.basicConfig(
