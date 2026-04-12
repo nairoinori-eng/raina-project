@@ -2279,6 +2279,11 @@ function enterExperience() {
   console.log('[raina] 呼吸体验阶段开始');
 }
 
+function skipGuide() {
+  if (currentMode !== 'GUIDE') return;
+  enterExperience();
+}
+
 function resetToIdle() {
   currentMode = 'IDLE';
   targetBlend   = 0.0;
@@ -2656,6 +2661,7 @@ const debugPanel  = document.getElementById('debug-panel');
 const debugState  = document.getElementById('debug-state');
 const debugBlend  = document.getElementById('debug-blend');
 const blendSlider = document.getElementById('blend-slider');
+const skipGuideButton = document.getElementById('btn-skip-guide');
 
 blendSlider.addEventListener('input', () => {
   targetBlend = blendSlider.value / 100;   // 本地直接生效，无需 Flask
@@ -2706,6 +2712,13 @@ document.getElementById('btn-start').addEventListener('click', () => {
   }
   startGuide();
 });
+skipGuideButton.addEventListener('click', () => {
+  if (socket.connected) {
+    socket.emit('skip_guide');
+    return;
+  }
+  skipGuide();
+});
 document.getElementById('btn-reset').addEventListener('click', () => {
   if (socket.connected) {
     socket.emit('admin_reset');
@@ -2717,6 +2730,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
 function updateDebugUI() {
   if (debugState) debugState.textContent = currentMode;
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
+  if (skipGuideButton) skipGuideButton.disabled = currentMode !== 'GUIDE';
 }
 
 

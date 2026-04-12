@@ -125,6 +125,7 @@ class RuntimeState:
     def __init__(self) -> None:
         self.lock = RLock()
         self.mode = "IDLE"
+        self.flow_revision = 0
         self.weight_chest = DEFAULT_WEIGHT_CHEST
         self.weight_waist = DEFAULT_WEIGHT_WAIST
         self.threshold = DEFAULT_THRESHOLD
@@ -139,6 +140,7 @@ class RuntimeState:
 
     def reset_for_new_session(self) -> SessionBundle:
         self.mode = "IDLE"
+        self.flow_revision += 1
         self.sensor = SensorSnapshot()
         self.debug_override = False
         self.session = self._new_session()
@@ -547,17 +549,32 @@ def sync_arduino_for_mode(mode: str) -> None:
         serial_bridge.enqueue(RESET_COMMAND)
 
 
-def schedule_state_change(delay_sec: float, expected_mode: str, next_mode: str) -> None:
+def schedule_experience_tail(flow_revision: int) -> None:
+    schedule_state_change(EXPERIENCE_DURATION_SEC, "EXPERIENCE", "TRANSITION", flow_revision)
+    schedule_state_change(EXPERIENCE_DURATION_SEC + TRANSITION_DURATION_SEC, "TRANSITION", "WAITING", flow_revision)
+
+
+def schedule_state_change(delay_sec: float, expected_mode: str, next_mode: str, flow_revision: int) -> None:
     session_id = state.session.session_id
 
     def _task() -> None:
         socketio.sleep(delay_sec)
         with state.lock:
-            if state.session.session_id != session_id or state.mode != expected_mode:
+            if (
+                state.session.session_id != session_id
+                or state.mode != expected_mode
+                or state.flow_revision != flow_revision
+            ):
                 return
             state.mode = next_mode
+            next_revision = flow_revision
+            if next_mode == "EXPERIENCE":
+                state.flow_revision += 1
+                next_revision = state.flow_revision
         sync_arduino_for_mode(next_mode)
         emit_state_change(mode=next_mode)
+        if next_mode == "EXPERIENCE":
+            schedule_experience_tail(next_revision)
 
     socketio.start_background_task(_task)
 
@@ -567,18 +584,29 @@ def start_guide_flow() -> dict[str, Any]:
         if state.mode != "IDLE":
             return state.snapshot()
         state.mode = "GUIDE"
+        state.flow_revision += 1
         state.session.locked = True
         state.debug_override = False
+        flow_revision = state.flow_revision
         snapshot = state.snapshot()
 
     emit_state_change(mode="START_GUIDE")
-    schedule_state_change(GUIDE_DURATION_SEC, "GUIDE", "EXPERIENCE")
-    schedule_state_change(GUIDE_DURATION_SEC + EXPERIENCE_DURATION_SEC, "EXPERIENCE", "TRANSITION")
-    schedule_state_change(
-        GUIDE_DURATION_SEC + EXPERIENCE_DURATION_SEC + TRANSITION_DURATION_SEC,
-        "TRANSITION",
-        "WAITING",
-    )
+    schedule_state_change(GUIDE_DURATION_SEC, "GUIDE", "EXPERIENCE", flow_revision)
+    return snapshot
+
+
+def skip_guide_flow() -> dict[str, Any]:
+    with state.lock:
+        if state.mode != "GUIDE":
+            return state.snapshot()
+        state.mode = "EXPERIENCE"
+        state.flow_revision += 1
+        flow_revision = state.flow_revision
+        snapshot = state.snapshot()
+
+    sync_arduino_for_mode("EXPERIENCE")
+    emit_state_change(mode="EXPERIENCE")
+    schedule_experience_tail(flow_revision)
     return snapshot
 
 
@@ -755,6 +783,11 @@ def on_button_press(data: dict[str, Any] | None = None) -> None:
 @socketio.on("admin_reset")
 def on_admin_reset() -> None:
     reset_system()
+
+
+@socketio.on("skip_guide")
+def on_skip_guide() -> None:
+    skip_guide_flow()
 
 
 @socketio.on("set_blend")
