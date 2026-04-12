@@ -1323,8 +1323,8 @@ const vineVertexShader = /* glsl */`
 
       float effectivePulse = totalPulse * depthFade;
       // 主藤脉冲 boost 压低（alpha/size 膨胀是"亮"的主因，不是颜色）
-      float pulseAlpha = (aVineId < 0.5) ? 0.15 : 0.45;
-      float pulseSize  = (aVineId < 0.5) ? 0.15 : 0.5;
+      float pulseAlpha = (aVineId < 0.5) ? 0.0 : 0.45;
+      float pulseSize  = (aVineId < 0.5) ? 0.0 : 0.5;
       alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * pulseAlpha);
       alpha *= uFormation;  // hide vines during intro
       sz = aSize * (1.0 + effectivePulse * pulseSize);
