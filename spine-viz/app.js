@@ -2268,8 +2268,10 @@ function enterExperience() {
   // 确保 formation = 1, guideAlpha = 1
   spineMat.uniforms.uFormation.value  = 1.0;
   spineMat.uniforms.uGuideAlpha.value = 1.0;
+  spineMat.uniforms.uSegmentHighlight.value = 0.0;
   vineMat.uniforms.uFormation.value   = 1.0;
   leafPoints.visible = true;
+  comparisonMat.opacity = 0;
   updateDebugUI();
   console.log('[raina] 呼吸体验阶段开始');
 }
