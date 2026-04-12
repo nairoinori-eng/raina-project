@@ -2241,31 +2241,30 @@ for (const fl of flowerInstances) {
       : 0.022 + Math.random() * 0.008;
     flSizes[flIdx] = baseSize * (fl.scale / 0.08);
 
-    // 描边粒子更亮，形成清晰轮廓
+    // 描边粒子深色（低 alpha），勾勒轮廓
     const layerAlpha = isStamen ? 0.95
-      : isEdge ? 0.85 + Math.random() * 0.10  // 描边最亮
-      : pt.petalIndex < 2 ? 0.50 + Math.random() * 0.10
-      : pt.petalIndex < 4 ? 0.60 + Math.random() * 0.10
-      : 0.70 + Math.random() * 0.10;
+      : isEdge ? 0.25 + Math.random() * 0.10  // 描边深色
+      : pt.petalIndex < 2 ? 0.55 + Math.random() * 0.10
+      : pt.petalIndex < 4 ? 0.65 + Math.random() * 0.10
+      : 0.75 + Math.random() * 0.10;
     flAlphas[flIdx] = layerAlpha;
 
-    // 颜色：每瓣有自己的色通道，瓣内根→尖渐变更浓郁
+    // 颜色：描边用深色(base)，填充瓣内渐变+撞色
     const dist = Math.sqrt(pt.bloomPos[0] * pt.bloomPos[0] + pt.bloomPos[1] * pt.bloomPos[1]);
     const distNorm = Math.min(1, dist / 0.52);
     let cv;
     if (isStamen) {
-      cv = 0.85 + Math.random() * 0.15; // 花蕊鹅黄
+      cv = 0.85 + Math.random() * 0.15;
+    } else if (isEdge) {
+      // 描边粒子：贴近 base color（cv≈0），深色勾边
+      cv = (Math.random() - 0.5) * 0.08;
     } else {
-      // 每瓣走不同色通道，瓣内从深到浅渐变
-      const petalHue = pt.petalIndex % 3; // 0,1,2 三种色调
+      const petalHue = pt.petalIndex % 3;
       if (petalHue === 0) {
-        // base → highlight（暖调渐变）
         cv = distNorm * 0.75 + (Math.random() - 0.5) * 0.12;
       } else if (petalHue === 1) {
-        // base → accent1（根部深，尖端用 accent1 色调）
         cv = -(distNorm * 0.45 + (Math.random() - 0.5) * 0.10);
       } else {
-        // base → accent2（另一个色调）
         cv = -(0.50 + distNorm * 0.40 + (Math.random() - 0.5) * 0.10);
       }
     }
