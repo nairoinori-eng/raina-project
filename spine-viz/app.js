@@ -2622,10 +2622,15 @@ socket.on('sensor_data', (data) => {
 socket.on('state_change', (data) => {
   if (data.mode === 'START_GUIDE') { startGuide(); return; }
   if (data.mode === 'EXPERIENCE') { enterExperience(); }
+  if (data.mode === 'IDLE') { resetToIdle(); return; }
   currentMode = data.mode;
   if (data.blend !== undefined) targetBlend = data.blend;
   updateDebugUI();
   console.log(`[状态] → ${currentMode}`);
+});
+
+socket.on('reset', () => {
+  resetToIdle();
 });
 
 
@@ -2680,8 +2685,20 @@ exposureSlider.addEventListener('input', () => {
   renderer.toneMappingExposure = exp;
 });
 
-document.getElementById('btn-start').addEventListener('click', () => startGuide());
-document.getElementById('btn-reset').addEventListener('click', () => resetToIdle());
+document.getElementById('btn-start').addEventListener('click', () => {
+  if (socket.connected) {
+    socket.emit('button_press');
+    return;
+  }
+  startGuide();
+});
+document.getElementById('btn-reset').addEventListener('click', () => {
+  if (socket.connected) {
+    socket.emit('admin_reset');
+    return;
+  }
+  resetToIdle();
+});
 
 function updateDebugUI() {
   if (debugState) debugState.textContent = currentMode;

@@ -3,3 +3,8 @@ dist/
 .vite/
 .DS_Store
 *.local
+__pycache__/
+*.pyc
+.venv/
+venv/
+flask_server/runtime/
