@@ -2234,8 +2234,8 @@ let targetBlend   = 0.0;
 let smoothBlend   = 0.0;
 let blendVelocity = 0.0;
 const WAVE = 0.28;
-const GUIDE_BLEND_LERP = 0.03;
-const GUIDE_BLEND_EPSILON = 0.0015;
+const GUIDE_BLEND_LERP = 0.01;
+const GUIDE_BLEND_EPSILON = 0.001;
 
 // ── 引导动画状态 ──
 let guideStartTime = 0;       // 引导开始的绝对时间(秒)
