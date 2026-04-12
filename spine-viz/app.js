@@ -2149,10 +2149,10 @@ for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
   const host = sortedLeaves[i];
   // 花比叶子略小，但要看得清
   const scale = (0.12 + host.scale * 0.50) * (0.85 + Math.random() * 0.35);
-  // 花朝外方向 + 随机偏移
-  const flowerAngle = host.angle + (Math.random() - 0.5) * 0.30;
-  // 绕 X 轴倾斜 30~55°（花碗口朝叶片展开方向）
-  const tiltX = (30 + Math.random() * 25) * Math.PI / 180;
+  // 花朝向跟叶面一致（基本朝镜头），方向朝上 + 微偏
+  const flowerAngle = Math.PI / 2 + (Math.random() - 0.5) * 0.40; // 朝上±12°
+  // 轻微倾斜 15~30°（跟叶面一样基本朝镜头，微微后仰展示碗形）
+  const tiltX = (15 + Math.random() * 15) * Math.PI / 180;
   // Z 深度：在叶子前面一点
   const flowerZ = (host.leafZ || 0) + 0.05 + Math.random() * 0.05;
   const flowerSeed = 100 + i * 7;
