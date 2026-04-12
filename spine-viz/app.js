@@ -2274,7 +2274,10 @@ function enterExperience() {
   // 确保 formation = 1, guideAlpha = 1
   spineMat.uniforms.uFormation.value  = 1.0;
   spineMat.uniforms.uGuideAlpha.value = 1.0;
+  spineMat.uniforms.uSegmentHighlight.value = 0.0;
   vineMat.uniforms.uFormation.value   = 1.0;
+  leafPoints.visible = true;
+  comparisonMat.opacity = 0;
   updateDebugUI();
   console.log('[raina] 呼吸体验阶段开始');
 }
@@ -2287,6 +2290,7 @@ function resetToIdle() {
   spineMat.uniforms.uFormation.value  = 0.0;
   spineMat.uniforms.uGuideAlpha.value = 1.0;
   vineMat.uniforms.uFormation.value   = 0.0;
+  leafPoints.visible = false;
   overlays.showIdleUI();
   updateDebugUI();
 }
@@ -2348,6 +2352,7 @@ function updateIdle(t) {
   comparisonMat.opacity = 0;
   vineMat.uniforms.uFormation.value   = 0.0;
   vineMat.uniforms.uTime.value        = t;
+  leafPoints.visible = false;
 
   // IDLE 不旋转，粒子纯漂浮
   spineGroup.rotation.y = 0;
@@ -2399,8 +2404,9 @@ function updateGuide(t) {
   diffuseMat.uniforms.uAccent1.value.copy(AC1_DARK);
   diffuseMat.uniforms.uAccent2.value.copy(AC2_DARK);
 
-  // 藤蔓始终隐藏
+  // 藤蔓/叶子始终隐藏
   vineMat.uniforms.uFormation.value = 0.0;
+  leafPoints.visible = false;
 
   const e = guideElapsed;
 
@@ -2684,6 +2690,10 @@ exposureSlider.addEventListener('input', () => {
 
 document.getElementById('btn-start').addEventListener('click', () => startGuide());
 document.getElementById('btn-reset').addEventListener('click', () => resetToIdle());
+document.getElementById('btn-skip').addEventListener('click', () => {
+  if (currentMode === 'IDLE') startGuide();
+  if (currentMode === 'GUIDE') enterExperience();
+});
 
 function updateDebugUI() {
   if (debugState) debugState.textContent = currentMode;
