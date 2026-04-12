@@ -1036,7 +1036,7 @@ for (let vi = 0; vi < vineData.length; vi++) {
       // 两根藤蔓反向，形成交织
       const yNorm = (vineYMax - sy) / vineYRange;
       const vineFactor = vi === 0 ? 1 : -1;
-      const wrapR = 0.14;
+      const wrapR = 0.06;
       vnZPos[particleIdx] = tangent.x * wrapR * vineFactor + gaussRand() * 0.008;
 
       vnParamT[particleIdx] = yNorm;
@@ -1312,7 +1312,11 @@ const vineVertexShader = /* glsl */`
       float xOcclusion = 1.0 - smoothstep(uSpineHalfW - 0.04, uSpineHalfW, dxWorld);
       // 深度相对：>0 粒子在骨骼前，<0 在骨骼后
       float zRel = pWorldZ - spineWorldZ;
-      float zDepthFade = 0.25 + 0.75 * smoothstep(-0.06, 0.01, zRel);
+      // 主藤(vineId=0) Z 浅(±0.06)，用更窄阈值让微小深度差也能暗化
+      // 辅藤(vineId>0) Z 深(±0.3)，用标准阈值
+      float zLo = (aVineId < 0.5) ? -0.03 : -0.06;
+      float zHi = (aVineId < 0.5) ?  0.005 : 0.01;
+      float zDepthFade = 0.25 + 0.75 * smoothstep(zLo, zHi, zRel);
       float depthFade = mix(1.0, zDepthFade, xOcclusion);
 
       float effectivePulse = totalPulse * depthFade;
