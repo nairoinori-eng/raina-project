@@ -736,8 +736,8 @@ const N_VINES = 3; // vineId 0=主藤蔓, 1/2=点缀藤蔓（依次生长）
 // ── 点缀藤蔓配置（薄、细、装饰性）──
 // 螺旋缠绕：x=R*sin(θ), z=R*cos(θ)，永远在骨骼外圈
 const ACCENT_VINES = [
-  { radius: 0.34, freq: 2.5, phase: Math.PI * 0.35, ppv: 15000, width: 0.016, alpha: 0.85 },
-  { radius: 0.26, freq: 3.5, phase: Math.PI * 1.30, ppv: 12000, width: 0.014, alpha: 0.80 },
+  { radius: 0.34, freq: 2.5, phase: Math.PI * 0.35, ppv: 15000, width: 0.012, alpha: 0.85 },
+  { radius: 0.26, freq: 3.5, phase: Math.PI * 1.30, ppv: 12000, width: 0.010, alpha: 0.80 },
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
@@ -997,7 +997,7 @@ ACCENT_VINES.forEach((accent, accentIdx) => {
     vnParamT[particleIdx]  = yNorm;
     vnVineId[particleIdx]  = accentIdx + 1; // 1,2,3 依次长出
     vnPhase[particleIdx]   = accent.phase;
-    vnSizes[particleIdx]   = 0.035 + Math.random() * 0.010;
+    vnSizes[particleIdx]   = 0.022 + Math.random() * 0.006;
     vnAlphas[particleIdx]  = accent.alpha + Math.random() * 0.10;
     vnColorVars[particleIdx] = (Math.random() - 0.5) * 0.15;
 
@@ -1710,7 +1710,7 @@ for (const src of leafSources) {
 
     // 色系
     const colorRoll = Math.random();
-    const colorType = colorRoll < 0.70 ? 0 : colorRoll < 0.85 ? 1 : 2;
+    const colorType = colorRoll < 0.40 ? 0 : colorRoll < 0.70 ? 1 : 2;
 
     // 模板选择
     // 模板权重：柳叶形(0) 10%，中型(1) 40%，心形(2) 50%
