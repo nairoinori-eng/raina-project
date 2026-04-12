@@ -1043,7 +1043,7 @@ for (let vi = 0; vi < vineData.length; vi++) {
       vnVineId[particleIdx] = vi;
       vnPhase[particleIdx]  = pulsePhase;
 
-      const baseSize = depth === 0 ? 0.028 : depth === 1 ? 0.022 : 0.016;
+      const baseSize = depth === 0 ? 0.038 : depth === 1 ? 0.030 : 0.022;
       vnSizes[particleIdx] = baseSize + Math.random() * 0.010;
       vnAlphas[particleIdx] = (depth === 0 ? 0.90 : 0.75) + Math.random() * 0.10;
 
