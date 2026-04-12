@@ -27,7 +27,7 @@ function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
       : PARTICLES_PETALS - PARTICLES_PER_PETAL * (N_PETALS - 1);
 
     for (let i = 0; i < nPts; i++) {
-      const petalRx = 0.18 + rand() * 0.03;
+      const petalRx = 0.32 + rand() * 0.04;
       const petalRy = 0.42 + rand() * 0.03;
       let lx, ly, tries = 0;
       do {

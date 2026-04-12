@@ -42,7 +42,7 @@ export function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
     for (let i = 0; i < nPts; i++) {
       // 先在"标准花瓣"局部坐标采样（椭圆，长轴 Y 方向）
       // 花瓣局部坐标：x 横向, y 纵向（从根部 0 到尖端 1）
-      const petalRx = 0.18 + rand() * 0.03; // 半宽
+      const petalRx = 0.32 + rand() * 0.04; // 半宽（宽圆饱满）
       const petalRy = 0.42 + rand() * 0.03; // 半长
       let lx, ly;
       let tries = 0;
