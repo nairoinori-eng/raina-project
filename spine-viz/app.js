@@ -2678,6 +2678,10 @@ exposureSlider.addEventListener('input', () => {
 
 document.getElementById('btn-start').addEventListener('click', () => startGuide());
 document.getElementById('btn-reset').addEventListener('click', () => resetToIdle());
+document.getElementById('btn-skip').addEventListener('click', () => {
+  if (currentMode === 'IDLE') startGuide();
+  if (currentMode === 'GUIDE') enterExperience();
+});
 
 function updateDebugUI() {
   if (debugState) debugState.textContent = currentMode;
