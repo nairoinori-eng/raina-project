@@ -1035,9 +1035,11 @@ for (let vi = 0; vi < vineData.length; vi++) {
       // 藤蔓往右摆(tangent.x>0)=前面，往左摆=后面
       // 两根藤蔓反向，形成交织
       const yNorm = (vineYMax - sy) / vineYRange;
+      // Z 深度：正弦缠绕，沿藤蔓长度周期性前后穿插（2D 形状不变）
+      // 2.5 个周期 → 自然的编织感，两根藤蔓反相形成交织
       const vineFactor = vi === 0 ? 1 : -1;
-      const wrapR = 0.06;
-      vnZPos[particleIdx] = tangent.x * wrapR * vineFactor + gaussRand() * 0.008;
+      const wrapR = 0.10;
+      vnZPos[particleIdx] = Math.sin(yNorm * Math.PI * 2 * 2.5) * wrapR * vineFactor + gaussRand() * 0.008;
 
       vnParamT[particleIdx] = yNorm;
       vnVineId[particleIdx] = vi;
