@@ -2151,10 +2151,8 @@ for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
   const scale = (0.12 + host.scale * 0.50) * (0.85 + Math.random() * 0.35);
   // 花朝外方向 + 随机偏移
   const flowerAngle = host.angle + (Math.random() - 0.5) * 0.30;
-  // 绕 Y 轴旋转 25~50°（斜侧面，不至于压成线）
-  const tiltY = (25 + Math.random() * 25) * Math.PI / 180;
-  // 左侧花翻转朝左，右侧花朝右
-  const facingSign = host.stemSX > 0 ? 1 : -1;
+  // 绕 X 轴倾斜 30~55°（花碗口朝叶片展开方向）
+  const tiltX = (30 + Math.random() * 25) * Math.PI / 180;
   // Z 深度：在叶子前面一点
   const flowerZ = (host.leafZ || 0) + 0.05 + Math.random() * 0.05;
   const flowerSeed = 100 + i * 7;
@@ -2165,7 +2163,7 @@ for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
 
   flowerInstances.push({
     hostLeaf: host, scale, angle: flowerAngle,
-    tiltY, facingSign, flowerZ,
+    tiltX, flowerZ,
     seed: flowerSeed, growGroup: groupIdx, colorType,
   });
 }
@@ -2201,23 +2199,21 @@ for (const fl of flowerInstances) {
   const flSX = host.stemSX;
   const flSY = host.stemSY + upOffset;
 
-  // 3D 旋转矩阵：先绕 Z 轴旋转花朵朝向角，再绕 Y 轴旋转侧面
+  // 3D 旋转：先 X 轴倾斜（花碗口朝外），再 Z 轴旋转到叶片方向
   const cosA = Math.cos(fl.angle), sinA = Math.sin(fl.angle);
-  const cosT = Math.cos(fl.tiltY * fl.facingSign), sinT = Math.sin(fl.tiltY * fl.facingSign);
+  const cosT = Math.cos(fl.tiltX), sinT = Math.sin(fl.tiltX);
 
   function transform3D(pos3) {
-    // pos3 = [x, y, z] 模板坐标
     let x = pos3[0] * fl.scale;
     let y = pos3[1] * fl.scale;
     let z = pos3[2] * fl.scale;
-    // 1. 绕 Y 轴旋转 tiltY（侧面朝向）
-    const rx = x * cosT + z * sinT;
-    const rz = -x * sinT + z * cosT;
-    x = rx; z = rz;
-    // 2. 绕 Z 轴旋转花朵朝外角度
-    const fx = x * cosA - y * sinA;
-    const fy = x * sinA + y * cosA;
-    return [fx, fy, z];
+    // 1. 绕 X 轴倾斜（花碗口朝外，跟叶片面方向一致）
+    const ry = y * cosT - z * sinT;
+    const rz = y * sinT + z * cosT;
+    // 2. 绕 Z 轴旋转到叶片展开方向
+    const fx = x * cosA - ry * sinA;
+    const fy = x * sinA + ry * cosA;
+    return [fx, fy, rz];
   }
 
   for (let p = 0; p < fl.particleCount; p++) {
@@ -2248,16 +2244,25 @@ for (const fl of flowerInstances) {
       : 0.75 + Math.random() * 0.10;                      // 内层
     flAlphas[flIdx] = layerAlpha;
 
-    // 颜色渐变：根据离花心距离 → 根部深(base) → 尖端亮(highlight)
-    // bloom 态的距离
+    // 颜色：每瓣有自己的色通道，瓣内根→尖渐变更浓郁
     const dist = Math.sqrt(pt.bloomPos[0] * pt.bloomPos[0] + pt.bloomPos[1] * pt.bloomPos[1]);
-    const distNorm = Math.min(1, dist / 0.52); // 0=花心, 1=花瓣尖端
+    const distNorm = Math.min(1, dist / 0.52);
     let cv;
     if (isStamen) {
-      cv = 0.8 + Math.random() * 0.2; // 花蕊鹅黄
+      cv = 0.85 + Math.random() * 0.15; // 花蕊鹅黄
     } else {
-      // 根部 cv≈0（base color），尖端 cv≈0.7（highlight），带随机
-      cv = distNorm * 0.65 + (Math.random() - 0.5) * 0.15;
+      // 每瓣走不同色通道，瓣内从深到浅渐变
+      const petalHue = pt.petalIndex % 3; // 0,1,2 三种色调
+      if (petalHue === 0) {
+        // base → highlight（暖调渐变）
+        cv = distNorm * 0.75 + (Math.random() - 0.5) * 0.12;
+      } else if (petalHue === 1) {
+        // base → accent1（根部深，尖端用 accent1 色调）
+        cv = -(distNorm * 0.45 + (Math.random() - 0.5) * 0.10);
+      } else {
+        // base → accent2（另一个色调）
+        cv = -(0.50 + distNorm * 0.40 + (Math.random() - 0.5) * 0.10);
+      }
     }
     flColorVars[flIdx] = cv;
     flIdx++;
@@ -2361,22 +2366,22 @@ const flowerVertexShader = /* glsl */`
   }
 `;
 
-// ── 花朵颜色：亮色调（additive blending 需要亮才看得见）──
-// A 套（blend=0 紫色骨骼）→ 亮粉/绯红
-const FLOWER_A_COLOR = new THREE.Color(0xd06080);  // 亮绯红
-const FLOWER_A_HL    = new THREE.Color(0xf8c8a0);  // 暖白/鹅黄（花瓣尖端 + 花蕊）
-const FLOWER_A_AC1   = new THREE.Color(0xe04868);  // 玫红
-const FLOWER_A_AC2   = new THREE.Color(0xc05898);  // 藤紫
-// MID 套（blend=0.5）→ 桃粉
-const FLOWER_MID_COLOR = new THREE.Color(0xe89098);  // 亮桃粉
-const FLOWER_MID_HL    = new THREE.Color(0xf8e080);  // 鹅黄
-const FLOWER_MID_AC1   = new THREE.Color(0xf07888);  // 藕荷
-const FLOWER_MID_AC2   = new THREE.Color(0xd888b8);  // 淡紫
-// B 套（blend=1 金色骨骼）→ 月白/青白
-const FLOWER_B_COLOR = new THREE.Color(0xd0e0f0);  // 月白
-const FLOWER_B_HL    = new THREE.Color(0xf8f0b0);  // 淡鹅黄
-const FLOWER_B_AC1   = new THREE.Color(0xb0d8e8);  // 青白
-const FLOWER_B_AC2   = new THREE.Color(0xe0c8e0);  // 淡藤紫
+// ── 花朵颜色：浓郁有深度，瓣间撞色但不俗 ──
+// A 套（blend≈0.3~0.5 粉色骨骼阶段）→ 胭脂系
+const FLOWER_A_COLOR = new THREE.Color(0xb84060);  // 胭脂（根部深色）
+const FLOWER_A_HL    = new THREE.Color(0xf0c898);  // 暖杏白（尖端亮，花蕊偏这）
+const FLOWER_A_AC1   = new THREE.Color(0xd85838);  // 朱砂（撞色瓣）
+const FLOWER_A_AC2   = new THREE.Color(0x9048a0);  // 青莲（冷撞色瓣）
+// MID 套（blend≈0.5~0.7）→ 桃红→藕荷过渡
+const FLOWER_MID_COLOR = new THREE.Color(0xd87888);  // 桃红
+const FLOWER_MID_HL    = new THREE.Color(0xf0d878);  // 鹅黄
+const FLOWER_MID_AC1   = new THREE.Color(0xe06848);  // 珊瑚
+const FLOWER_MID_AC2   = new THREE.Color(0xa868c0);  // 藕荷
+// B 套（blend≈0.8~1.0 金色骨骼）→ 素雅清冷
+const FLOWER_B_COLOR = new THREE.Color(0xc8b8c8);  // 藕色
+const FLOWER_B_HL    = new THREE.Color(0xf0e8a8);  // 淡鹅黄
+const FLOWER_B_AC1   = new THREE.Color(0xb0a8c0);  // 丁香灰
+const FLOWER_B_AC2   = new THREE.Color(0xd8c0b8);  // 藕粉
 
 const flowerMat = new THREE.ShaderMaterial({
   vertexShader: flowerVertexShader,
