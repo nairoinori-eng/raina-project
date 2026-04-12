@@ -74,7 +74,8 @@ DEFAULT_WEIGHT_CHEST = 0.6
 DEFAULT_WEIGHT_WAIST = 0.4
 DEFAULT_THRESHOLD = 1800.0
 PREVIEW_BLEND_DEADBAND = 0.08
-PREVIEW_BLEND_SMOOTHING = 0.05
+PREVIEW_BLEND_THRESHOLD_RATIO = 0.5
+PREVIEW_BLEND_SMOOTHING = 0.015
 PUBLIC_URL = os.getenv("PUBLIC_URL", f"http://localhost:{PORT}").rstrip("/")
 START_COMMAND = os.getenv("ARDUINO_START_COMMAND", "START")
 RESET_COMMAND = os.getenv("ARDUINO_RESET_COMMAND", "RESET")
@@ -410,7 +411,8 @@ def compute_blend_from_payload(payload: dict[str, float]) -> tuple[float, float]
         chest = payload.get("S1", 0.0) - payload.get("S2", 0.0)
         waist = payload.get("S4", 0.0) - payload.get("S3", 0.0)
         raw_score = chest * state.weight_chest + waist * state.weight_waist
-        normalized = clamp(raw_score / max(state.threshold, 1.0), 0.0, 1.0)
+        preview_threshold = max(state.threshold * PREVIEW_BLEND_THRESHOLD_RATIO, 1.0)
+        normalized = clamp(raw_score / preview_threshold, 0.0, 1.0)
         if normalized <= PREVIEW_BLEND_DEADBAND:
             normalized = 0.0
         else:

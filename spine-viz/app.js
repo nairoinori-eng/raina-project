@@ -2234,6 +2234,8 @@ let targetBlend   = 0.0;
 let smoothBlend   = 0.0;
 let blendVelocity = 0.0;
 const WAVE = 0.28;
+const GUIDE_BLEND_LERP = 0.03;
+const GUIDE_BLEND_EPSILON = 0.0015;
 
 // ── 引导动画状态 ──
 let guideStartTime = 0;       // 引导开始的绝对时间(秒)
@@ -2287,6 +2289,14 @@ function resetToIdle() {
   vineMat.uniforms.uFormation.value   = 0.0;
   overlays.showIdleUI();
   updateDebugUI();
+}
+
+function stepGuideBlend() {
+  smoothBlend += (targetBlend - smoothBlend) * GUIDE_BLEND_LERP;
+  if (Math.abs(targetBlend - smoothBlend) < GUIDE_BLEND_EPSILON) {
+    smoothBlend = targetBlend;
+  }
+  smoothBlend = Math.max(0, Math.min(1, smoothBlend));
 }
 
 
@@ -2362,6 +2372,7 @@ function updateIdle(t) {
 // ── GUIDE 更新（60s 认知引导时间线）─────────────────────────
 function updateGuide(t) {
   guideElapsed = performance.now() / 1000 - guideStartTime;
+  stepGuideBlend();
 
   // 检查结束（86s 完整引导）
   if (guideElapsed >= 86) {
@@ -2403,6 +2414,7 @@ function updateGuide(t) {
   const e = guideElapsed;
 
   // 默认重置段相关 uniform
+  spineMat.uniforms.uBlend.value = smoothBlend;
   spineMat.uniforms.uBreatheExpand.value = 1.0;
 
   if (e < 3) {
