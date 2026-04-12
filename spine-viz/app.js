@@ -2147,11 +2147,17 @@ const sortedLeaves = leafInstances
 const N_FLOWER_TARGET = Math.max(8, Math.round(leafInstances.length * 0.25));
 for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
   const host = sortedLeaves[i];
-  const scale = (0.14 + host.scale * 0.45) * (0.85 + Math.random() * 0.35);
-  // 花朝向跟叶面一致（基本朝镜头），方向朝上 + 微偏
-  const flowerAngle = Math.PI / 2 + (Math.random() - 0.5) * 0.40; // 朝上±12°
-  // 轻微倾斜 15~30°（跟叶面一样基本朝镜头，微微后仰展示碗形）
-  const tiltX = (15 + Math.random() * 15) * Math.PI / 180;
+  // 花大小差异大（0.08~0.28），不能每朵一样
+  const sizeRand = 0.5 + Math.random() * 0.8; // 0.5~1.3 宽幅随机
+  const scale = (0.10 + host.scale * 0.35) * sizeRand;
+  // 花朝外（远离脊柱），不要平铺俯视
+  const isRight = host.stemSX > 0;
+  const outwardAngle = isRight
+    ? (30 + Math.random() * 40) * Math.PI / 180   // 右侧：朝右上 30~70°
+    : (110 + Math.random() * 40) * Math.PI / 180;  // 左侧：朝左上 110~150°
+  const flowerAngle = outwardAngle;
+  // 倾斜 35~55°（朝外倾斜，不平铺覆盖骨骼）
+  const tiltX = (35 + Math.random() * 20) * Math.PI / 180;
   // Z 深度：在叶子前面一点
   const flowerZ = (host.leafZ || 0) + 0.05 + Math.random() * 0.05;
   const flowerSeed = 100 + i * 7;
@@ -2168,7 +2174,7 @@ for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
 }
 
 // ── 生成花朵粒子 ──
-const FLOWER_PARTICLES_PER = 650;
+const FLOWER_PARTICLES_PER = 900;
 for (const fl of flowerInstances) {
   fl.template = generateFlowerTemplate(FLOWER_PARTICLES_PER, fl.seed);
   fl.particleCount = fl.template.length;
@@ -2239,9 +2245,9 @@ for (const fl of flowerInstances) {
       : 0.018 + Math.random() * 0.006;
     flSizes[flIdx] = baseSize * (fl.scale / 0.08);
 
-    // 描边粒子深色（低 alpha），勾勒轮廓
+    // 描边粒子深实（极低 alpha），清晰勾勒每瓣轮廓
     const layerAlpha = isStamen ? 0.95
-      : isEdge ? 0.25 + Math.random() * 0.10  // 描边深色
+      : isEdge ? 0.15 + Math.random() * 0.08  // 描边深实
       : pt.petalIndex < 2 ? 0.55 + Math.random() * 0.10
       : pt.petalIndex < 4 ? 0.65 + Math.random() * 0.10
       : 0.75 + Math.random() * 0.10;
