@@ -1,7 +1,6 @@
 // 生成花朵 3 态预览 SVG（node 运行一次即可）
 // 用法：node generate-flower-previews.cjs
 
-// 因为 flower-shapes.js 是 ESM，这里内联生成逻辑
 function seededRandom(seed) {
   let s = seed;
   return () => {
@@ -19,42 +18,50 @@ function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
   const points = [];
 
   for (let pi = 0; pi < N_PETALS; pi++) {
-    const baseAngle = (pi / N_PETALS) * Math.PI * 2 - Math.PI / 2;
-    const angleJitter = (rand() - 0.5) * 0.15;
-    const petalAngle = baseAngle + angleJitter;
+    const bloomAngle = (pi / N_PETALS) * Math.PI * 2 - Math.PI / 2
+                     + (rand() - 0.5) * 0.15;
+    const layerDepth = pi < 2 ? 0 : pi < 4 ? 1 : 2;
+
     const nPts = (pi < N_PETALS - 1)
       ? PARTICLES_PER_PETAL
       : PARTICLES_PETALS - PARTICLES_PER_PETAL * (N_PETALS - 1);
 
     for (let i = 0; i < nPts; i++) {
-      const bloomCenterR = 0.50;
-      const bloomRx = 0.22 + rand() * 0.02;
-      const bloomRy = 0.45 + rand() * 0.02;
+      const petalRx = 0.18 + rand() * 0.03;
+      const petalRy = 0.42 + rand() * 0.03;
       let lx, ly, tries = 0;
       do {
-        lx = (rand() - 0.5) * 2 * bloomRx;
-        ly = (rand() - 0.5) * 2 * bloomRy;
+        lx = (rand() - 0.5) * 2 * petalRx;
+        ly = rand() * petalRy;
         tries++;
-      } while ((lx * lx) / (bloomRx * bloomRx) + (ly * ly) / (bloomRy * bloomRy) > 1.0 && tries < 50);
+      } while ((lx * lx) / (petalRx * petalRx) + (ly * ly) / (petalRy * petalRy) > 1.0 && tries < 80);
 
-      const cos = Math.cos(petalAngle), sin = Math.sin(petalAngle);
-      const bloomX = (lx) * cos - (ly + bloomCenterR) * sin;
-      const bloomY = (lx) * sin + (ly + bloomCenterR) * cos;
+      // Bloom
+      const bloomOffset = 0.20;
+      const bCos = Math.cos(bloomAngle), bSin = Math.sin(bloomAngle);
+      const bloomX = lx * bCos - (ly + bloomOffset) * bSin;
+      const bloomY = lx * bSin + (ly + bloomOffset) * bCos;
 
-      const layerFactor = pi < 2 ? 0.70 : pi < 4 ? 0.50 : 0.30;
-      const halfCenterR = 0.15 + (bloomCenterR - 0.15) * layerFactor;
-      const halfRx = bloomRx * (0.5 + layerFactor * 0.3);
-      const halfRy = bloomRy * (0.4 + layerFactor * 0.3);
-      const halfLocalX = lx * (halfRx / bloomRx);
-      const halfLocalY = ly * (halfRy / bloomRy);
-      const halfX = (halfLocalX) * cos - (halfLocalY + halfCenterR) * sin;
-      const halfY = (halfLocalX) * sin + (halfLocalY + halfCenterR) * cos;
+      // Bud
+      const budUpAngle = 0 + (pi - 2) * 0.12;
+      const budNarrow = 0.35;
+      const budLx = lx * budNarrow;
+      const budLy = ly * 0.7;
+      const budOffset = 0.03 + layerDepth * 0.02;
+      const budCos = Math.cos(budUpAngle), budSin = Math.sin(budUpAngle);
+      const budX = budLx * budCos - (budLy + budOffset) * budSin;
+      const budY = budLx * budSin + (budLy + budOffset) * budCos;
 
-      const budR = 0.08 + rand() * 0.10;
-      const budAngle = petalAngle + (rand() - 0.5) * 0.5;
-      const budSpread = 0.04;
-      const budX = Math.cos(budAngle) * budR + (rand() - 0.5) * budSpread;
-      const budY = Math.sin(budAngle) * budR + (rand() - 0.5) * budSpread;
+      // Half
+      const halfOpenFactor = layerDepth === 0 ? 0.65 : layerDepth === 1 ? 0.35 : 0.12;
+      const halfAngle = budUpAngle + (bloomAngle - budUpAngle) * halfOpenFactor;
+      const halfNarrow = budNarrow + (1.0 - budNarrow) * halfOpenFactor * 0.7;
+      const halfLx = lx * halfNarrow;
+      const halfLy = ly * (0.7 + 0.3 * halfOpenFactor);
+      const halfOffset = budOffset + (bloomOffset - budOffset) * halfOpenFactor;
+      const hCos = Math.cos(halfAngle), hSin = Math.sin(halfAngle);
+      const halfX = halfLx * hCos - (halfLy + halfOffset) * hSin;
+      const halfY = halfLx * hSin + (halfLy + halfOffset) * hCos;
 
       points.push({ budPos: [budX, budY], halfPos: [halfX, halfY], bloomPos: [bloomX, bloomY], petalIndex: pi });
     }
@@ -65,10 +72,10 @@ function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
     const a = rand() * Math.PI * 2;
     const bloomX = Math.cos(a) * r;
     const bloomY = Math.sin(a) * r;
-    const halfX = bloomX * 0.6;
-    const halfY = bloomY * 0.6;
-    const budX = bloomX * 0.25 + (rand() - 0.5) * 0.02;
-    const budY = bloomY * 0.25 + (rand() - 0.5) * 0.02;
+    const halfX = bloomX * 0.5;
+    const halfY = bloomY * 0.5 + 0.06;
+    const budX = bloomX * 0.15;
+    const budY = bloomY * 0.15 + 0.12;
     points.push({ budPos: [budX, budY], halfPos: [halfX, halfY], bloomPos: [bloomX, bloomY], petalIndex: 5 });
   }
   return points;
@@ -107,4 +114,4 @@ for (const state of ['bud', 'half', 'bloom']) {
   fs.writeFileSync(file, svg);
   console.log(`写入 ${file}`);
 }
-console.log('完成！打开 SVG 文件查看 3 个形态预览。');
+console.log('完成！');
