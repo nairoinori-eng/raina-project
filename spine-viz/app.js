@@ -1036,14 +1036,14 @@ for (let vi = 0; vi < vineData.length; vi++) {
       // 两根藤蔓反向，形成交织
       const yNorm = (vineYMax - sy) / vineYRange;
       const vineFactor = vi === 0 ? 1 : -1;
-      const wrapR = 0.06;
+      const wrapR = 0.14;
       vnZPos[particleIdx] = tangent.x * wrapR * vineFactor + gaussRand() * 0.008;
 
       vnParamT[particleIdx] = yNorm;
       vnVineId[particleIdx] = vi;
       vnPhase[particleIdx]  = pulsePhase;
 
-      const baseSize = depth === 0 ? 0.038 : depth === 1 ? 0.030 : 0.022;
+      const baseSize = depth === 0 ? 0.028 : depth === 1 ? 0.022 : 0.016;
       vnSizes[particleIdx] = baseSize + Math.random() * 0.010;
       vnAlphas[particleIdx] = (depth === 0 ? 0.90 : 0.75) + Math.random() * 0.10;
 
