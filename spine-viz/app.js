@@ -2147,8 +2147,7 @@ const sortedLeaves = leafInstances
 const N_FLOWER_TARGET = Math.max(8, Math.round(leafInstances.length * 0.25));
 for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
   const host = sortedLeaves[i];
-  // 花要大，看得清花形
-  const scale = (0.20 + host.scale * 0.65) * (0.85 + Math.random() * 0.35);
+  const scale = (0.14 + host.scale * 0.45) * (0.85 + Math.random() * 0.35);
   // 花朝向跟叶面一致（基本朝镜头），方向朝上 + 微偏
   const flowerAngle = Math.PI / 2 + (Math.random() - 0.5) * 0.40; // 朝上±12°
   // 轻微倾斜 15~30°（跟叶面一样基本朝镜头，微微后仰展示碗形）
@@ -2169,7 +2168,7 @@ for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
 }
 
 // ── 生成花朵粒子 ──
-const FLOWER_PARTICLES_PER = 400;
+const FLOWER_PARTICLES_PER = 650;
 for (const fl of flowerInstances) {
   fl.template = generateFlowerTemplate(FLOWER_PARTICLES_PER, fl.seed);
   fl.particleCount = fl.template.length;
@@ -2235,10 +2234,9 @@ for (const fl of flowerInstances) {
 
     const isStamen = pt.petalIndex === 5;
     const isEdge = pt.isEdge;
-    // 粒子保持小巧精致，描边粒子略小更锐利
-    const baseSize = isStamen ? 0.020 + Math.random() * 0.006
-      : isEdge ? 0.016 + Math.random() * 0.004
-      : 0.022 + Math.random() * 0.008;
+    const baseSize = isStamen ? 0.016 + Math.random() * 0.005
+      : isEdge ? 0.012 + Math.random() * 0.003
+      : 0.018 + Math.random() * 0.006;
     flSizes[flIdx] = baseSize * (fl.scale / 0.08);
 
     // 描边粒子深色（低 alpha），勾勒轮廓
