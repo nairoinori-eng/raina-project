@@ -73,6 +73,8 @@ TRANSITION_DURATION_SEC = 18
 DEFAULT_WEIGHT_CHEST = 0.6
 DEFAULT_WEIGHT_WAIST = 0.4
 DEFAULT_THRESHOLD = 1800.0
+PREVIEW_BLEND_DEADBAND = 0.08
+PREVIEW_BLEND_SMOOTHING = 0.05
 PUBLIC_URL = os.getenv("PUBLIC_URL", f"http://localhost:{PORT}").rstrip("/")
 START_COMMAND = os.getenv("ARDUINO_START_COMMAND", "START")
 RESET_COMMAND = os.getenv("ARDUINO_RESET_COMMAND", "RESET")
@@ -400,7 +402,8 @@ def parse_serial_payload(line: str) -> dict[str, float]:
 
 def compute_blend_from_payload(payload: dict[str, float]) -> tuple[float, float]:
     with state.lock:
-        if "B" in payload:
+        use_arduino_blend = state.mode == "EXPERIENCE" and "B" in payload
+        if use_arduino_blend:
             raw = clamp(payload["B"] / 255.0, 0.0, 1.0)
             return raw, raw
 
@@ -408,7 +411,16 @@ def compute_blend_from_payload(payload: dict[str, float]) -> tuple[float, float]
         waist = payload.get("S4", 0.0) - payload.get("S3", 0.0)
         raw_score = chest * state.weight_chest + waist * state.weight_waist
         normalized = clamp(raw_score / max(state.threshold, 1.0), 0.0, 1.0)
-        return raw_score, normalized
+        if normalized <= PREVIEW_BLEND_DEADBAND:
+            normalized = 0.0
+        else:
+            normalized = (normalized - PREVIEW_BLEND_DEADBAND) / (1.0 - PREVIEW_BLEND_DEADBAND)
+
+        previous_blend = state.sensor.blend
+        smoothed = previous_blend + (normalized - previous_blend) * PREVIEW_BLEND_SMOOTHING
+        if smoothed < 0.003:
+            smoothed = 0.0
+        return raw_score, clamp(smoothed, 0.0, 1.0)
 
 
 class SerialBridge:
