@@ -2270,6 +2270,9 @@ function startGuide() {
 
 function enterExperience() {
   currentMode = 'EXPERIENCE';
+  targetBlend = 0.0;
+  smoothBlend = 0.0;
+  blendVelocity = 0.0;
   overlays.clearAll();
   // 确保 formation = 1, guideAlpha = 1
   spineMat.uniforms.uFormation.value  = 1.0;

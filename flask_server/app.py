@@ -72,7 +72,7 @@ EXPERIENCE_DURATION_SEC = 120
 TRANSITION_DURATION_SEC = 18
 DEFAULT_WEIGHT_CHEST = 0.6
 DEFAULT_WEIGHT_WAIST = 0.4
-DEFAULT_THRESHOLD = 1000.0
+DEFAULT_THRESHOLD = 600.0
 PREVIEW_BLEND_DEADBAND = 0.05
 PREVIEW_BLEND_THRESHOLD_RATIO = 0.25
 PREVIEW_BLEND_SMOOTHING = 0.08
@@ -549,6 +549,11 @@ def sync_arduino_for_mode(mode: str) -> None:
         serial_bridge.enqueue(RESET_COMMAND)
 
 
+def clear_blend_accumulator() -> None:
+    state.sensor.blend = 0.0
+    state.sensor.raw_blend = 0.0
+
+
 def schedule_experience_tail(flow_revision: int) -> None:
     schedule_state_change(EXPERIENCE_DURATION_SEC, "EXPERIENCE", "TRANSITION", flow_revision)
     schedule_state_change(EXPERIENCE_DURATION_SEC + TRANSITION_DURATION_SEC, "TRANSITION", "WAITING", flow_revision)
@@ -570,6 +575,7 @@ def schedule_state_change(delay_sec: float, expected_mode: str, next_mode: str, 
             next_revision = flow_revision
             if next_mode == "EXPERIENCE":
                 state.flow_revision += 1
+                clear_blend_accumulator()
                 next_revision = state.flow_revision
         sync_arduino_for_mode(next_mode)
         emit_state_change(mode=next_mode)
@@ -601,6 +607,7 @@ def skip_guide_flow() -> dict[str, Any]:
             return state.snapshot()
         state.mode = "EXPERIENCE"
         state.flow_revision += 1
+        clear_blend_accumulator()
         flow_revision = state.flow_revision
         snapshot = state.snapshot()
 
