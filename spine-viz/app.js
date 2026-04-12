@@ -2148,11 +2148,11 @@ const N_FLOWER_TARGET = Math.max(8, Math.round(leafInstances.length * 0.25));
 for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
   const host = sortedLeaves[i];
   // 花比叶子略小，但看得清
-  const scale = (0.06 + host.scale * 0.25) * (0.80 + Math.random() * 0.40);
+  const scale = (0.10 + host.scale * 0.40) * (0.80 + Math.random() * 0.40);
   // 花朝外方向 + 随机偏移
   const flowerAngle = host.angle + (Math.random() - 0.5) * 0.30;
-  // 绕 Y 轴旋转 55~80°（侧面朝向观众）
-  const tiltY = (55 + Math.random() * 25) * Math.PI / 180;
+  // 绕 Y 轴旋转 25~50°（斜侧面，不至于压成线）
+  const tiltY = (25 + Math.random() * 25) * Math.PI / 180;
   // 左侧花翻转朝左，右侧花朝右
   const facingSign = host.stemSX > 0 ? 1 : -1;
   // Z 深度：在叶子前面一点
@@ -2962,6 +2962,16 @@ exposureSlider.addEventListener('input', () => {
 });
 
 document.getElementById('btn-start').addEventListener('click', () => startGuide());
+document.getElementById('btn-skip').addEventListener('click', () => {
+  // 跳过引导直接进入体验模式
+  currentMode = 'EXPERIENCE';
+  overlays.clearAll();
+  spineMat.uniforms.uFormation.value  = 1.0;
+  spineMat.uniforms.uGuideAlpha.value = 1.0;
+  vineMat.uniforms.uFormation.value   = 1.0;
+  updateDebugUI();
+  console.log('[raina] 跳过引导，直接进入体验');
+});
 document.getElementById('btn-reset').addEventListener('click', () => resetToIdle());
 
 function updateDebugUI() {

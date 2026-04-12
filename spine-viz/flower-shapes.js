@@ -65,12 +65,12 @@ export function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
       // BLOOM: 碗形 Z —— 中心高，边缘低
       const [bx, by] = transform2d(def.bloom);
       const bloomDist = Math.sqrt(bx * bx + by * by);
-      const bloomZ = 0.15 * (1 - Math.pow(bloomDist / 0.55, 1.5)); // 碗形
+      const bloomZ = 0.25 * (1 - Math.pow(bloomDist / 0.55, 1.5)); // 碗形（加深）
 
       // HALF: 较浅的碗
       const [hx, hy] = transform2d(def.half);
       const halfDist = Math.sqrt(hx * hx + hy * hy);
-      const halfZ = 0.08 * (1 - Math.pow(halfDist / 0.35, 1.5));
+      const halfZ = 0.15 * (1 - Math.pow(halfDist / 0.35, 1.5));
 
       // BUD: 花瓣层叠，Z 按 petalIndex 微偏
       const [ux, uy] = transform2d(def.bud);
