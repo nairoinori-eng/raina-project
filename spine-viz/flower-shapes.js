@@ -1,6 +1,6 @@
 // 花朵形状数据（3 态 morphing：花苞 / 半开 / 全开）
-// 输出 3D 坐标 [x, y, z]：全开时碗形（花蕊高、边缘低），花苞时竖直
-// app.js 里每朵花绕 Y 轴旋转 55~80° 显示侧面
+// 输出 3D 坐标 [x, y, z] + isEdge 标记（描边粒子）
+// 花苞大小 ≈ 一片花瓣大小（自然法则）
 
 function seededRandom(seed) {
   let s = seed;
@@ -10,9 +10,11 @@ function seededRandom(seed) {
 export function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
   const rand = seededRandom(seed);
   const N_PETALS = 5;
-  const PARTICLES_STAMEN = Math.floor(particlesPerFlower * 0.10);
+  const PARTICLES_STAMEN = Math.floor(particlesPerFlower * 0.08);
   const PARTICLES_PETALS = particlesPerFlower - PARTICLES_STAMEN;
   const PER_PETAL = Math.floor(PARTICLES_PETALS / N_PETALS);
+  // 每瓣 25% 做描边
+  const EDGE_RATIO = 0.25;
 
   const DEG = Math.PI / 180;
   const points = [];
@@ -21,19 +23,23 @@ export function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
   for (let pi = 0; pi < N_PETALS; pi++) {
     const bloomAngle = pi * 72 * DEG - 90 * DEG;
     const layer = pi < 2 ? 0 : pi < 4 ? 1 : 2;
+
+    // BLOOM：胖圆花瓣
     const bloom = { cx: Math.cos(bloomAngle) * 0.28, cy: Math.sin(bloomAngle) * 0.28, rx: 0.24, ry: 0.24, angle: bloomAngle };
 
+    // BUD：花苞大小 ≈ 一片花瓣（直径 ~0.48）
     let bud;
     if (layer === 0) {
       const side = pi === 0 ? -1 : 1;
-      bud = { cx: side * 0.06, cy: 0.03, rx: 0.14, ry: 0.22, angle: side * 5 * DEG };
+      bud = { cx: side * 0.06, cy: 0.02, rx: 0.20, ry: 0.28, angle: side * 5 * DEG };
     } else if (layer === 1) {
       const side = pi === 2 ? -1 : 1;
-      bud = { cx: side * 0.03, cy: 0.10, rx: 0.09, ry: 0.15, angle: side * 3 * DEG };
+      bud = { cx: side * 0.04, cy: 0.08, rx: 0.14, ry: 0.22, angle: side * 3 * DEG };
     } else {
-      bud = { cx: 0, cy: 0.18, rx: 0.04, ry: 0.08, angle: 0 };
+      bud = { cx: 0, cy: 0.16, rx: 0.07, ry: 0.12, angle: 0 };
     }
 
+    // HALF：玫瑰螺旋
     let half;
     if (layer === 0) {
       half = { cx: Math.cos(bloomAngle) * 0.20, cy: Math.sin(bloomAngle) * 0.20, rx: 0.20, ry: 0.20, angle: bloomAngle };
@@ -51,37 +57,51 @@ export function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
   for (let pi = 0; pi < N_PETALS; pi++) {
     const def = petalDefs[pi];
     const nPts = (pi < N_PETALS - 1) ? PER_PETAL : PARTICLES_PETALS - PER_PETAL * (N_PETALS - 1);
+    const nEdge = Math.floor(nPts * EDGE_RATIO);
+    const nFill = nPts - nEdge;
 
-    for (let i = 0; i < nPts; i++) {
-      let du, dv;
-      do { du = (rand() - 0.5) * 2; dv = (rand() - 0.5) * 2; } while (du * du + dv * dv > 1.0);
+    function transform2d(state, du, dv) {
+      const c = Math.cos(state.angle), s = Math.sin(state.angle);
+      const lx = du * state.rx, ly = dv * state.ry;
+      return [state.cx + lx * c - ly * s, state.cy + lx * s + ly * c];
+    }
 
-      function transform2d(state) {
-        const c = Math.cos(state.angle), s = Math.sin(state.angle);
-        const lx = du * state.rx, ly = dv * state.ry;
-        return [state.cx + lx * c - ly * s, state.cy + lx * s + ly * c];
-      }
-
-      // BLOOM: 碗形 Z —— 中心高，边缘低
-      const [bx, by] = transform2d(def.bloom);
+    function makePoint(du, dv, isEdge) {
+      const [bx, by] = transform2d(def.bloom, du, dv);
       const bloomDist = Math.sqrt(bx * bx + by * by);
-      const bloomZ = 0.25 * (1 - Math.pow(bloomDist / 0.55, 1.5)); // 碗形（加深）
+      const bloomZ = 0.25 * (1 - Math.pow(bloomDist / 0.55, 1.5));
 
-      // HALF: 较浅的碗
-      const [hx, hy] = transform2d(def.half);
+      const [hx, hy] = transform2d(def.half, du, dv);
       const halfDist = Math.sqrt(hx * hx + hy * hy);
       const halfZ = 0.15 * (1 - Math.pow(halfDist / 0.35, 1.5));
 
-      // BUD: 花瓣层叠，Z 按 petalIndex 微偏
-      const [ux, uy] = transform2d(def.bud);
-      const budZ = pi * 0.015; // 外层低，内层高
+      const [ux, uy] = transform2d(def.bud, du, dv);
+      const budZ = pi * 0.015;
 
-      points.push({
+      return {
         budPos:   [ux, uy, budZ],
         halfPos:  [hx, hy, halfZ],
         bloomPos: [bx, by, bloomZ],
         petalIndex: pi,
-      });
+        isEdge,
+      };
+    }
+
+    // 填充粒子（圆盘内）
+    for (let i = 0; i < nFill; i++) {
+      let du, dv;
+      do { du = (rand() - 0.5) * 2; dv = (rand() - 0.5) * 2; } while (du * du + dv * dv > 1.0);
+      points.push(makePoint(du, dv, false));
+    }
+
+    // 描边粒子（圆盘边缘）
+    for (let i = 0; i < nEdge; i++) {
+      const angle = rand() * Math.PI * 2;
+      // 沿椭圆边缘 ± 微小扰动
+      const r = 0.92 + rand() * 0.08;
+      const du = Math.cos(angle) * r;
+      const dv = Math.sin(angle) * r;
+      points.push(makePoint(du, dv, true));
     }
   }
 
@@ -90,12 +110,12 @@ export function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
     const r = Math.sqrt(rand()) * 0.08;
     const a = rand() * Math.PI * 2;
     const bx = Math.cos(a) * r, by = Math.sin(a) * r;
-
     points.push({
-      budPos:   [bx * 0.1, by * 0.1 + 0.22, 0.08],
+      budPos:   [bx * 0.1, by * 0.1 + 0.20, 0.08],
       halfPos:  [bx * 0.4, by * 0.4, 0.10],
-      bloomPos: [bx, by, 0.18], // 花蕊最高
+      bloomPos: [bx, by, 0.18],
       petalIndex: 5,
+      isEdge: false,
     });
   }
 

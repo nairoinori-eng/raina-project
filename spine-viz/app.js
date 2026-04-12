@@ -2234,14 +2234,19 @@ for (const fl of flowerInstances) {
     flGrowGroup[flIdx] = fl.growGroup;
 
     const isStamen = pt.petalIndex === 5;
-    const baseSize = isStamen ? 0.028 + Math.random() * 0.012 : 0.036 + Math.random() * 0.016;
-    flSizes[flIdx] = baseSize * (fl.scale / 0.10);
+    const isEdge = pt.isEdge;
+    // 粒子保持小巧精致，描边粒子略小更锐利
+    const baseSize = isStamen ? 0.020 + Math.random() * 0.006
+      : isEdge ? 0.016 + Math.random() * 0.004
+      : 0.022 + Math.random() * 0.008;
+    flSizes[flIdx] = baseSize * (fl.scale / 0.08);
 
-    // 花瓣层次：外层稍暗，内层亮，花蕊最亮
+    // 描边粒子更亮，形成清晰轮廓
     const layerAlpha = isStamen ? 0.95
-      : pt.petalIndex < 2 ? 0.55 + Math.random() * 0.10  // 外层
-      : pt.petalIndex < 4 ? 0.65 + Math.random() * 0.10  // 中层
-      : 0.75 + Math.random() * 0.10;                      // 内层
+      : isEdge ? 0.85 + Math.random() * 0.10  // 描边最亮
+      : pt.petalIndex < 2 ? 0.50 + Math.random() * 0.10
+      : pt.petalIndex < 4 ? 0.60 + Math.random() * 0.10
+      : 0.70 + Math.random() * 0.10;
     flAlphas[flIdx] = layerAlpha;
 
     // 颜色：每瓣有自己的色通道，瓣内根→尖渐变更浓郁
