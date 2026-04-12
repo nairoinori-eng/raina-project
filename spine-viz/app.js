@@ -1314,10 +1314,10 @@ const vineVertexShader = /* glsl */`
       float xOcclusion = 1.0 - smoothstep(uSpineHalfW - 0.04, uSpineHalfW, dxWorld);
       // 深度相对：>0 粒子在骨骼前，<0 在骨骼后
       float zRel = pWorldZ - spineWorldZ;
-      // 主藤(vineId=0) Z 浅(±0.06)，用更窄阈值让微小深度差也能暗化
+      // 主藤(vineId=0) Z 浅(±0.10)，用宽阈值让脉冲从前到后平滑过渡
       // 辅藤(vineId>0) Z 深(±0.3)，用标准阈值
-      float zLo = (aVineId < 0.5) ? -0.03 : -0.06;
-      float zHi = (aVineId < 0.5) ?  0.005 : 0.01;
+      float zLo = (aVineId < 0.5) ? -0.08 : -0.06;
+      float zHi = (aVineId < 0.5) ?  0.08 : 0.01;
       float zDepthFade = 0.25 + 0.75 * smoothstep(zLo, zHi, zRel);
       float depthFade = mix(1.0, zDepthFade, xOcclusion);
 
