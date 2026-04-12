@@ -1339,12 +1339,12 @@ const vineVertexShader = /* glsl */`
 // 藤蔓配色：与骨骼互补反相 + 饱和中点（每档都有色相，不走灰）
 // A 套（blend=0）：骨骼深紫时 → 藤蔓金
 const VINE_A_COLOR = new THREE.Color(0x7a5618);  // 饱和深金基调
-const VINE_A_HL    = new THREE.Color(0x5a4628);  // 闷金脉冲（紫色阶段不刺眼）
+const VINE_A_HL    = new THREE.Color(0x382818);  // 深闷金脉冲（紫色阶段再压暗）
 const VINE_A_AC1   = new THREE.Color(0xc8804a);  // 暖琥珀点缀
 const VINE_A_AC2   = new THREE.Color(0x4a2e08);  // 深青铜阴影
 // MID 套（blend=0.5）：翠绿过渡（粉红的对比色），高光/暗部都压得更深
 const VINE_MID_COLOR = new THREE.Color(0x78c890);  // 翠绿基调（base 保持）
-const VINE_MID_HL    = new THREE.Color(0x2a4438);  // 深闷翠脉冲（亮部再压暗）
+const VINE_MID_HL    = new THREE.Color(0x1a2e24);  // 极闷翠脉冲（粉色阶段再压暗）
 const VINE_MID_AC1   = new THREE.Color(0x1a3828);  // 深墨翠点缀
 const VINE_MID_AC2   = new THREE.Color(0x081810);  // 近黑暗部
 // B 套（blend=1）：骨骼金时 → 藤蔓花青
