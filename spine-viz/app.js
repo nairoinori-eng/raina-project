@@ -70,23 +70,23 @@ const N_AMB   = 300;                   // Layer E
 // 3. 颜色（低饱和度，优雅克制）
 // ============================================================
 
-const COLOR_DARK = new THREE.Color(0x3a2d6e);  // 深蓝紫（压暗回来）
-const COLOR_MID  = new THREE.Color(0x5c527a);  // 灰紫过渡
-const COLOR_GOLD = new THREE.Color(0xc4a882);  // 灰金色
+const COLOR_DARK = new THREE.Color(0x3f2a82);  // 中等饱和深紫
+const COLOR_MID  = new THREE.Color(0xd87890);  // 粉红过渡（饱和的中间色，不再灰）
+const COLOR_GOLD = new THREE.Color(0xd49c58);  // 中等饱和暖金
 
 // 高光色（接近白色的高亮，强烈正面光感）
-const HL_DARK = new THREE.Color(0xc0b0f0);   // 亮白紫
-const HL_MID  = new THREE.Color(0xe0d0c0);   // 亮白金
-const HL_GOLD = new THREE.Color(0xfff0d8);   // 近白暖光
+const HL_DARK = new THREE.Color(0xc8a0f4);   // 柔和亮紫
+const HL_MID  = new THREE.Color(0xffd8e8);   // 亮粉高光
+const HL_GOLD = new THREE.Color(0xffe0a0);   // 柔和亮金
 
 // 对比色1：暖色系（高饱和）
 const AC1_DARK = new THREE.Color(0xff6840);  // 鲜橘红
-const AC1_MID  = new THREE.Color(0xf0a030);  // 鲜琥珀
+const AC1_MID  = new THREE.Color(0xf8d030);  // 亮黄（粉里撞出来的暖 pop 色）
 const AC1_GOLD = new THREE.Color(0xff3090);  // 亮品红（在金色中极醒目）
 
 // 对比色2：冷色系（高饱和）
 const AC2_DARK = new THREE.Color(0x20e0c0);  // 鲜翡翠
-const AC2_MID  = new THREE.Color(0x30d870);  // 鲜翠绿
+const AC2_MID  = new THREE.Color(0x30d0b0);  // 薄荷绿松石（粉的互补色，最强反差）
 const AC2_GOLD = new THREE.Color(0x2868ff);  // 亮宝蓝（金色的互补色）
 
 
@@ -147,7 +147,7 @@ function getAccent2Color(blend) {
 
 const canvas = document.getElementById('spine-canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.5));  // 降低像素密度提升帧率
+renderer.setPixelRatio(3.0);  // 锁定高清模式
 renderer.setSize(window.innerWidth, window.innerHeight);
 // 不用色调映射（ACES会把暗色压太狠），用shader clamp防过曝即可
 
@@ -187,6 +187,7 @@ const fragmentShader = /* glsl */`
   uniform vec3 uHighlight;
   uniform vec3 uAccent1;
   uniform vec3 uAccent2;
+  uniform float uAlphaBoost; // 高清模式亮度补偿
   varying float vAlpha;
   varying float vColorVar;
   void main() {
@@ -204,7 +205,7 @@ const fragmentShader = /* glsl */`
     c = clamp(c, 0.0, 0.88);
     float core  = exp(-d * d * 24.0);
     float halo  = exp(-d * d * 10.0) * 0.12;
-    float alpha = (core + halo) * vAlpha;
+    float alpha = (core + halo) * vAlpha * uAlphaBoost;
     gl_FragColor = vec4(c, alpha);
   }
 `;
@@ -283,6 +284,7 @@ const spineFragmentShader = /* glsl */`
   uniform vec3 uAccent1;
   uniform vec3 uAccent2;
   uniform float uSegmentHighlight;  // 0 = normal, 1 = thoracic orange + lumbar cyan
+  uniform float uAlphaBoost; // 高清模式亮度补偿
   varying float vAlpha;
   varying float vColorVar;
   varying float vParamT;
@@ -300,9 +302,10 @@ const spineFragmentShader = /* glsl */`
     c = clamp(c, 0.0, 0.88);
     // Segment highlight: 只高亮弯曲最严重的区域
     // 胸椎峰值 @ t ≈ 0.33 (T7)，腰椎峰值 @ t ≈ 0.75 (L3)
+    // 用 AC1_DARK (鲜橘红) 和 AC2_DARK (鲜翡翠) 保证色板一致性
     if (uSegmentHighlight > 0.0) {
-      vec3 thoracicCol = vec3(1.0, 0.55, 0.18);
-      vec3 lumbarCol   = vec3(0.18, 0.75, 0.92);
+      vec3 thoracicCol = vec3(1.0, 0.408, 0.251);   // AC1_DARK 0xff6840
+      vec3 lumbarCol   = vec3(0.125, 0.878, 0.753);  // AC2_DARK 0x20e0c0
       // 胸椎区域：t 从 0.12 升起，0.33 峰值，0.52 落下
       float thorZone = smoothstep(0.12, 0.28, vParamT)
                      * (1.0 - smoothstep(0.38, 0.52, vParamT));
@@ -315,7 +318,7 @@ const spineFragmentShader = /* glsl */`
     }
     float core  = exp(-d * d * 24.0);
     float halo  = exp(-d * d * 10.0) * 0.12;
-    float alpha = (core + halo) * vAlpha;
+    float alpha = (core + halo) * vAlpha * uAlphaBoost;
     gl_FragColor = vec4(c, alpha);
   }
 `;
@@ -336,7 +339,7 @@ const spColorVars = new Float32Array(N_SPINE);
 // 空心管参数（跟随 SPINE_SCALE 缩放）
 const TUBE_OUTER   = 0.14 * SPINE_SCALE;
 const TUBE_INNER   = 0.055 * SPINE_SCALE;
-const TUBE_Y_SCALE = 1.0;              // Z深度=X深度，真正的圆形截面
+const TUBE_Y_SCALE = 1.9;              // Z 方向椭圆截面，增强立体感
 
 // 管壁宽度沿脊柱变化（模拟真实椎体：颈椎窄→胸椎中→腰椎宽→骶椎收）
 function tubeWidthAt(t) {
@@ -535,7 +538,7 @@ for (let vi = 0; vi < 13; vi++) {
       ? Math.pow(Math.random(), 0.5) * VERT_OUTER
       : VERT_INNER + Math.random() * (VERT_OUTER - VERT_INNER);
     const cosA   = Math.cos(vAngle) * vr;
-    const gz     = Math.sin(vAngle) * vr;
+    const gz     = Math.sin(vAngle) * vr * 1.9; // Z 方向椭圆，与 TUBE_Y_SCALE 一致
     // Y方向扩大分布范围，用 alpha 衰减制造上下渐变（立体感）
     const ySigma = 0.030 * SPINE_SCALE;
     const gy     = gaussRand() * ySigma;
@@ -660,6 +663,7 @@ const spineMat = new THREE.ShaderMaterial({
     uFormation:         { value: 0.0 },   // 0=scattered, 1=formed
     uGuideAlpha:        { value: 1.0 },   // overall alpha (0 during teaching)
     uSegmentHighlight:  { value: 0.0 },   // 0=normal, 1=thoracic/lumbar highlight
+    uAlphaBoost:        { value: 1.0 },   // 高清模式亮度补偿
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -800,10 +804,11 @@ diffuseGeo.setAttribute('aColorVar', new THREE.BufferAttribute(dfColorVars, 1));
 const diffuseMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
   uniforms: {
-    uColor:     { value: COLOR_DARK.clone() },
-    uHighlight: { value: HL_DARK.clone() },
-    uAccent1:   { value: AC1_DARK.clone() },
-    uAccent2:   { value: AC2_DARK.clone() },
+    uColor:      { value: COLOR_DARK.clone() },
+    uHighlight:  { value: HL_DARK.clone() },
+    uAccent1:    { value: AC1_DARK.clone() },
+    uAccent2:    { value: AC2_DARK.clone() },
+    uAlphaBoost: { value: 1.0 },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -1291,6 +1296,7 @@ const vineMat = new THREE.ShaderMaterial({
     uTime:       { value: 0.0 },
     uVineGrowth: { value: new THREE.Vector3(0, 0, 0) },
     uFormation:  { value: 0.0 },
+    uAlphaBoost: { value: 1.0 },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -1344,10 +1350,11 @@ ambGeo.setAttribute('aColorVar', new THREE.BufferAttribute(ambCVars, 1));
 const ambMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
   uniforms: {
-    uColor:     { value: new THREE.Color(0x18102e) },
-    uHighlight: { value: new THREE.Color(0x18102e) },
-    uAccent1:   { value: new THREE.Color(0x18102e) },
-    uAccent2:   { value: new THREE.Color(0x18102e) },
+    uColor:      { value: new THREE.Color(0x18102e) },
+    uHighlight:  { value: new THREE.Color(0x18102e) },
+    uAccent1:    { value: new THREE.Color(0x18102e) },
+    uAccent2:    { value: new THREE.Color(0x18102e) },
+    uAlphaBoost: { value: 1.0 },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -1372,6 +1379,14 @@ const bloomPass = new UnrealBloomPass(
 );
 composer.addPass(bloomPass);
 
+// 锁定高清模式下的 alpha 补偿：boost = pow(3.0/1.5, 2) = 4.0
+{
+  const lockedBoost = Math.pow(3.0 / 1.5, 2.0);
+  spineMat  .uniforms.uAlphaBoost.value = lockedBoost;
+  diffuseMat.uniforms.uAlphaBoost.value = lockedBoost;
+  vineMat   .uniforms.uAlphaBoost.value = lockedBoost;
+  ambMat    .uniforms.uAlphaBoost.value = lockedBoost;
+}
 
 
 // ============================================================
