@@ -2147,8 +2147,8 @@ const sortedLeaves = leafInstances
 const N_FLOWER_TARGET = Math.max(8, Math.round(leafInstances.length * 0.25));
 for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
   const host = sortedLeaves[i];
-  // 花比叶子略小，但要看得清
-  const scale = (0.12 + host.scale * 0.50) * (0.85 + Math.random() * 0.35);
+  // 花要大，看得清花形
+  const scale = (0.20 + host.scale * 0.65) * (0.85 + Math.random() * 0.35);
   // 花朝向跟叶面一致（基本朝镜头），方向朝上 + 微偏
   const flowerAngle = Math.PI / 2 + (Math.random() - 0.5) * 0.40; // 朝上±12°
   // 轻微倾斜 15~30°（跟叶面一样基本朝镜头，微微后仰展示碗形）
@@ -2234,8 +2234,8 @@ for (const fl of flowerInstances) {
     flGrowGroup[flIdx] = fl.growGroup;
 
     const isStamen = pt.petalIndex === 5;
-    const baseSize = isStamen ? 0.024 + Math.random() * 0.010 : 0.030 + Math.random() * 0.014;
-    flSizes[flIdx] = baseSize * (fl.scale / 0.07);
+    const baseSize = isStamen ? 0.028 + Math.random() * 0.012 : 0.036 + Math.random() * 0.016;
+    flSizes[flIdx] = baseSize * (fl.scale / 0.10);
 
     // 花瓣层次：外层稍暗，内层亮，花蕊最亮
     const layerAlpha = isStamen ? 0.95
