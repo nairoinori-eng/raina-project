@@ -22,6 +22,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { io } from 'socket.io-client';
 import { VINE1_SEGMENTS, VINE2_SEGMENTS } from './figma-vine-paths.js';
 import { LEAF_SHAPES } from './leaf-shapes.js';
+import { generateFlowerTemplate, PETAL_Z_LAYERS } from './flower-shapes.js';
 import { IntroOverlays } from './intro-overlays.js';
 
 
@@ -2133,6 +2134,283 @@ leafPoints.frustumCulled = false;
 spineGroup.add(leafPoints);
 
 
+// ============================================================
+// 9b. 花朵粒子系统（宿主叶子上 morphing 绽放）
+// ============================================================
+
+// ── 花朵宿主选择：从 leafInstances 中挑 20~30% 大叶 ──
+const flowerInstances = [];
+const sortedLeaves = leafInstances
+  .map((l, i) => ({ ...l, _origIdx: i }))
+  .sort((a, b) => b.scale - a.scale); // 大叶优先
+
+const N_FLOWER_TARGET = Math.max(8, Math.round(leafInstances.length * 0.25));
+for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
+  const host = sortedLeaves[i];
+  // 花朵大小关联宿主叶子
+  const baseScale = 0.05 + host.scale * 0.35;
+  const scale = baseScale * (0.75 + Math.random() * 0.50);
+  // 花朵位置：叶子茎部偏叶尖方向 30~50%
+  const tipOffset = 0.30 + Math.random() * 0.20;
+  // 花朵角度跟随叶子朝外方向 + 随机偏移
+  const angleOffset = (Math.random() - 0.5) * 0.26; // ±15°
+  const flowerAngle = host.angle + angleOffset;
+  // Z 深度独立抖动
+  const flowerZ = (host.leafZ || 0) + (Math.random() - 0.5) * 0.10;
+  // 每朵花用不同 seed → 形状自然不同
+  const flowerSeed = 100 + i * 7;
+  // 花瓣数微调 (暂用固定5瓣模板，seed不同粒子分布不同)
+
+  // blend 阈值：4 组（0.55/0.65/0.80/1.00）+ 组内随机偏移
+  const groupIdx = Math.min(3, Math.floor(i / Math.ceil(N_FLOWER_TARGET / 4)));
+  const groupThresholds = [0.55, 0.65, 0.80, 1.00];
+  const bloomThreshold = groupThresholds[groupIdx] + (Math.random() - 0.5) * 0.03;
+
+  flowerInstances.push({
+    hostLeaf: host,
+    scale,
+    tipOffset,
+    angle: flowerAngle,
+    flowerZ,
+    seed: flowerSeed,
+    growGroup: groupIdx,
+    bloomThreshold,
+    // 色系：比叶子更鲜艳
+    colorType: Math.floor(Math.random() * 3),
+  });
+}
+
+// ── 生成花朵粒子 ──
+const FLOWER_PARTICLES_PER = 400;
+for (const fl of flowerInstances) {
+  const tmpl = generateFlowerTemplate(FLOWER_PARTICLES_PER, fl.seed);
+  fl.template = tmpl;
+  fl.particleCount = tmpl.length;
+}
+const N_FLOWER_TOTAL = flowerInstances.reduce((s, f) => s + f.particleCount, 0);
+
+// ── 属性数组 ──
+const flBudPos     = new Float32Array(N_FLOWER_TOTAL * 2);
+const flHalfPos    = new Float32Array(N_FLOWER_TOTAL * 2);
+const flBloomPos   = new Float32Array(N_FLOWER_TOTAL * 2);
+const flStemCurved = new Float32Array(N_FLOWER_TOTAL * 2);
+const flStemStraight = new Float32Array(N_FLOWER_TOTAL * 2);
+const flStemInfo   = new Float32Array(N_FLOWER_TOTAL * 2); // (stemParamT, hostVineId)
+const flGrowGroup  = new Float32Array(N_FLOWER_TOTAL);
+const flSizes      = new Float32Array(N_FLOWER_TOTAL);
+const flAlphas     = new Float32Array(N_FLOWER_TOTAL);
+const flColorVars  = new Float32Array(N_FLOWER_TOTAL);
+const flPetalZ     = new Float32Array(N_FLOWER_TOTAL);
+
+let flIdx = 0;
+for (const fl of flowerInstances) {
+  const host = fl.hostLeaf;
+  const cosA = Math.cos(fl.angle);
+  const sinA = Math.sin(fl.angle);
+
+  // 花朵中心 = 叶柄 + 沿叶片方向偏移
+  const tipDx = Math.cos(host.angle + Math.PI / 2) * fl.tipOffset * host.scale;
+  const tipDy = Math.sin(host.angle + Math.PI / 2) * fl.tipOffset * host.scale;
+  const flCX = host.stemCX + tipDx;
+  const flCY = host.stemCY + tipDy;
+  const flSX = host.stemSX + tipDx;
+  const flSY = host.stemSY + tipDy;
+
+  for (let p = 0; p < fl.particleCount; p++) {
+    const pt = fl.template[p];
+
+    // 3 态局部坐标 → 旋转 + 缩放
+    function transformLocal(pos) {
+      const lx = pos[0] * fl.scale;
+      const ly = pos[1] * fl.scale;
+      return [lx * cosA - ly * sinA, lx * sinA + ly * cosA];
+    }
+    const bud  = transformLocal(pt.budPos);
+    const half = transformLocal(pt.halfPos);
+    const bloom = transformLocal(pt.bloomPos);
+
+    flBudPos[flIdx * 2]     = bud[0];
+    flBudPos[flIdx * 2 + 1] = bud[1];
+    flHalfPos[flIdx * 2]     = half[0];
+    flHalfPos[flIdx * 2 + 1] = half[1];
+    flBloomPos[flIdx * 2]     = bloom[0];
+    flBloomPos[flIdx * 2 + 1] = bloom[1];
+    flStemCurved[flIdx * 2]     = flCX;
+    flStemCurved[flIdx * 2 + 1] = flCY;
+    flStemStraight[flIdx * 2]     = flSX;
+    flStemStraight[flIdx * 2 + 1] = flSY;
+    flStemInfo[flIdx * 2]     = host.stemParamT;
+    flStemInfo[flIdx * 2 + 1] = host.hostVineId;
+    flGrowGroup[flIdx] = fl.growGroup;
+    flPetalZ[flIdx] = fl.flowerZ + PETAL_Z_LAYERS[pt.petalIndex] * fl.scale * 2;
+
+    // 粒子大小：花蕊更小更密，花瓣稍大
+    const isStamen = pt.petalIndex === 5;
+    const baseSize = isStamen
+      ? 0.018 + Math.random() * 0.006
+      : 0.022 + Math.random() * 0.010;
+    flSizes[flIdx] = baseSize * (fl.scale / 0.08);
+
+    // alpha：花蕊更亮
+    flAlphas[flIdx] = (isStamen ? 0.85 : 0.60) + Math.random() * 0.15;
+
+    // 颜色：比叶子更鲜艳（colorVar 值更大）
+    let cv;
+    if (isStamen) {
+      cv = 0.6 + Math.random() * 0.3; // 花蕊偏亮金
+    } else if (fl.colorType === 0) {
+      cv = 0.3 + Math.random() * 0.5; // highlight
+    } else if (fl.colorType === 1) {
+      cv = -(0.2 + Math.random() * 0.3); // accent1
+    } else {
+      cv = -(0.55 + Math.random() * 0.4); // accent2
+    }
+    flColorVars[flIdx] = cv;
+
+    flIdx++;
+  }
+}
+
+// ── GPU geometry ──
+const flPositions3 = new Float32Array(N_FLOWER_TOTAL * 3);
+for (let i = 0; i < N_FLOWER_TOTAL; i++) {
+  flPositions3[i * 3]     = flStemCurved[i * 2] + flBudPos[i * 2];
+  flPositions3[i * 3 + 1] = flStemCurved[i * 2 + 1] + flBudPos[i * 2 + 1];
+  flPositions3[i * 3 + 2] = flPetalZ[i];
+}
+
+const flowerGeo = new THREE.BufferGeometry();
+flowerGeo.setAttribute('position',       new THREE.BufferAttribute(flPositions3, 3));
+flowerGeo.setAttribute('aBudPos',        new THREE.BufferAttribute(flBudPos, 2));
+flowerGeo.setAttribute('aHalfPos',       new THREE.BufferAttribute(flHalfPos, 2));
+flowerGeo.setAttribute('aBloomPos',      new THREE.BufferAttribute(flBloomPos, 2));
+flowerGeo.setAttribute('aStemCurved',    new THREE.BufferAttribute(flStemCurved, 2));
+flowerGeo.setAttribute('aStemStraight',  new THREE.BufferAttribute(flStemStraight, 2));
+flowerGeo.setAttribute('aStemInfo',      new THREE.BufferAttribute(flStemInfo, 2));
+flowerGeo.setAttribute('aGrowGroup',     new THREE.BufferAttribute(flGrowGroup, 1));
+flowerGeo.setAttribute('aSize',          new THREE.BufferAttribute(flSizes, 1));
+flowerGeo.setAttribute('aAlpha',         new THREE.BufferAttribute(flAlphas, 1));
+flowerGeo.setAttribute('aColorVar',      new THREE.BufferAttribute(flColorVars, 1));
+flowerGeo.setAttribute('aPetalZ',        new THREE.BufferAttribute(flPetalZ, 1));
+
+// ── 花朵 vertex shader（3 态 morphing + 分组绽放）──
+const flowerVertexShader = /* glsl */`
+  attribute vec2 aBudPos;
+  attribute vec2 aHalfPos;
+  attribute vec2 aBloomPos;
+  attribute vec2 aStemCurved;
+  attribute vec2 aStemStraight;
+  attribute vec2 aStemInfo;   // (stemParamT, hostVineId)
+  attribute float aGrowGroup;
+  attribute float aSize;
+  attribute float aAlpha;
+  attribute float aColorVar;
+  attribute float aPetalZ;
+
+  uniform float uBlend;
+  uniform float uTime;
+  uniform vec4 uFlowerGrowths; // 4 组绽放进度
+  uniform float uFlowerBloom;  // 全局绽放度 (0=bud, 1=bloom)
+
+  varying float vAlpha;
+  varying float vColorVar;
+
+  void main() {
+    float stemParamT = aStemInfo.x;
+    float hostVineId = aStemInfo.y;
+
+    // 1. 花朵中心位置（双态插值）
+    float lb = clamp((uBlend - (1.0 - stemParamT) * 0.28) / 0.72, 0.0, 1.0);
+    vec2 stemPos = mix(aStemCurved, aStemStraight, lb);
+
+    // 2. 摇曳（跟随宿主藤蔓）
+    float swayBase = 1.0 - stemParamT * 0.3;
+    float vineAmp = hostVineId < 0.5 ? 1.0 : (hostVineId < 1.5 ? 1.4 : 0.7);
+    float vineFreq = hostVineId < 0.5 ? 1.0 : (hostVineId < 1.5 ? 0.8 : 1.3);
+    float vinePhase = hostVineId < 0.5 ? 0.2 : (hostVineId < 1.5 ? 1.100 : 4.084);
+    float swayX = sin(uTime * 0.35 * vineFreq + stemParamT * 3.0 + vinePhase) * 0.025 * swayBase * vineAmp;
+    float swayY = sin(uTime * 0.6 * vineFreq + stemParamT * 8.0 + vinePhase * 2.0) * 0.05 * swayBase * vineAmp;
+    stemPos.x += swayX;
+    stemPos.y += swayY;
+
+    // 3. 分组绽放进度
+    float myGrowth = aGrowGroup < 0.5 ? uFlowerGrowths.x
+                   : aGrowGroup < 1.5 ? uFlowerGrowths.y
+                   : aGrowGroup < 2.5 ? uFlowerGrowths.z
+                   : uFlowerGrowths.w;
+    float growEase = smoothstep(0.0, 1.0, myGrowth);
+
+    // 4. 3 态 morphing：bud → half → bloom
+    // bloomT 由 growEase 驱动
+    vec2 localPos;
+    if (growEase < 0.5) {
+      localPos = mix(aBudPos, aHalfPos, growEase * 2.0);
+    } else {
+      localPos = mix(aHalfPos, aBloomPos, (growEase - 0.5) * 2.0);
+    }
+
+    // 5. 最终位置
+    vec2 pos2d = stemPos + localPos * growEase;
+    vec3 pos = vec3(pos2d.x, pos2d.y, aPetalZ);
+
+    float alpha = aAlpha * growEase;
+    float sz = aSize * growEase;
+
+    vAlpha = alpha;
+    vColorVar = aColorVar;
+
+    vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+    gl_PointSize = sz * (300.0 / -mv.z);
+    gl_Position = projectionMatrix * mv;
+  }
+`;
+
+// ── 花朵颜色：比叶子更鲜艳饱和 ──
+const FLOWER_A_COLOR = new THREE.Color(0xc87820);  // 浓金
+const FLOWER_A_HL    = new THREE.Color(0xf8e040);  // 亮金黄
+const FLOWER_A_AC1   = new THREE.Color(0xf04828);  // 烈橘红
+const FLOWER_A_AC2   = new THREE.Color(0xe83070);  // 浓玫红
+
+const FLOWER_MID_COLOR = new THREE.Color(0x70e890);  // 翠绿
+const FLOWER_MID_HL    = new THREE.Color(0xfff040);  // 明黄
+const FLOWER_MID_AC1   = new THREE.Color(0xf850b8);  // 亮洋红
+const FLOWER_MID_AC2   = new THREE.Color(0xa050f8);  // 亮紫
+
+const FLOWER_B_COLOR = new THREE.Color(0x2060a8);  // 浓花青
+const FLOWER_B_HL    = new THREE.Color(0x50d8f8);  // 亮青
+const FLOWER_B_AC1   = new THREE.Color(0x38d890);  // 翡翠
+const FLOWER_B_AC2   = new THREE.Color(0x8868e0);  // 紫罗兰
+
+const flowerMat = new THREE.ShaderMaterial({
+  vertexShader: flowerVertexShader,
+  fragmentShader,
+  uniforms: {
+    uColor:     { value: FLOWER_A_COLOR.clone() },
+    uHighlight: { value: FLOWER_A_HL.clone() },
+    uAccent1:   { value: FLOWER_A_AC1.clone() },
+    uAccent2:   { value: FLOWER_A_AC2.clone() },
+    uAlphaBoost: { value: 1.0 },
+    uBlend: { value: 0.0 },
+    uTime:  { value: 0.0 },
+    uFlowerGrowths: { value: new THREE.Vector4(0, 0, 0, 0) },
+    uFlowerBloom:   { value: 0.0 },
+  },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+
+// 花朵分组绽放：4 组，blend 阈值递增
+const FLOWER_GROW_THRESHOLDS = [0.55, 0.65, 0.80, 1.00];
+const FLOWER_GROW_DURATION = 3.0; // 花开比叶子慢
+const flowerGrowTriggered = [false, false, false, false];
+const flowerGrowStartTime = [-10, -10, -10, -10];
+const flowerGrowProgress = [0, 0, 0, 0];
+
+const flowerPoints = new THREE.Points(flowerGeo, flowerMat);
+flowerPoints.frustumCulled = false;
+spineGroup.add(flowerPoints);
+
 
 // ============================================================
 // 10. ambGeo (Layer E)
@@ -2295,7 +2573,7 @@ let fpsFrames = 0, fpsLast = performance.now();
 const debugFps = document.getElementById('debug-fps');
 const debugParticles = document.getElementById('debug-particles');
 // 统计总粒子数
-const totalParticleCount = N_SPINE + N_DFULL + N_AMB + N_VINE_TOTAL + N_LEAF_TOTAL;
+const totalParticleCount = N_SPINE + N_DFULL + N_AMB + N_VINE_TOTAL + N_LEAF_TOTAL + N_FLOWER_TOTAL;
 if (debugParticles) debugParticles.textContent = totalParticleCount.toLocaleString();
 
 function animate() {
@@ -2569,6 +2847,33 @@ function updateExperience(t) {
   lerpMid(leafMat.uniforms.uHighlight.value, LEAF_A_HL,    LEAF_MID_HL,    LEAF_B_HL,    colorBlend);
   lerpMid(leafMat.uniforms.uAccent1  .value, LEAF_A_AC1,   LEAF_MID_AC1,   LEAF_B_AC1,   colorBlend);
   lerpMid(leafMat.uniforms.uAccent2  .value, LEAF_A_AC2,   LEAF_MID_AC2,   LEAF_B_AC2,   colorBlend);
+
+  // 花朵 uniforms（分组触发式绽放，与叶子同模式但阈值更高）
+  for (let g = 0; g < 4; g++) {
+    if (!flowerGrowTriggered[g] && smoothBlend >= FLOWER_GROW_THRESHOLDS[g]) {
+      flowerGrowTriggered[g] = true;
+      flowerGrowStartTime[g] = t;
+    }
+    if (flowerGrowTriggered[g] && smoothBlend < FLOWER_GROW_THRESHOLDS[g] - 0.05) {
+      flowerGrowTriggered[g] = false;
+      flowerGrowStartTime[g] = t - (1.0 - flowerGrowProgress[g]) * FLOWER_GROW_DURATION;
+    }
+    if (flowerGrowTriggered[g]) {
+      flowerGrowProgress[g] = Math.min(1.0, (t - flowerGrowStartTime[g]) / FLOWER_GROW_DURATION);
+    } else {
+      const elapsed = t - flowerGrowStartTime[g];
+      flowerGrowProgress[g] = Math.max(0.0, 1.0 - elapsed / FLOWER_GROW_DURATION);
+    }
+  }
+  flowerMat.uniforms.uFlowerGrowths.value.set(
+    flowerGrowProgress[0], flowerGrowProgress[1], flowerGrowProgress[2], flowerGrowProgress[3]
+  );
+  flowerMat.uniforms.uBlend.value = smoothBlend;
+  flowerMat.uniforms.uTime.value  = t;
+  lerpMid(flowerMat.uniforms.uColor    .value, FLOWER_A_COLOR, FLOWER_MID_COLOR, FLOWER_B_COLOR, colorBlend);
+  lerpMid(flowerMat.uniforms.uHighlight.value, FLOWER_A_HL,    FLOWER_MID_HL,    FLOWER_B_HL,    colorBlend);
+  lerpMid(flowerMat.uniforms.uAccent1  .value, FLOWER_A_AC1,   FLOWER_MID_AC1,   FLOWER_B_AC1,   colorBlend);
+  lerpMid(flowerMat.uniforms.uAccent2  .value, FLOWER_A_AC2,   FLOWER_MID_AC2,   FLOWER_B_AC2,   colorBlend);
 
   // Layer C
   for (let i = 0; i < N_DIFF; i++) {
