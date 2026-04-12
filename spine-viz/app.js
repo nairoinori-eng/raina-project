@@ -2284,6 +2284,24 @@ function skipGuide() {
   enterExperience();
 }
 
+function resetGrowthVisuals() {
+  for (let v = 0; v < N_VINES; v++) {
+    vineGrowTriggered[v] = false;
+    vineGrowStartTime[v] = -10;
+    vineGrowProgress[v] = 0.0;
+  }
+  vineMat.uniforms.uVineGrowth.value.set(0, 0, 0);
+  vineMat.uniforms.uBlend.value = 0.0;
+
+  for (let g = 0; g < 4; g++) {
+    leafGrowTriggered[g] = false;
+    leafGrowStartTime[g] = -10;
+    leafGrowProgress[g] = 0.0;
+  }
+  leafMat.uniforms.uLeafGrowths.value.set(0, 0, 0, 0);
+  leafMat.uniforms.uBlend.value = 0.0;
+}
+
 function resetToIdle() {
   currentMode = 'IDLE';
   targetBlend   = 0.0;
@@ -2292,6 +2310,7 @@ function resetToIdle() {
   spineMat.uniforms.uFormation.value  = 0.0;
   spineMat.uniforms.uGuideAlpha.value = 1.0;
   vineMat.uniforms.uFormation.value   = 0.0;
+  resetGrowthVisuals();
   overlays.showIdleUI();
   updateDebugUI();
 }
@@ -2362,7 +2381,12 @@ function updateIdle(t) {
   spineMat.uniforms.uSegmentHighlight.value = 0.0;
   comparisonMat.opacity = 0;
   vineMat.uniforms.uFormation.value   = 0.0;
+  vineMat.uniforms.uVineGrowth.value.set(0, 0, 0);
+  vineMat.uniforms.uBlend.value = 0.0;
   vineMat.uniforms.uTime.value        = t;
+  leafMat.uniforms.uLeafGrowths.value.set(0, 0, 0, 0);
+  leafMat.uniforms.uBlend.value = 0.0;
+  leafMat.uniforms.uTime.value = t;
 
   // IDLE 不旋转，粒子纯漂浮
   spineGroup.rotation.y = 0;
