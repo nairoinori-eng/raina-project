@@ -2144,26 +2144,33 @@ const sortedLeaves = leafInstances
   .map((l, i) => ({ ...l, _origIdx: i }))
   .sort((a, b) => b.scale - a.scale);
 
-const N_FLOWER_TARGET = Math.max(8, Math.round(leafInstances.length * 0.25));
+// 数量增加到 40%
+const N_FLOWER_TARGET = Math.max(12, Math.round(leafInstances.length * 0.40));
 for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
   const host = sortedLeaves[i];
-  // 花大小差异大（0.08~0.28），不能每朵一样
-  const sizeRand = 0.5 + Math.random() * 0.8; // 0.5~1.3 宽幅随机
-  const scale = (0.10 + host.scale * 0.35) * sizeRand;
-  // 花朝外（远离脊柱），不要平铺俯视
+
+  // 跳过正面叶子（stemSX 接近 0 = 骨骼正面，花会覆盖骨骼）
+  if (Math.abs(host.stemSX) < 0.12) continue;
+
+  // 平均大小调大，差异仍保留
+  const sizeRand = 0.7 + Math.random() * 0.6; // 0.7~1.3
+  const scale = (0.14 + host.scale * 0.40) * sizeRand;
+
+  // 花朝外（远离脊柱）
   const isRight = host.stemSX > 0;
   const outwardAngle = isRight
-    ? (30 + Math.random() * 40) * Math.PI / 180   // 右侧：朝右上 30~70°
-    : (110 + Math.random() * 40) * Math.PI / 180;  // 左侧：朝左上 110~150°
+    ? (40 + Math.random() * 35) * Math.PI / 180
+    : (105 + Math.random() * 35) * Math.PI / 180;
   const flowerAngle = outwardAngle;
-  // 倾斜 18~28°（稍微倾斜，花形清晰可见）
+
+  // 倾斜 18~28°
   const tiltX = (18 + Math.random() * 10) * Math.PI / 180;
-  // Z 深度：在叶子前面一点
-  const flowerZ = (host.leafZ || 0) + 0.05 + Math.random() * 0.05;
+
+  // Z 深度：推到藤蔓前面，避免重叠被切割
+  const flowerZ = 0.15 + Math.random() * 0.08;
+
   const flowerSeed = 100 + i * 7;
-  // 分组
   const groupIdx = Math.min(3, Math.floor(i / Math.ceil(N_FLOWER_TARGET / 4)));
-  // 色系
   const colorType = Math.floor(Math.random() * 3);
 
   flowerInstances.push({
@@ -2241,8 +2248,8 @@ for (const fl of flowerInstances) {
     const isStamen = pt.petalIndex === 5;
     const isEdge = pt.isEdge;
     const baseSize = isStamen ? 0.016 + Math.random() * 0.005
-      : isEdge ? 0.012 + Math.random() * 0.003
-      : 0.018 + Math.random() * 0.006;
+      : isEdge ? 0.015 + Math.random() * 0.004  // 描边稍大更连续
+      : 0.017 + Math.random() * 0.005;
     flSizes[flIdx] = baseSize * (fl.scale / 0.08);
 
     // additive blending 下用亮描边（发光轮廓） + 中等填充
@@ -2410,14 +2417,14 @@ const flowerMat = new THREE.ShaderMaterial({
   depthWrite: false,
 });
 
-// 阶段1：花苞出现（叶子长完后，blend 0.46+）
-const FLOWER_GROW_THRESHOLDS = [0.46, 0.49, 0.52, 0.55];
-const FLOWER_GROW_DURATION = 2.0;
+// 阶段1：花苞出现（叶子长完后）
+const FLOWER_GROW_THRESHOLDS = [0.40, 0.43, 0.46, 0.49];
+const FLOWER_GROW_DURATION = 1.8;
 const flowerGrowTriggered = [false, false, false, false];
 const flowerGrowStartTime = [-10, -10, -10, -10];
 const flowerGrowProgress = [0, 0, 0, 0];
 // 阶段2：花苞绽放
-const FLOWER_BLOOM_THRESHOLDS = [0.60, 0.72, 0.85, 1.00];
+const FLOWER_BLOOM_THRESHOLDS = [0.50, 0.60, 0.72, 0.85];
 const FLOWER_BLOOM_DURATION = 3.0;
 const flowerBloomTriggered = [false, false, false, false];
 const flowerBloomStartTime = [-10, -10, -10, -10];

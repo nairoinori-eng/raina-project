@@ -13,8 +13,8 @@ export function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
   const PARTICLES_STAMEN = Math.floor(particlesPerFlower * 0.08);
   const PARTICLES_PETALS = particlesPerFlower - PARTICLES_STAMEN;
   const PER_PETAL = Math.floor(PARTICLES_PETALS / N_PETALS);
-  // 每瓣 30% 做描边（密实轮廓）
-  const EDGE_RATIO = 0.30;
+  // 每瓣 35% 做描边（密实连续轮廓线）
+  const EDGE_RATIO = 0.35;
 
   const DEG = Math.PI / 180;
   const points = [];
