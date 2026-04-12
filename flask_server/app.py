@@ -520,6 +520,16 @@ class SerialBridge:
 serial_bridge = SerialBridge()
 
 
+def sync_arduino_for_mode(mode: str) -> None:
+    if mode == "EXPERIENCE":
+        logger.info("进入 EXPERIENCE，启动 Arduino 呼吸节奏")
+        serial_bridge.enqueue(START_COMMAND)
+        return
+    if mode in {"TRANSITION", "WAITING", "IDLE"}:
+        logger.info("离开体验阶段，停止 Arduino 呼吸节奏")
+        serial_bridge.enqueue(RESET_COMMAND)
+
+
 def schedule_state_change(delay_sec: float, expected_mode: str, next_mode: str) -> None:
     session_id = state.session.session_id
 
@@ -529,6 +539,7 @@ def schedule_state_change(delay_sec: float, expected_mode: str, next_mode: str) 
             if state.session.session_id != session_id or state.mode != expected_mode:
                 return
             state.mode = next_mode
+        sync_arduino_for_mode(next_mode)
         emit_state_change(mode=next_mode)
 
     socketio.start_background_task(_task)
@@ -543,7 +554,6 @@ def start_guide_flow() -> dict[str, Any]:
         state.debug_override = False
         snapshot = state.snapshot()
 
-    serial_bridge.enqueue(START_COMMAND)
     emit_state_change(mode="START_GUIDE")
     schedule_state_change(GUIDE_DURATION_SEC, "GUIDE", "EXPERIENCE")
     schedule_state_change(GUIDE_DURATION_SEC + EXPERIENCE_DURATION_SEC, "EXPERIENCE", "TRANSITION")
