@@ -1047,7 +1047,7 @@ for (let vi = 0; vi < vineData.length; vi++) {
 
       const baseSize = depth === 0 ? 0.038 : depth === 1 ? 0.030 : 0.022;
       vnSizes[particleIdx] = baseSize + Math.random() * 0.010;
-      vnAlphas[particleIdx] = (depth === 0 ? 0.90 : 0.75) + Math.random() * 0.10;
+      vnAlphas[particleIdx] = (depth === 0 ? 0.55 : 0.45) + Math.random() * 0.10;
 
       // 颜色渐变：顶部暖亮 → 底部深冷 + Z深度立体
       const yNormColor = (vineYMax - sy) / vineYRange;
@@ -1323,8 +1323,8 @@ const vineVertexShader = /* glsl */`
 
       float effectivePulse = totalPulse * depthFade;
       // 主藤脉冲 boost 压低（alpha/size 膨胀是"亮"的主因，不是颜色）
-      float pulseAlpha = (aVineId < 0.5) ? 0.0 : 0.45;
-      float pulseSize  = (aVineId < 0.5) ? 0.0 : 0.5;
+      float pulseAlpha = (aVineId < 0.5) ? 0.08 : 0.45;
+      float pulseSize  = (aVineId < 0.5) ? 0.08 : 0.5;
       alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * pulseAlpha);
       alpha *= uFormation;  // hide vines during intro
       sz = aSize * (1.0 + effectivePulse * pulseSize);
