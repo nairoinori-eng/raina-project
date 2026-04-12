@@ -2630,11 +2630,21 @@ function updateExperience(t) {
 
 const socket = io('http://localhost:5000');
 
+function mergeIncomingBlend(nextBlend) {
+  if (nextBlend === undefined || nextBlend === null || Number.isNaN(nextBlend)) return;
+  const clamped = Math.max(0, Math.min(1, nextBlend));
+  if (currentMode === 'IDLE') {
+    targetBlend = clamped;
+    return;
+  }
+  targetBlend = Math.max(targetBlend, clamped);
+}
+
 socket.on('connect',    () => { console.log('✅ Flask 已连接'); updateDebugUI(); });
 socket.on('disconnect', () => { console.log('❌ Flask 断开');   });
 
 socket.on('sensor_data', (data) => {
-  targetBlend = data.blend;
+  mergeIncomingBlend(data.blend);
   updateDebugUI();
 });
 
@@ -2643,7 +2653,7 @@ socket.on('state_change', (data) => {
   if (data.mode === 'EXPERIENCE') { enterExperience(); }
   if (data.mode === 'IDLE') { resetToIdle(); return; }
   currentMode = data.mode;
-  if (data.blend !== undefined) targetBlend = data.blend;
+  if (data.blend !== undefined) mergeIncomingBlend(data.blend);
   updateDebugUI();
   console.log(`[状态] → ${currentMode}`);
 });

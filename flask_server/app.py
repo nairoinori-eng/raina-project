@@ -405,10 +405,11 @@ def parse_serial_payload(line: str) -> dict[str, float]:
 
 def compute_blend_from_payload(payload: dict[str, float]) -> tuple[float, float]:
     with state.lock:
+        previous_blend = state.sensor.blend
         use_arduino_blend = state.mode == "EXPERIENCE" and "B" in payload
         if use_arduino_blend:
             raw = clamp(payload["B"] / 255.0, 0.0, 1.0)
-            return raw, raw
+            return raw, max(previous_blend, raw)
 
         chest = payload.get("S1", 0.0) - payload.get("S2", 0.0)
         waist = payload.get("S4", 0.0) - payload.get("S3", 0.0)
@@ -420,7 +421,6 @@ def compute_blend_from_payload(payload: dict[str, float]) -> tuple[float, float]
         else:
             normalized = (normalized - PREVIEW_BLEND_DEADBAND) / (1.0 - PREVIEW_BLEND_DEADBAND)
 
-        previous_blend = state.sensor.blend
         if normalized <= previous_blend:
             smoothed = previous_blend
         else:
