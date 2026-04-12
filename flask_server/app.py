@@ -19,12 +19,21 @@ from flask import Flask, jsonify, render_template, request, send_from_directory
 from flask_socketio import SocketIO
 from werkzeug.utils import secure_filename
 
-try:
-    import eventlet  # noqa: F401
-except Exception:
+PREFERRED_ASYNC_MODE = os.getenv("SOCKETIO_ASYNC_MODE", "").strip().lower()
+
+if PREFERRED_ASYNC_MODE == "threading":
+    ASYNC_MODE = "threading"
+elif os.name == "nt":
+    # Windows 下 eventlet 经常导致 Flask-SocketIO 请求挂住，
+    # 默认退回 threading，稳定性更高。
     ASYNC_MODE = "threading"
 else:
-    ASYNC_MODE = "eventlet"
+    try:
+        import eventlet  # noqa: F401
+    except Exception:
+        ASYNC_MODE = "threading"
+    else:
+        ASYNC_MODE = "eventlet"
 
 try:
     import serial
