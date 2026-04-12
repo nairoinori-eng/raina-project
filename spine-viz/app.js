@@ -140,6 +140,20 @@ function getAccent2Color(blend) {
   return c;
 }
 
+/** piecewise 3 段插值：blend<0.5 从 A→MID，blend≥0.5 从 MID→B。写回 out。 */
+function lerpMid(out, A, MID, B, t) {
+  if (t < 0.5) out.lerpColors(A, MID, t * 2);
+  else         out.lerpColors(MID, B, (t - 0.5) * 2);
+}
+
+/** 不对称"拉长停留"：0~holdA 保持 0（紫色停留），1-holdB~1 保持 1（金色停留）。
+ *  紫色 hold 更长（观众看得多），金色 hold 更短（过渡占大头）。 */
+function remapDwellAsym(t, holdA, holdB) {
+  if (t <= holdA)       return 0;
+  if (t >= 1 - holdB)   return 1;
+  return (t - holdA) / (1 - holdA - holdB);
+}
+
 
 // ============================================================
 // 5. 场景 / 摄像机 / 渲染器
@@ -464,17 +478,17 @@ for (let i = 0; i < N_BONE; i++) {
   // colorVar：Z靠前→高光(正值)，对比色粒子更大更亮才能突出
   const zDepth = Math.abs(bZ[i]) / Math.max(effectiveOuter * TUBE_Y_SCALE, 0.01);
   const acRoll = Math.random();
-  if (acRoll < 0.10) {
-    spColorVars[i] = -(0.25 + Math.random() * 0.25);   // 暖对比色
-    bBaseA[i] *= 3.5;
-  } else if (acRoll < 0.18) {
-    spColorVars[i] = -(0.55 + Math.random() * 0.40);   // 冷对比色
-    bBaseA[i] *= 3.5;
-  } else if (acRoll < 0.28) {
-    spColorVars[i] = 0.6 + Math.random() * 0.4;        // 强高光粒子
-    bBaseA[i] *= 2.5;
+  if (acRoll < 0.03) {
+    spColorVars[i] = -(0.20 + Math.random() * 0.20);   // 暖对比色（减少）
+    bBaseA[i] *= 2.2;
+  } else if (acRoll < 0.06) {
+    spColorVars[i] = -(0.55 + Math.random() * 0.30);   // 冷对比色（减少）
+    bBaseA[i] *= 2.2;
+  } else if (acRoll < 0.12) {
+    spColorVars[i] = 0.5 + Math.random() * 0.3;        // 高光粒子
+    bBaseA[i] *= 1.8;
   } else {
-    spColorVars[i] = (1 - zDepth) * 0.4 + (Math.random() - 0.5) * 0.1;
+    spColorVars[i] = (1 - zDepth) * 0.35 + (Math.random() - 0.5) * 0.08;
   }
   spPositions[i*3]   = cpx + bOffCurvedX[i];
   spPositions[i*3+1] = cpy + bOffCurvedY[i];
@@ -580,17 +594,17 @@ for (let vi = 0; vi < 13; vi++) {
     spAlphas[gi]        = vBaseAlph[idx];
     const vzDepth = Math.abs(gz) / Math.max(VERT_OUTER, 0.01);
     const vacRoll = Math.random();
-    if (vacRoll < 0.10) {
-      spColorVars[gi] = -(0.25 + Math.random() * 0.25);
-      vBaseAlph[idx] *= 3.5;
-    } else if (vacRoll < 0.18) {
-      spColorVars[gi] = -(0.55 + Math.random() * 0.40);
-      vBaseAlph[idx] *= 3.5;
-    } else if (vacRoll < 0.28) {
-      spColorVars[gi] = 0.6 + Math.random() * 0.4;
-      vBaseAlph[idx] *= 2.5;
+    if (vacRoll < 0.03) {
+      spColorVars[gi] = -(0.20 + Math.random() * 0.20);
+      vBaseAlph[idx] *= 2.2;
+    } else if (vacRoll < 0.06) {
+      spColorVars[gi] = -(0.55 + Math.random() * 0.30);
+      vBaseAlph[idx] *= 2.2;
+    } else if (vacRoll < 0.12) {
+      spColorVars[gi] = 0.5 + Math.random() * 0.3;
+      vBaseAlph[idx] *= 1.8;
     } else {
-      spColorVars[gi] = (1 - vzDepth) * 0.4 + (Math.random() - 0.5) * 0.12;
+      spColorVars[gi] = (1 - vzDepth) * 0.35 + (Math.random() - 0.5) * 0.08;
     }
   }
 }
@@ -1335,8 +1349,8 @@ for (let i = 0; i < N_AMB; i++) {
   ambPos[i*3+2] = ambBase[i*3+2];
   ambSizes[i]    = 0.010 + Math.random() * 0.015;
   ambAlphas[i]   = 0.05  + Math.random() * 0.08;
-  ambOrbitR[i]   = 0.03  + Math.random() * 0.15;
-  ambOrbitSpd[i] = 0.03  + Math.random() * 0.10;
+  ambOrbitR[i]   = 0.04  + Math.random() * 0.18;
+  ambOrbitSpd[i] = 0.04  + Math.random() * 0.12;
   ambOrbitPh[i]  = Math.random() * Math.PI * 2;
   ambCVars[i]    = (Math.random() - 0.5) * 0.15;
 }
@@ -1368,6 +1382,7 @@ scene.add(new THREE.Points(ambGeo, ambMat));
 // ============================================================
 
 const composer = new EffectComposer(renderer);
+composer.setPixelRatio(3.0);  // 锁定高清模式
 composer.addPass(new RenderPass(scene, camera));
 
 // Bloom 用半分辨率渲染（性能关键优化）
@@ -1664,10 +1679,12 @@ function updateExperience(t) {
   spineMat.uniforms.uBreathe.value          = breathe;
   spineMat.uniforms.uTime.value             = t;
 
-  const blendColor = getBlendColor(smoothBlend);
-  const hlColor    = getHighlightColor(smoothBlend);
-  const ac1Color   = getAccent1Color(smoothBlend);
-  const ac2Color   = getAccent2Color(smoothBlend);
+  // 颜色用不对称停留重映射：紫色停留 0~30%，过渡 30~90%，金色停留 90~100%
+  const colorBlend = remapDwellAsym(smoothBlend, 0.3, 0.1);
+  const blendColor = getBlendColor(colorBlend);
+  const hlColor    = getHighlightColor(colorBlend);
+  const ac1Color   = getAccent1Color(colorBlend);
+  const ac2Color   = getAccent2Color(colorBlend);
   spineMat.uniforms.uColor.value.copy(blendColor);
   spineMat.uniforms.uHighlight.value.copy(hlColor);
   spineMat.uniforms.uAccent1.value.copy(ac1Color);
