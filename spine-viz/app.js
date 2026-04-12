@@ -2156,8 +2156,8 @@ for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
     ? (30 + Math.random() * 40) * Math.PI / 180   // 右侧：朝右上 30~70°
     : (110 + Math.random() * 40) * Math.PI / 180;  // 左侧：朝左上 110~150°
   const flowerAngle = outwardAngle;
-  // 倾斜 35~55°（朝外倾斜，不平铺覆盖骨骼）
-  const tiltX = (35 + Math.random() * 20) * Math.PI / 180;
+  // 倾斜 18~28°（稍微倾斜，花形清晰可见）
+  const tiltX = (18 + Math.random() * 10) * Math.PI / 180;
   // Z 深度：在叶子前面一点
   const flowerZ = (host.leafZ || 0) + 0.05 + Math.random() * 0.05;
   const flowerSeed = 100 + i * 7;
@@ -2245,12 +2245,12 @@ for (const fl of flowerInstances) {
       : 0.018 + Math.random() * 0.006;
     flSizes[flIdx] = baseSize * (fl.scale / 0.08);
 
-    // 描边粒子深实（极低 alpha），清晰勾勒每瓣轮廓
-    const layerAlpha = isStamen ? 0.95
-      : isEdge ? 0.15 + Math.random() * 0.08  // 描边深实
-      : pt.petalIndex < 2 ? 0.55 + Math.random() * 0.10
-      : pt.petalIndex < 4 ? 0.65 + Math.random() * 0.10
-      : 0.75 + Math.random() * 0.10;
+    // additive blending 下用亮描边（发光轮廓） + 中等填充
+    const layerAlpha = isStamen ? 0.90
+      : isEdge ? 0.75 + Math.random() * 0.15  // 描边亮（发光轮廓线）
+      : pt.petalIndex < 2 ? 0.35 + Math.random() * 0.10
+      : pt.petalIndex < 4 ? 0.40 + Math.random() * 0.10
+      : 0.50 + Math.random() * 0.10;
     flAlphas[flIdx] = layerAlpha;
 
     // 颜色：描边用深色(base)，填充瓣内渐变+撞色
@@ -2260,8 +2260,8 @@ for (const fl of flowerInstances) {
     if (isStamen) {
       cv = 0.85 + Math.random() * 0.15;
     } else if (isEdge) {
-      // 描边粒子：贴近 base color（cv≈0），深色勾边
-      cv = (Math.random() - 0.5) * 0.08;
+      // 描边粒子：用 highlight 色（亮色发光轮廓）
+      cv = 0.55 + Math.random() * 0.20;
     } else {
       const petalHue = pt.petalIndex % 3;
       if (petalHue === 0) {
