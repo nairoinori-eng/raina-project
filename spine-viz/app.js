@@ -2292,9 +2292,11 @@ function resetToIdle() {
 }
 
 function stepGuideBlend() {
-  smoothBlend += (targetBlend - smoothBlend) * GUIDE_BLEND_LERP;
+  if (targetBlend > smoothBlend) {
+    smoothBlend += (targetBlend - smoothBlend) * GUIDE_BLEND_LERP;
+  }
   if (Math.abs(targetBlend - smoothBlend) < GUIDE_BLEND_EPSILON) {
-    smoothBlend = targetBlend;
+    smoothBlend = Math.max(smoothBlend, targetBlend);
   }
   smoothBlend = Math.max(0, Math.min(1, smoothBlend));
 }

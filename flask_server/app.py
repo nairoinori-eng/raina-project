@@ -419,7 +419,10 @@ def compute_blend_from_payload(payload: dict[str, float]) -> tuple[float, float]
             normalized = (normalized - PREVIEW_BLEND_DEADBAND) / (1.0 - PREVIEW_BLEND_DEADBAND)
 
         previous_blend = state.sensor.blend
-        smoothed = previous_blend + (normalized - previous_blend) * PREVIEW_BLEND_SMOOTHING
+        if normalized <= previous_blend:
+            smoothed = previous_blend
+        else:
+            smoothed = previous_blend + (normalized - previous_blend) * PREVIEW_BLEND_SMOOTHING
         if smoothed < 0.003:
             smoothed = 0.0
         return raw_score, clamp(smoothed, 0.0, 1.0)
