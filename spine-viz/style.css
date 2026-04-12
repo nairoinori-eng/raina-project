@@ -13,7 +13,7 @@
 body {
   background: radial-gradient(ellipse at center, #0a0a1a 0%, #000000 100%);
   overflow: hidden;
-  font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'STSongti-SC', 'Songti SC', 'SimSun', serif;
 }
 
 /* ① Three.js 画布：铺满全屏 */
@@ -158,4 +158,201 @@ body {
 #debug-panel.hidden {
   opacity: 0;
   pointer-events: none;
+}
+
+
+/* ============================================================
+   引导动画叠加层
+   ============================================================ */
+
+/* ── IDLE UI ── */
+#intro-idle {
+  position: fixed; inset: 0;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  pointer-events: none; z-index: 15;
+  transition: opacity 0.6s ease;
+}
+#intro-idle.out { opacity: 0; pointer-events: none; }
+
+.intro-title {
+  font-size: clamp(2rem, 4vw, 3.5rem);
+  font-weight: 300; letter-spacing: 0.15em;
+  color: rgba(200, 190, 240, 0.7);
+  animation: _breathe 4s ease-in-out infinite;
+}
+@keyframes _breathe {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 0.8; }
+}
+.intro-title-en {
+  margin-top: 0.6rem;
+  font-size: clamp(0.9rem, 1.5vw, 1.3rem);
+  font-weight: 300; font-style: italic;
+  letter-spacing: 0.2em;
+  color: rgba(200, 190, 240, 0.45);
+  font-family: 'Georgia', 'Times New Roman', serif;
+}
+.intro-hint {
+  margin-top: 1.8rem; font-size: 0.9rem; font-weight: 300;
+  color: rgba(180, 170, 220, 0.35); letter-spacing: 0.1em;
+}
+
+/* ── 叙事字幕容器（左侧固定，按组堆叠）── */
+#intro-text {
+  position: fixed;
+  top: 35%;
+  left: 7%;
+  width: 38vw;
+  max-width: 600px;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* 每个叙事段是一个 flex column，所有组重叠在相同位置 */
+.intro-group {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1em;
+}
+
+/* 单行字幕：默认透明，.vis 时显示 */
+.intro-line {
+  opacity: 0;
+  transition: opacity 0.9s ease;
+  font-size: clamp(0.85rem, 1.4vw, 1.2rem);
+  font-weight: 300;
+  line-height: 1.7;
+  letter-spacing: 0.1em;
+  color: rgba(220, 215, 245, 0.92);
+  white-space: nowrap;
+  text-align: left;
+  text-shadow: 0 0 20px rgba(120, 80, 200, 0.45), 0 0 8px rgba(40, 20, 80, 0.6);
+  margin: 0;
+}
+.intro-line.vis { opacity: 1; }
+
+/* 独立定位的字幕（绕开分组堆叠）*/
+.intro-line-fixed {
+  position: fixed;
+  pointer-events: none;
+  z-index: 20;
+}
+
+/* 高亮数据颜色 */
+.hl-o { color: #ff6840; font-weight: 500; letter-spacing: 0.05em; }
+.hl-c { color: #20e0c0; font-weight: 500; letter-spacing: 0.05em; }
+
+/* ── 倒数字幕（居中单独显示）── */
+#intro-countdown {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  font-size: clamp(0.85rem, 1.4vw, 1.2rem);
+  font-weight: 300;
+  letter-spacing: 0.12em;
+  color: rgba(220, 215, 245, 0.92);
+  text-align: center;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+  z-index: 20;
+  text-shadow: 0 0 24px rgba(120, 80, 200, 0.45);
+}
+#intro-countdown.vis { opacity: 1; }
+#intro-countdown.big {
+  font-size: clamp(3rem, 7vw, 5.5rem);
+  font-weight: 200;
+  letter-spacing: 0.05em;
+}
+
+/* ── 人体剪影 ── */
+#intro-body {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(35vw, 320px);
+  opacity: 0; transition: opacity 0.8s ease;
+  pointer-events: none; z-index: 18;
+}
+#intro-body.vis { opacity: 1; }
+
+.body-svg path, .body-svg line, .body-svg ellipse {
+  fill: none; stroke: rgba(180,165,220,0.35);
+  stroke-width: 1.5; stroke-linecap: round; stroke-dasharray: 3,4;
+}
+.body-svg .spine-line {
+  stroke: rgba(160,140,210,0.5); stroke-width: 2; stroke-dasharray: 4,5;
+}
+
+.glow-dot {
+  /* 凹陷侧（左后背，胸椎凹陷对应位置） */
+  position: absolute; top: 28%; left: 20%;
+  width: 18px; height: 18px; border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,180,100,0.9) 0%, transparent 70%);
+  box-shadow: 0 0 20px rgba(255,160,80,0.6);
+  opacity: 0; transition: opacity 0.5s;
+}
+.glow-dot.vis { opacity: 1; animation: _pulse 1.6s ease-in-out infinite; }
+@keyframes _pulse {
+  0%,100% { transform: scale(1); }
+  50% { transform: scale(1.4); box-shadow: 0 0 35px rgba(255,160,80,0.8); }
+}
+
+.arrow-ind {
+  /* 箭头：从凸起（右）指向凹陷（左）——水平翻转 */
+  position: absolute; top: 28%; left: 28%; width: 45%;
+  opacity: 0; transition: opacity 0.5s;
+  transform: scaleX(-1) translateX(-30px);
+}
+.arrow-ind.vis { opacity: 1; animation: _slide 1s ease-out forwards; }
+@keyframes _slide {
+  from { transform: scaleX(-1) translateX(-30px); opacity: 0; }
+  to   { transform: scaleX(-1) translateX(0);     opacity: 1; }
+}
+
+.chest-exp {
+  /* 胸廓膨胀动画：凹陷侧（左后背）膨胀 */
+  position: absolute; top: 24%; left: 18%;
+  width: 60px; height: 70px; opacity: 0; transition: opacity 0.5s;
+}
+.chest-exp.vis { opacity: 1; }
+.rib-half {
+  /* 半椭圆向左膨胀（凹陷侧被撑开） */
+  width: 100%; height: 100%;
+  border: 2px solid rgba(255,180,100,0.5);
+  border-radius: 60% 0 0 60%; border-right: none;
+  transform-origin: right center;
+}
+.rib-half.anim { animation: _rib 3s ease-in-out infinite; }
+@keyframes _rib {
+  0%,100% { transform: scaleX(1);   border-color: rgba(255,180,100,0.4); }
+  50%     { transform: scaleX(1.5); border-color: rgba(255,200,130,0.7); }
+}
+
+/* ── 呼吸节拍器 ── */
+#intro-pacer {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  display: flex; flex-direction: column; align-items: center; gap: 1.2rem;
+  opacity: 0; transition: opacity 0.6s ease;
+  pointer-events: none; z-index: 20;
+}
+#intro-pacer.vis { opacity: 1; }
+
+.pacer-ring {
+  width: 120px; height: 120px; border-radius: 50%;
+  border: 2px solid rgba(200,180,255,0.5);
+  background: radial-gradient(circle, rgba(160,140,220,0.08) 0%, transparent 100%);
+  transition: transform 0.15s ease-out;
+}
+.pacer-label {
+  font-size: 1.1rem; font-weight: 300;
+  letter-spacing: 0.15em; color: rgba(220,210,255,0.8);
+  min-height: 1.5em;
 }

@@ -22,6 +22,7 @@ import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPa
 import { io } from 'socket.io-client';
 import { VINE1_SEGMENTS, VINE2_SEGMENTS } from './figma-vine-paths.js';
 import { LEAF_SHAPES } from './leaf-shapes.js';
+import { IntroOverlays } from './intro-overlays.js';
 
 
 // ============================================================
@@ -238,20 +239,101 @@ const spineVertexShader = /* glsl */`
   uniform float uBreatheExpand;
   uniform float uBreathe;
   uniform float uTime;
+  uniform float uFormation;    // 0 = scattered (IDLE), 1 = formed (spine visible)
+  uniform float uGuideAlpha;   // overall alpha multiplier (0 during teaching)
   varying float vAlpha;
   varying float vColorVar;
+  varying float vParamT;
   void main() {
+    // ── Formed position (normal spine) ──
     float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 center = mix(aCurvedPos, aStraightPos, lb);
     vec2 off = mix(aCurvedOff, aStraightOff, lb);
-    vec3 pos = vec3(center.x + off.x * uBreatheExpand, center.y + off.y, aZPos);
-    float size = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
-    float alpha = aAlpha * (0.55 + uBreathe * 0.45);
+    vec3 formedPos = vec3(center.x + off.x * uBreatheExpand, center.y + off.y, aZPos);
+
+    // ── Scattered position (IDLE star dust) ──
+    // Use per-axis independent seeds to avoid correlation
+    float sX = aPhase * 2.7 + aParamT * 13.1 + aColorVar * 7.3;
+    float sY = aPhase * 5.1 + aParamT * 3.7  + aColorVar * 11.9;
+    float sZ = aPhase * 3.9 + aParamT * 19.7 + aColorVar * 2.3;
+    float rx = fract(sin(sX * 12.9898) * 43758.5453) * 2.0 - 1.0;
+    float ry = fract(sin(sY * 78.233)  * 43758.5453) * 2.0 - 1.0;
+    float rz = fract(sin(sZ * 45.164)  * 43758.5453) * 2.0 - 1.0;
+    // Large spread across full screen (camera z=5 FOV 60, visible ~±2.9)
+    vec3 scatterPos = vec3(rx * 7.5, ry * 5.0, rz * 2.5);
+    // Per-particle drift speed for organic floating
+    float driftSpd = 0.06 + fract(sX * 1.23) * 0.14;
+    scatterPos.x += sin(uTime * driftSpd + sX * 6.28) * 0.6;
+    scatterPos.y += cos(uTime * driftSpd * 0.75 + sY * 4.0) * 0.42;
+    scatterPos.x += sin(uTime * 0.05 + sZ * 2.0) * 0.22;
+
+    // ── Blend between scatter and formed ──
+    vec3 pos = mix(scatterPos, formedPos, uFormation);
+
+    // ── Size: varied dust in IDLE (small + large mix), normal when formed ──
+    float sizeRand = fract(sX * 3.14);
+    float idleSize = 0.015 + sizeRand * sizeRand * 0.09;
+    float formedSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
+    float size = mix(idleSize, formedSize, uFormation);
+
+    // ── Alpha: scattered particles visible in IDLE (~30% visible) ──
+    float idleVisible = step(0.70, fract(sY * 0.618));
+    float idleAlpha = (0.15 + fract(sZ * 2.71) * 0.20) * idleVisible;
+    float formedAlpha = aAlpha * (0.55 + uBreathe * 0.45);
+    float alpha = mix(idleAlpha, formedAlpha, uFormation) * uGuideAlpha;
+
     vAlpha = alpha;
     vColorVar = aColorVar;
+    vParamT = aParamT;
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_PointSize = size * (300.0 / -mv.z);
     gl_Position = projectionMatrix * mv;
+  }
+`;
+
+// Spine-specific fragment shader with segment highlighting support
+const spineFragmentShader = /* glsl */`
+  uniform vec3 uColor;
+  uniform vec3 uHighlight;
+  uniform vec3 uAccent1;
+  uniform vec3 uAccent2;
+  uniform float uSegmentHighlight;  // 0 = normal, 1 = thoracic orange + lumbar cyan
+  uniform float uAlphaBoost; // 高清模式亮度补偿
+  varying float vAlpha;
+  varying float vColorVar;
+  varying float vParamT;
+  void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    vec3 c;
+    if (vColorVar > 0.0) {
+      c = mix(uColor, uHighlight, clamp(vColorVar, 0.0, 1.0));
+    } else if (vColorVar > -0.5) {
+      c = mix(uColor, uAccent1, clamp(-vColorVar * 2.0, 0.0, 1.0));
+    } else {
+      c = mix(uColor, uAccent2, clamp((-vColorVar - 0.5) * 2.0, 0.0, 1.0));
+    }
+    c = clamp(c, 0.0, 0.88);
+    // Segment highlight: 只高亮弯曲最严重的区域
+    // 胸椎峰值 @ t ≈ 0.33 (T7)，腰椎峰值 @ t ≈ 0.75 (L3)
+    // 用 AC1_DARK (鲜橘红) 和 AC2_DARK (鲜翡翠) 保证色板一致性
+    if (uSegmentHighlight > 0.0) {
+      vec3 thoracicCol = vec3(1.0, 0.408, 0.251);   // AC1_DARK 0xff6840
+      vec3 lumbarCol   = vec3(0.125, 0.878, 0.753);  // AC2_DARK 0x20e0c0
+      // 胸椎区域：t 从 0.12 升起，0.33 峰值，0.52 落下
+      float thorZone = smoothstep(0.12, 0.28, vParamT)
+                     * (1.0 - smoothstep(0.38, 0.52, vParamT));
+      // 腰椎区域：t 从 0.58 升起，0.75 峰值，0.95 落下
+      float lumbZone = smoothstep(0.58, 0.72, vParamT)
+                     * (1.0 - smoothstep(0.82, 0.95, vParamT));
+      vec3 hlColor = thoracicCol * thorZone + lumbarCol * lumbZone;
+      float hlStrength = max(thorZone, lumbZone);
+      c = mix(c, hlColor * 1.5, hlStrength * uSegmentHighlight);
+    }
+    float core  = exp(-d * d * 24.0);
+    float halo  = exp(-d * d * 10.0) * 0.12;
+    float alpha = (core + halo) * vAlpha * uAlphaBoost;
+    gl_FragColor = vec4(c, alpha);
   }
 `;
 
@@ -582,17 +664,20 @@ spineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(gpuParamT, 1));
 spineGeo.setAttribute('aPhase',       new THREE.BufferAttribute(gpuPhase, 1));
 
 const spineMat = new THREE.ShaderMaterial({
-  vertexShader: spineVertexShader, fragmentShader,
+  vertexShader: spineVertexShader, fragmentShader: spineFragmentShader,
   uniforms: {
-    uColor:         { value: COLOR_DARK.clone() },
-    uHighlight:     { value: HL_DARK.clone() },
-    uAccent1:       { value: AC1_DARK.clone() },
-    uAccent2:       { value: AC2_DARK.clone() },
-    uAlphaBoost:    { value: 1.0 },
-    uBlend:         { value: 0.0 },
-    uBreatheExpand: { value: 1.0 },
-    uBreathe:       { value: 0.0 },
-    uTime:          { value: 0.0 },
+    uColor:             { value: COLOR_DARK.clone() },
+    uHighlight:         { value: HL_DARK.clone() },
+    uAccent1:           { value: AC1_DARK.clone() },
+    uAccent2:           { value: AC2_DARK.clone() },
+    uAlphaBoost:        { value: 1.0 },
+    uBlend:             { value: 0.0 },
+    uBreatheExpand:     { value: 1.0 },
+    uBreathe:           { value: 0.0 },
+    uTime:              { value: 0.0 },
+    uFormation:         { value: 0.0 },   // 0=scattered, 1=formed
+    uGuideAlpha:        { value: 1.0 },   // overall alpha (0 during teaching)
+    uSegmentHighlight:  { value: 0.0 },   // 0=normal, 1=thoracic/lumbar highlight
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -601,6 +686,26 @@ const spineMat = new THREE.ShaderMaterial({
 const spinePoints = new THREE.Points(spineGeo, spineMat);
 spinePoints.frustumCulled = false;
 spineGroup.add(spinePoints);
+
+// ── 正常直脊柱对比线（虚线，教学段使用）──
+const comparisonPoints = [];
+for (let i = 0; i <= 80; i++) {
+  comparisonPoints.push(curveStraight.getPoint(i / 80));
+}
+const comparisonGeo = new THREE.BufferGeometry().setFromPoints(comparisonPoints);
+const comparisonMat = new THREE.LineDashedMaterial({
+  color: 0xbbbbcc,
+  transparent: true,
+  opacity: 0,
+  dashSize: 0.12,
+  gapSize: 0.10,
+  linewidth: 1,
+});
+const comparisonLine = new THREE.Line(comparisonGeo, comparisonMat);
+comparisonLine.computeLineDistances();
+// 放在脊柱中线（x=0），代表"如果没弯曲应该在哪里"
+comparisonLine.position.z = -0.1;
+spineGroup.add(comparisonLine);
 
 
 // ============================================================
@@ -713,10 +818,10 @@ diffuseGeo.setAttribute('aColorVar', new THREE.BufferAttribute(dfColorVars, 1));
 const diffuseMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
   uniforms: {
-    uColor:     { value: COLOR_DARK.clone() },
-    uHighlight: { value: HL_DARK.clone() },
-    uAccent1:   { value: AC1_DARK.clone() },
-    uAccent2:   { value: AC2_DARK.clone() },
+    uColor:      { value: COLOR_DARK.clone() },
+    uHighlight:  { value: HL_DARK.clone() },
+    uAccent1:    { value: AC1_DARK.clone() },
+    uAccent2:    { value: AC2_DARK.clone() },
     uAlphaBoost: { value: 1.0 },
   },
   transparent: true,
@@ -1133,6 +1238,7 @@ const vineVertexShader = /* glsl */`
   uniform float uSpineYs[33];
   uniform float uSpineHalfW;
   uniform float uSpineRotY;
+  uniform float uFormation;  // hide vines during intro (0=hidden, 1=visible)
 
   varying float vAlpha;
   varying float vColorVar;
@@ -1211,6 +1317,7 @@ const vineVertexShader = /* glsl */`
 
       float effectivePulse = totalPulse * depthFade;
       alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * 0.45);
+      alpha *= uFormation;  // hide vines during intro
       sz = aSize * (1.0 + effectivePulse * 0.5);
 
       vAlpha = alpha;
@@ -1274,6 +1381,7 @@ const vineMat = new THREE.ShaderMaterial({
     uSpineYs:    { value: SPINE_YS_FLAT },
     uSpineHalfW: { value: 0.18 },
     uSpineRotY:  { value: 0.0 },
+    uFormation:  { value: 0.0 },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -2063,10 +2171,10 @@ ambGeo.setAttribute('aColorVar', new THREE.BufferAttribute(ambCVars, 1));
 const ambMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
   uniforms: {
-    uColor:     { value: new THREE.Color(0x18102e) },
-    uHighlight: { value: new THREE.Color(0x18102e) },
-    uAccent1:   { value: new THREE.Color(0x18102e) },
-    uAccent2:   { value: new THREE.Color(0x18102e) },
+    uColor:      { value: new THREE.Color(0x18102e) },
+    uHighlight:  { value: new THREE.Color(0x18102e) },
+    uAccent1:    { value: new THREE.Color(0x18102e) },
+    uAccent2:    { value: new THREE.Color(0x18102e) },
     uAlphaBoost: { value: 1.0 },
   },
   transparent: true,
@@ -2103,17 +2211,79 @@ const bloomPass = new UnrealBloomPass(
 );
 composer.addPass(bloomPass);
 
+// 锁定高清模式下的 alpha 补偿：boost = pow(3.0/1.5, 2) = 4.0
+{
+  const lockedBoost = Math.pow(3.0 / 1.5, 2.0);
+  spineMat  .uniforms.uAlphaBoost.value = lockedBoost;
+  diffuseMat.uniforms.uAlphaBoost.value = lockedBoost;
+  vineMat   .uniforms.uAlphaBoost.value = lockedBoost;
+  ambMat    .uniforms.uAlphaBoost.value = lockedBoost;
+}
 
 
 // ============================================================
-// 11. 状态 / blend 控制
+// 11. 状态 / blend 控制 + 引导动画状态
 // ============================================================
 
-let currentMode   = 'IDLE';
+let currentMode   = 'IDLE';   // IDLE → GUIDE → EXPERIENCE
 let targetBlend   = 0.0;
 let smoothBlend   = 0.0;
 let blendVelocity = 0.0;
 const WAVE = 0.28;
+
+// ── 引导动画状态 ──
+let guideStartTime = 0;       // 引导开始的绝对时间(秒)
+let guideElapsed   = 0;       // 引导已经过的秒数
+
+// 把胸椎/腰椎峰值 3D 点传给 overlays 用于屏幕投影
+const THORACIC_PEAK_WORLD = SPINE_CURVED[4].clone();   // 最右凸
+const LUMBAR_PEAK_WORLD   = SPINE_CURVED[9].clone();   // 最左凸
+
+const overlays = new IntroOverlays({
+  camera,
+  spineGroup,
+  anchors: {
+    thoracic: THORACIC_PEAK_WORLD,
+    lumbar:   LUMBAR_PEAK_WORLD,
+  },
+});
+
+
+// ============================================================
+// 11b. 引导动画控制函数
+// ============================================================
+
+function startGuide() {
+  if (currentMode !== 'IDLE') return;
+  currentMode = 'GUIDE';
+  guideStartTime = performance.now() / 1000;
+  overlays.hideIdleUI();
+  updateDebugUI();
+  console.log('[raina] 60s 认知引导开始');
+}
+
+function enterExperience() {
+  currentMode = 'EXPERIENCE';
+  overlays.clearAll();
+  // 确保 formation = 1, guideAlpha = 1
+  spineMat.uniforms.uFormation.value  = 1.0;
+  spineMat.uniforms.uGuideAlpha.value = 1.0;
+  vineMat.uniforms.uFormation.value   = 1.0;
+  updateDebugUI();
+  console.log('[raina] 呼吸体验阶段开始');
+}
+
+function resetToIdle() {
+  currentMode = 'IDLE';
+  targetBlend   = 0.0;
+  smoothBlend   = 0.0;
+  blendVelocity = 0.0;
+  spineMat.uniforms.uFormation.value  = 0.0;
+  spineMat.uniforms.uGuideAlpha.value = 1.0;
+  vineMat.uniforms.uFormation.value   = 0.0;
+  overlays.showIdleUI();
+  updateDebugUI();
+}
 
 
 // ============================================================
@@ -2132,7 +2302,7 @@ function animate() {
   requestAnimationFrame(animate);
   time += 0.016;
 
-  // FPS 计算（每秒更新一次）
+  // FPS
   fpsFrames++;
   const now = performance.now();
   if (now - fpsLast >= 1000) {
@@ -2141,22 +2311,191 @@ function animate() {
     fpsLast = now;
   }
 
+  // ── 分模式更新 ──
+  switch (currentMode) {
+    case 'IDLE':       updateIdle(time);       break;
+    case 'GUIDE':      updateGuide(time);      break;
+    case 'EXPERIENCE': updateExperience(time); break;
+  }
+
+  // ── 公共：环境星尘始终更新 ──
+  const ap = ambGeo.attributes.position.array;
+  for (let i = 0; i < N_AMB; i++) {
+    ap[i*3]   = ambBase[i*3]   + Math.cos(time * ambOrbitSpd[i]       + ambOrbitPh[i]) * ambOrbitR[i];
+    ap[i*3+1] = ambBase[i*3+1] + Math.sin(time * ambOrbitSpd[i] * 0.7 + ambOrbitPh[i]) * ambOrbitR[i];
+  }
+  ambGeo.attributes.position.needsUpdate = true;
+
+  if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
+  composer.render();
+}
+
+// ── IDLE 更新 ──────────────────────────────────────────────
+function updateIdle(t) {
+  spineMat.uniforms.uFormation.value  = 0.0;
+  spineMat.uniforms.uGuideAlpha.value = 1.0;
+  spineMat.uniforms.uBlend.value      = 0.0;
+  spineMat.uniforms.uBreatheExpand.value = 1.0;
+  spineMat.uniforms.uBreathe.value    = 0.0;
+  spineMat.uniforms.uTime.value       = t;
+  spineMat.uniforms.uSegmentHighlight.value = 0.0;
+  comparisonMat.opacity = 0;
+  vineMat.uniforms.uFormation.value   = 0.0;
+  vineMat.uniforms.uTime.value        = t;
+
+  // IDLE 不旋转，粒子纯漂浮
+  spineGroup.rotation.y = 0;
+
+  // 颜色：固定在暗蓝紫
+  spineMat.uniforms.uColor.value.copy(COLOR_DARK);
+  spineMat.uniforms.uHighlight.value.copy(HL_DARK);
+  spineMat.uniforms.uAccent1.value.copy(AC1_DARK);
+  spineMat.uniforms.uAccent2.value.copy(AC2_DARK);
+
+  bloomPass.strength = 0.08;
+}
+
+// ── GUIDE 更新（60s 认知引导时间线）─────────────────────────
+function updateGuide(t) {
+  guideElapsed = performance.now() / 1000 - guideStartTime;
+
+  // 检查结束（86s 完整引导）
+  if (guideElapsed >= 86) {
+    enterExperience();
+    return;
+  }
+
+  // 更新叠加层
+  overlays.updateGuide(guideElapsed);
+
+  // 脊柱旋转：病理解释段 (26-40s) 冻结，其余阶段正常摆动
+  const inPathology = (guideElapsed >= 26 && guideElapsed < 40);
+  if (!branchEditMode) {
+    const rotTarget = inPathology ? 0 : Math.sin(t * 0.52) * 0.35;
+    // 平滑过渡避免跳变
+    spineGroup.rotation.y += (rotTarget - spineGroup.rotation.y) * 0.08;
+  }
+
+  // 时间总是同步
+  spineMat.uniforms.uTime.value = t;
+  vineMat.uniforms.uTime.value  = t;
+
+  // blend 在引导期间保持0
+  spineMat.uniforms.uBlend.value = 0.0;
+
+  // 颜色：固定在暗蓝紫（blend=0 的颜色）
+  spineMat.uniforms.uColor.value.copy(COLOR_DARK);
+  spineMat.uniforms.uHighlight.value.copy(HL_DARK);
+  spineMat.uniforms.uAccent1.value.copy(AC1_DARK);
+  spineMat.uniforms.uAccent2.value.copy(AC2_DARK);
+  diffuseMat.uniforms.uColor.value.copy(COLOR_DARK);
+  diffuseMat.uniforms.uHighlight.value.copy(HL_DARK);
+  diffuseMat.uniforms.uAccent1.value.copy(AC1_DARK);
+  diffuseMat.uniforms.uAccent2.value.copy(AC2_DARK);
+
+  // 藤蔓始终隐藏
+  vineMat.uniforms.uFormation.value = 0.0;
+
+  const e = guideElapsed;
+
+  // 默认重置段相关 uniform
+  spineMat.uniforms.uBreatheExpand.value = 1.0;
+
+  if (e < 3) {
+    // ─── 0-3s：粒子快速凝聚成脊柱 ───
+    const formation = e / 3;
+    spineMat.uniforms.uFormation.value        = formation;
+    spineMat.uniforms.uGuideAlpha.value       = 1.0;
+    spineMat.uniforms.uBreathe.value          = 0.0;
+    spineMat.uniforms.uSegmentHighlight.value = 0.0;
+    comparisonMat.opacity = 0;
+    bloomPass.strength = 0.08 + formation * 0.08;
+
+  } else if (e < 26) {
+    // ─── 3-26s：情感叙事段，脊柱正常展示 ───
+    const pulse = smoothstep(0, 1, (e - 4) / 3) * 0.35;
+    spineMat.uniforms.uFormation.value        = 1.0;
+    spineMat.uniforms.uGuideAlpha.value       = 1.0;
+    spineMat.uniforms.uBreathe.value          = pulse;
+    spineMat.uniforms.uSegmentHighlight.value = 0.0;
+    comparisonMat.opacity = 0;
+    bloomPass.strength = 0.16;
+
+  } else if (e < 40) {
+    // ─── 26-40s：病理解释（胸椎橙 / 腰椎青高亮 + 正常脊柱对比线）───
+    // 段高亮在 26-28s 内淡入，38-40s 淡出
+    let segHL = 1.0;
+    if (e < 28) segHL = (e - 26) / 2;
+    else if (e > 38) segHL = (40 - e) / 2;
+    // 对比线在 28-32s 淡入，36-40s 淡出
+    let lineOp = 0;
+    if (e >= 28 && e < 32) lineOp = ((e - 28) / 4) * 0.45;
+    else if (e >= 32 && e < 36) lineOp = 0.45;
+    else if (e >= 36 && e < 40) lineOp = (1 - (e - 36) / 4) * 0.45;
+
+    spineMat.uniforms.uFormation.value        = 1.0;
+    spineMat.uniforms.uGuideAlpha.value       = 1.0;
+    spineMat.uniforms.uBreathe.value          = 0.35;
+    spineMat.uniforms.uSegmentHighlight.value = segHL;
+    comparisonMat.opacity = lineOp;
+    bloomPass.strength = 0.18;
+
+  } else if (e < 44) {
+    // ─── 40-44s：脊柱淡出，准备进入教学 ───
+    const segT = (e - 40) / 4;
+    const guideAlpha = Math.max(0, 1 - segT * 1.2);
+    spineMat.uniforms.uFormation.value        = 1.0;
+    spineMat.uniforms.uGuideAlpha.value       = guideAlpha;
+    spineMat.uniforms.uBreathe.value          = 0.35 * guideAlpha;
+    spineMat.uniforms.uSegmentHighlight.value = 0.0;
+    comparisonMat.opacity = 0;
+    bloomPass.strength = 0.18 * guideAlpha + 0.04;
+
+  } else if (e < 76) {
+    // ─── 44-76s：人体轮廓教学段 + 呼吸节拍器（脊柱隐藏）───
+    spineMat.uniforms.uFormation.value        = 1.0;
+    spineMat.uniforms.uGuideAlpha.value       = 0.0;
+    spineMat.uniforms.uBreathe.value          = 0.0;
+    spineMat.uniforms.uSegmentHighlight.value = 0.0;
+    comparisonMat.opacity = 0;
+    bloomPass.strength = 0.04;
+
+  } else {
+    // ─── 76-86s："现在换你试试" + 3-2-1-开始 → 过渡 ───
+    const segT = (e - 76) / 10;
+    const guideAlpha = Math.min(1, segT * 3.0);
+    const breathe = guideAlpha * breatheCurve(t) * 0.5;
+
+    spineMat.uniforms.uFormation.value        = 1.0;
+    spineMat.uniforms.uGuideAlpha.value       = guideAlpha;
+    spineMat.uniforms.uBreathe.value          = breathe;
+    spineMat.uniforms.uBreatheExpand.value    = 1 + breathe * 0.1;
+    spineMat.uniforms.uSegmentHighlight.value = 0.0;
+    comparisonMat.opacity = 0;
+    bloomPass.strength = 0.04 + guideAlpha * 0.14;
+  }
+}
+
+// ── EXPERIENCE 更新（原有呼吸体验逻辑）──────────────────────
+function updateExperience(t) {
   // 弹簧物理平滑 blend
   const springF = (targetBlend - smoothBlend) * 0.035;
   blendVelocity = blendVelocity * 0.82 + springF;
   smoothBlend   = Math.max(0, Math.min(1, smoothBlend + blendVelocity));
 
-  const breathe       = breatheCurve(time);
-  const breatheExpand = 1 + breathe * 0.20;   // 横向呼吸扩张 ±20%
+  const breathe       = breatheCurve(t);
+  const breatheExpand = 1 + breathe * 0.20;
 
-  // 脊柱缓慢摆动 ±20°，12秒一个周期（编辑模式下暂停）
-  if (!branchEditMode) spineGroup.rotation.y = Math.sin(time * 0.52) * 0.35;
+  if (!branchEditMode) spineGroup.rotation.y = Math.sin(t * 0.52) * 0.35;
 
-  // ── Layer A + B：GPU-driven (uniforms only) ──────────────
-  spineMat.uniforms.uBlend.value         = smoothBlend;
-  spineMat.uniforms.uBreatheExpand.value = breatheExpand;
-  spineMat.uniforms.uBreathe.value       = breathe;
-  spineMat.uniforms.uTime.value          = time;
+  // Layer A + B
+  spineMat.uniforms.uFormation.value        = 1.0;
+  spineMat.uniforms.uGuideAlpha.value       = 1.0;
+  spineMat.uniforms.uSegmentHighlight.value = 0.0;
+  spineMat.uniforms.uBlend.value            = smoothBlend;
+  spineMat.uniforms.uBreatheExpand.value    = breatheExpand;
+  spineMat.uniforms.uBreathe.value          = breathe;
+  spineMat.uniforms.uTime.value             = t;
 
   // 颜色同步（基色 + 高光 + 两种对比色 都跟随 blend）
   // colorBlend: 两端不对称"停留"的重映射 blend，用于颜色。
@@ -2174,28 +2513,27 @@ function animate() {
   diffuseMat.uniforms.uHighlight.value.copy(hlColor);
   diffuseMat.uniforms.uAccent1.value.copy(ac1Color);
   diffuseMat.uniforms.uAccent2.value.copy(ac2Color);
-  // 藤蔓生长状态管理：触发式动画
+
+  // 藤蔓
+  vineMat.uniforms.uFormation.value = 1.0;
   for (let v = 0; v < N_VINES; v++) {
     if (!vineGrowTriggered[v] && smoothBlend >= VINE_GROW_THRESHOLDS[v]) {
       vineGrowTriggered[v] = true;
-      vineGrowStartTime[v] = time;
+      vineGrowStartTime[v] = t;
     }
     if (vineGrowTriggered[v] && smoothBlend < VINE_GROW_THRESHOLDS[v] - 0.05) {
-      // blend 回落，触发收回动画
       vineGrowTriggered[v] = false;
-      vineGrowStartTime[v] = time - (1.0 - vineGrowProgress[v]) * VINE_GROW_DURATION;
+      vineGrowStartTime[v] = t - (1.0 - vineGrowProgress[v]) * VINE_GROW_DURATION;
     }
     if (vineGrowTriggered[v]) {
-      vineGrowProgress[v] = Math.min(1.0, (time - vineGrowStartTime[v]) / VINE_GROW_DURATION);
+      vineGrowProgress[v] = Math.min(1.0, (t - vineGrowStartTime[v]) / VINE_GROW_DURATION);
     } else {
-      // 收回：从当前进度反向
-      const elapsed = time - vineGrowStartTime[v];
-      vineGrowProgress[v] = Math.max(0.0, 1.0 - elapsed / VINE_GROW_DURATION);
+      vineGrowProgress[v] = Math.max(0.0, 1.0 - (t - vineGrowStartTime[v]) / VINE_GROW_DURATION);
     }
   }
   vineMat.uniforms.uVineGrowth.value.set(vineGrowProgress[0], vineGrowProgress[1], vineGrowProgress[2]);
   vineMat.uniforms.uBlend.value = smoothBlend;
-  vineMat.uniforms.uTime.value  = time;
+  vineMat.uniforms.uTime.value  = t;
   vineMat.uniforms.uSpineRotY.value = spineGroup.rotation.y;
   // 藤蔓配色跟随 colorBlend（同骨骼），中点用翠绿（粉红的对比色）保饱和度
   lerpMid(vineMat.uniforms.uColor    .value, VINE_A_COLOR, VINE_MID_COLOR, VINE_B_COLOR, colorBlend);
@@ -2208,16 +2546,16 @@ function animate() {
   for (let g = 0; g < 4; g++) {
     if (!leafGrowTriggered[g] && smoothBlend >= LEAF_GROW_THRESHOLDS[g]) {
       leafGrowTriggered[g] = true;
-      leafGrowStartTime[g] = time;
+      leafGrowStartTime[g] = t;
     }
     if (leafGrowTriggered[g] && smoothBlend < LEAF_GROW_THRESHOLDS[g] - 0.05) {
       leafGrowTriggered[g] = false;
-      leafGrowStartTime[g] = time - (1.0 - leafGrowProgress[g]) * LEAF_GROW_DURATION;
+      leafGrowStartTime[g] = t - (1.0 - leafGrowProgress[g]) * LEAF_GROW_DURATION;
     }
     if (leafGrowTriggered[g]) {
-      leafGrowProgress[g] = Math.min(1.0, (time - leafGrowStartTime[g]) / LEAF_GROW_DURATION);
+      leafGrowProgress[g] = Math.min(1.0, (t - leafGrowStartTime[g]) / LEAF_GROW_DURATION);
     } else {
-      const elapsed = time - leafGrowStartTime[g];
+      const elapsed = t - leafGrowStartTime[g];
       leafGrowProgress[g] = Math.max(0.0, 1.0 - elapsed / LEAF_GROW_DURATION);
     }
   }
@@ -2225,71 +2563,41 @@ function animate() {
     leafGrowProgress[0], leafGrowProgress[1], leafGrowProgress[2], leafGrowProgress[3]
   );
   leafMat.uniforms.uBlend.value = smoothBlend;
-  leafMat.uniforms.uTime.value  = time;
+  leafMat.uniforms.uTime.value  = t;
   // 叶子配色跟随 colorBlend（同骨骼），中点用嫩翠保饱和度
   lerpMid(leafMat.uniforms.uColor    .value, LEAF_A_COLOR, LEAF_MID_COLOR, LEAF_B_COLOR, colorBlend);
   lerpMid(leafMat.uniforms.uHighlight.value, LEAF_A_HL,    LEAF_MID_HL,    LEAF_B_HL,    colorBlend);
   lerpMid(leafMat.uniforms.uAccent1  .value, LEAF_A_AC1,   LEAF_MID_AC1,   LEAF_B_AC1,   colorBlend);
   lerpMid(leafMat.uniforms.uAccent2  .value, LEAF_A_AC2,   LEAF_MID_AC2,   LEAF_B_AC2,   colorBlend);
 
-
-  // ── Layer C：贝塞尔弧线粒子流────────────────────────────────
+  // Layer C
   for (let i = 0; i < N_DIFF; i++) {
     dT[i] += dDt[i];
-    if (dT[i] >= 1.0) {
-      resetDiffuse(i, smoothBlend);
-    }
-
-    const t  = dT[i];
-    const u  = 1 - t;
-    const u2 = u * u, u3 = u2 * u;
-    const t2 = t * t, t3 = t2 * t;
-
-    const x = u3*dPx[i] + 3*u2*t*dBzX1[i] + 3*u*t2*dBzX2[i] + t3*dBzX3[i];
-    const y = u3*dPy[i] + 3*u2*t*dBzY1[i] + 3*u*t2*dBzY2[i] + t3*dBzY3[i];
-
-    const fadeIn  = smoothstep(0.0, 0.08, t);
-    const fadeOut = 1.0 - smoothstep(0.85, 1.0, t);
-
-    dfPositions[i*3]   = x;
-    dfPositions[i*3+1] = y;
+    if (dT[i] >= 1.0) resetDiffuse(i, smoothBlend);
+    const tt = dT[i], u = 1-tt, u2=u*u, u3=u2*u, t2=tt*tt, t3=t2*tt;
+    dfPositions[i*3]   = u3*dPx[i]+3*u2*tt*dBzX1[i]+3*u*t2*dBzX2[i]+t3*dBzX3[i];
+    dfPositions[i*3+1] = u3*dPy[i]+3*u2*tt*dBzY1[i]+3*u*t2*dBzY2[i]+t3*dBzY3[i];
     dfPositions[i*3+2] = 0.1;
     dfSizes[i]  = dBSize[i];
-    dfAlphas[i] = dBAlpha[i] * fadeIn * fadeOut;
+    dfAlphas[i] = dBAlpha[i] * smoothstep(0,0.08,tt) * (1-smoothstep(0.85,1,tt));
   }
-
-  // ── Layer D：辉光线（跟随脊柱曲线，随 blend 变直）──────────
+  // Layer D
   for (let i = 0; i < N_GLOW; i++) {
-    const gi = N_DIFF + i;
-    const t0 = i / (N_GLOW - 1);
-    const endFade = smoothstep(0, 0.08, t0) * smoothstep(1, 0.92, t0);
-
-    dfPositions[gi*3]   = glowCurvedX[i] + (glowStraightX[i] - glowCurvedX[i]) * smoothBlend;
+    const gi = N_DIFF+i, t0 = i/(N_GLOW-1);
+    const endFade = smoothstep(0,0.08,t0)*smoothstep(1,0.92,t0);
+    dfPositions[gi*3]   = glowCurvedX[i]+(glowStraightX[i]-glowCurvedX[i])*smoothBlend;
     dfPositions[gi*3+1] = glowY[i];
     dfPositions[gi*3+2] = -0.5;
-    dfAlphas[gi] = (0.035 + breathe * 0.025) * endFade;
+    dfAlphas[gi] = (0.035+breathe*0.025)*endFade;
   }
-
   if (N_DFULL > 0) {
     diffuseGeo.attributes.position.needsUpdate = true;
     diffuseGeo.attributes.aSize.needsUpdate    = true;
     diffuseGeo.attributes.aAlpha.needsUpdate   = true;
   }
 
-  // ── Layer E：环境星尘（圆形轨道）──────────────────────────
-  const ap = ambGeo.attributes.position.array;
-  for (let i = 0; i < N_AMB; i++) {
-    ap[i*3]   = ambBase[i*3]   + Math.cos(time * ambOrbitSpd[i]       + ambOrbitPh[i]) * ambOrbitR[i];
-    ap[i*3+1] = ambBase[i*3+1] + Math.sin(time * ambOrbitSpd[i] * 0.7 + ambOrbitPh[i]) * ambOrbitR[i];
-  }
-  ambGeo.attributes.position.needsUpdate = true;
-
   // Bloom 随呼吸调整（blend 高时反而收敛，防过曝）
   bloomPass.strength = userBloomStrength + breathe * 0.06 - smoothBlend * 0.03;
-
-  if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
-
-  composer.render();
 }
 
 
@@ -2308,6 +2616,8 @@ socket.on('sensor_data', (data) => {
 });
 
 socket.on('state_change', (data) => {
+  if (data.mode === 'START_GUIDE') { startGuide(); return; }
+  if (data.mode === 'EXPERIENCE') { enterExperience(); }
   currentMode = data.mode;
   if (data.blend !== undefined) targetBlend = data.blend;
   updateDebugUI();
@@ -2366,8 +2676,8 @@ exposureSlider.addEventListener('input', () => {
   renderer.toneMappingExposure = exp;
 });
 
-document.getElementById('btn-start').addEventListener('click', () => socket.emit('button_press'));
-document.getElementById('btn-reset').addEventListener('click', () => socket.emit('button_press'));
+document.getElementById('btn-start').addEventListener('click', () => startGuide());
+document.getElementById('btn-reset').addEventListener('click', () => resetToIdle());
 
 function updateDebugUI() {
   if (debugState) debugState.textContent = currentMode;
@@ -2503,6 +2813,8 @@ canvas.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (e.code === 'Space') { e.preventDefault(); startGuide(); }
+  if (e.key === 'r' || e.key === 'R') { if (!branchEditMode) resetToIdle(); }
   if (e.key === 'd' || e.key === 'D') debugPanel.classList.toggle('hidden');
   if (e.key === 'f' || e.key === 'F') {
     if (!document.fullscreenElement) document.documentElement.requestFullscreen();
