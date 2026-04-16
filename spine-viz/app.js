@@ -2588,6 +2588,35 @@ function resetToIdle() {
   spineMat.uniforms.uFormation.value  = 0.0;
   spineMat.uniforms.uGuideAlpha.value = 1.0;
   vineMat.uniforms.uFormation.value   = 0.0;
+
+  // 重置藤蔓
+  for (let v = 0; v < N_VINES; v++) {
+    vineGrowTriggered[v] = false;
+    vineGrowProgress[v] = 0;
+    vineGrowStartTime[v] = -10;
+  }
+  vineMat.uniforms.uVineGrowth.value.set(0, 0, 0);
+
+  // 重置叶子
+  for (let g = 0; g < 4; g++) {
+    leafGrowTriggered[g] = false;
+    leafGrowProgress[g] = 0;
+    leafGrowStartTime[g] = -10;
+  }
+  leafMat.uniforms.uLeafGrowths.value.set(0, 0, 0, 0);
+
+  // 重置花朵
+  for (let g = 0; g < 4; g++) {
+    flowerGrowTriggered[g] = false;
+    flowerGrowProgress[g] = 0;
+    flowerGrowStartTime[g] = -10;
+    flowerBloomTriggered[g] = false;
+    flowerBloomProgress[g] = 0;
+    flowerBloomStartTime[g] = -10;
+  }
+  flowerMat.uniforms.uFlowerGrowths.value.set(0, 0, 0, 0);
+  flowerMat.uniforms.uFlowerBlooms.value.set(0, 0, 0, 0);
+
   overlays.showIdleUI();
   updateDebugUI();
 }
