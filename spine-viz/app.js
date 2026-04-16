@@ -2535,6 +2535,8 @@ const WAVE = 0.28;
 // ── 引导动画状态 ──
 let guideStartTime = 0;       // 引导开始的绝对时间(秒)
 let guideElapsed   = 0;       // 引导已经过的秒数
+let guideSpeed     = 3.0;     // 引导速度倍率（默认 3x 快进）
+let guideManualProgress = -1; // 手动进度（-1 = 自动）
 
 // 把胸椎/腰椎峰值 3D 点传给 overlays 用于屏幕投影
 const THORACIC_PEAK_WORLD = SPINE_CURVED[4].clone();   // 最右凸
@@ -2658,7 +2660,12 @@ function updateIdle(t) {
 
 // ── GUIDE 更新（60s 认知引导时间线）─────────────────────────
 function updateGuide(t) {
-  guideElapsed = performance.now() / 1000 - guideStartTime;
+  // 手动进度优先，否则用速度倍率
+  if (guideManualProgress >= 0) {
+    guideElapsed = guideManualProgress;
+  } else {
+    guideElapsed = (performance.now() / 1000 - guideStartTime) * guideSpeed;
+  }
 
   // 检查结束（86s 完整引导）
   if (guideElapsed >= 86) {
@@ -3038,9 +3045,50 @@ document.getElementById('btn-skip').addEventListener('click', () => {
 });
 document.getElementById('btn-reset').addEventListener('click', () => resetToIdle());
 
+// ── 引导进度/速度控制 ──
+const guideProgressSlider = document.getElementById('guide-progress-slider');
+const guideProgressVal    = document.getElementById('guide-progress-val');
+const guideSpeedSlider    = document.getElementById('guide-speed-slider');
+const guideSpeedVal       = document.getElementById('guide-speed-val');
+
+if (guideProgressSlider) {
+  guideProgressSlider.addEventListener('input', () => {
+    const v = parseFloat(guideProgressSlider.value);
+    guideProgressVal.textContent = v.toFixed(1);
+    guideManualProgress = v;
+    // 自动进入 GUIDE 模式
+    if (currentMode !== 'GUIDE') {
+      currentMode = 'GUIDE';
+      guideStartTime = performance.now() / 1000;
+      overlays.hideIdleUI();
+      updateDebugUI();
+    }
+  });
+  guideProgressSlider.addEventListener('change', () => {
+    // 松手后恢复自动播放，从当前位置继续
+    guideStartTime = performance.now() / 1000 - guideManualProgress / guideSpeed;
+    guideManualProgress = -1;
+  });
+}
+if (guideSpeedSlider) {
+  guideSpeedSlider.addEventListener('input', () => {
+    guideSpeed = parseFloat(guideSpeedSlider.value) / 10;
+    guideSpeedVal.textContent = guideSpeed.toFixed(1);
+    // 重算起始时间保持当前进度
+    if (currentMode === 'GUIDE' && guideManualProgress < 0) {
+      guideStartTime = performance.now() / 1000 - guideElapsed / guideSpeed;
+    }
+  });
+}
+
 function updateDebugUI() {
   if (debugState) debugState.textContent = currentMode;
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
+  // 同步引导进度滑块
+  if (guideProgressSlider && currentMode === 'GUIDE' && guideManualProgress < 0) {
+    guideProgressSlider.value = Math.min(86, guideElapsed);
+    if (guideProgressVal) guideProgressVal.textContent = guideElapsed.toFixed(1);
+  }
 }
 
 

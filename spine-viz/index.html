@@ -47,6 +47,13 @@
     </div>
 
     <div class="debug-section">
+      <label for="guide-progress-slider">引导进度 (<span id="guide-progress-val">0</span>s / 86s)：</label>
+      <input type="range" id="guide-progress-slider" min="0" max="86" value="0" step="0.5" />
+      <label for="guide-speed-slider">引导速度 (<span id="guide-speed-val">3.0</span>x)：</label>
+      <input type="range" id="guide-speed-slider" min="10" max="100" value="30" />
+    </div>
+
+    <div class="debug-section">
       <label for="pixel-ratio-slider">高清粒子精度 (<span id="pixel-ratio-val">3.0</span>)：</label>
       <input type="range" id="pixel-ratio-slider" min="10" max="40" value="30" />
       <label for="bloom-slider">边缘物理泛光 (<span id="bloom-val">0.12</span>)：</label>
