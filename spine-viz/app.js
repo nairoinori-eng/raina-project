@@ -476,20 +476,34 @@ for (let i = 0; i < N_BONE; i++) {
   }
   bPhase[i] = Math.random() * Math.PI * 2;
 
-  // colorVar：Z靠前→高光(正值)，对比色粒子更大更亮才能突出
+  // colorVar：Z靠前→高光(正值)，明暗区掺撞色增强立体感
   const zDepth = Math.abs(bZ[i]) / Math.max(effectiveOuter * TUBE_Y_SCALE, 0.01);
   const acRoll = Math.random();
-  if (acRoll < 0.03) {
-    spColorVars[i] = -(0.20 + Math.random() * 0.20);   // 暖对比色（减少）
-    bBaseA[i] *= 2.2;
-  } else if (acRoll < 0.06) {
-    spColorVars[i] = -(0.55 + Math.random() * 0.30);   // 冷对比色（减少）
-    bBaseA[i] *= 2.2;
-  } else if (acRoll < 0.12) {
-    spColorVars[i] = 0.5 + Math.random() * 0.3;        // 高光粒子
-    bBaseA[i] *= 1.8;
+  // 椎体中心的"辉光粒子"：大亮点展示立体感
+  const isVertCenter = distFromVert < 0.12 && bT[i] >= 0 && bT[i] <= 1;
+  const glowRoll = Math.random();
+  if (isVertCenter && glowRoll < 0.04) {
+    // 辉光粒子：大、亮、偏高光色
+    spColorVars[i] = 0.70 + Math.random() * 0.25;
+    bBaseS[i] *= 2.5;
+    bBaseA[i] *= 3.0;
+  } else if (acRoll < 0.07) {
+    // 暖撞色（暗部掺入）：管壁深处 Z 大的粒子更容易被选中
+    spColorVars[i] = -(0.15 + Math.random() * 0.25);
+    bBaseA[i] *= 2.0;
+    bBaseS[i] *= 1.3;
+  } else if (acRoll < 0.14) {
+    // 冷撞色（亮部点缀）
+    spColorVars[i] = -(0.50 + Math.random() * 0.35);
+    bBaseA[i] *= 2.0;
+    bBaseS[i] *= 1.3;
+  } else if (acRoll < 0.22) {
+    // 高光粒子（管壁前缘）
+    spColorVars[i] = 0.45 + Math.random() * 0.35;
+    bBaseA[i] *= 1.6;
   } else {
-    spColorVars[i] = (1 - zDepth) * 0.35 + (Math.random() - 0.5) * 0.08;
+    // 普通粒子：前亮后暗
+    spColorVars[i] = (1 - zDepth) * 0.35 + (Math.random() - 0.5) * 0.10;
   }
   spPositions[i*3]   = cpx + bOffCurvedX[i];
   spPositions[i*3+1] = cpy + bOffCurvedY[i];
@@ -2829,7 +2843,7 @@ function updateExperience(t) {
       vineGrowTriggered[v] = true;
       vineGrowStartTime[v] = t;
     }
-    if (vineGrowTriggered[v] && smoothBlend < VINE_GROW_THRESHOLDS[v] - 0.05) {
+    if (vineGrowTriggered[v] && smoothBlend < VINE_GROW_THRESHOLDS[v] - 0.03) {
       vineGrowTriggered[v] = false;
       vineGrowStartTime[v] = t - (1.0 - vineGrowProgress[v]) * VINE_GROW_DURATION;
     }
