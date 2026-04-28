@@ -76,6 +76,13 @@ DEFAULT_THRESHOLD = 1010.0
 PREVIEW_BLEND_DEADBAND = 0.05
 PREVIEW_BLEND_THRESHOLD_RATIO = 0.25
 PREVIEW_BLEND_SMOOTHING = 0.08
+EXPERIENCE_MIN_FLOOR_RATE = 0.002
+EXPERIENCE_CLIMAX_EXTRA_RATE = 0.005
+EXPERIENCE_SENSOR_RISE_RATE = 0.020
+EXPERIENCE_TEACHING_SEC = 30.0
+EXPERIENCE_SENSITIVITY_FADE_SEC = 15.0
+EXPERIENCE_CLIMAX_SEC = 30.0
+MAX_SERIAL_DT_SEC = 0.5
 PUBLIC_URL = os.getenv("PUBLIC_URL", f"http://localhost:{PORT}").rstrip("/")
 START_COMMAND = os.getenv("ARDUINO_START_COMMAND", "START")
 RESET_COMMAND = os.getenv("ARDUINO_RESET_COMMAND", "RESET")
@@ -133,6 +140,8 @@ class RuntimeState:
         self.serial_connected = False
         self.serial_port = ""
         self.debug_override = False
+        self.experience_started_at: float | None = None
+        self.last_blend_update_at: float | None = None
         self.session = self._new_session()
 
     def _new_session(self) -> SessionBundle:
@@ -143,6 +152,8 @@ class RuntimeState:
         self.flow_revision += 1
         self.sensor = SensorSnapshot()
         self.debug_override = False
+        self.experience_started_at = None
+        self.last_blend_update_at = None
         self.session = self._new_session()
         return self.session
 
@@ -408,8 +419,33 @@ def compute_blend_from_payload(payload: dict[str, float]) -> tuple[float, float]
         previous_blend = state.sensor.blend
         use_arduino_blend = state.mode == "EXPERIENCE" and "B" in payload
         if use_arduino_blend:
+            now = time.time()
+            if state.experience_started_at is None:
+                state.experience_started_at = now
+            if state.last_blend_update_at is None:
+                state.last_blend_update_at = now
+
             raw = clamp(payload["B"] / 255.0, 0.0, 1.0)
-            return raw, max(previous_blend, raw)
+            elapsed = max(0.0, now - state.experience_started_at)
+            dt = clamp(now - state.last_blend_update_at, 0.0, MAX_SERIAL_DT_SEC)
+            state.last_blend_update_at = now
+
+            if elapsed < EXPERIENCE_TEACHING_SEC:
+                sensitivity = 1.5
+            elif elapsed < EXPERIENCE_TEACHING_SEC + EXPERIENCE_SENSITIVITY_FADE_SEC:
+                fade = (elapsed - EXPERIENCE_TEACHING_SEC) / EXPERIENCE_SENSITIVITY_FADE_SEC
+                sensitivity = 1.5 - 0.5 * clamp(fade, 0.0, 1.0)
+            else:
+                sensitivity = 1.0
+
+            sensor_rate = raw * sensitivity * EXPERIENCE_SENSOR_RISE_RATE
+            floor_rate = EXPERIENCE_MIN_FLOOR_RATE
+            if elapsed >= max(0.0, EXPERIENCE_DURATION_SEC - EXPERIENCE_CLIMAX_SEC):
+                floor_rate += EXPERIENCE_CLIMAX_EXTRA_RATE
+
+            # PRD: 传感器贡献和保底增长叠加；按现场要求保留“只上升、不回退”。
+            next_blend = previous_blend + (sensor_rate + floor_rate) * dt
+            return raw, clamp(next_blend, 0.0, 1.0)
 
         chest = payload.get("S1", 0.0) - payload.get("S2", 0.0)
         waist = payload.get("S4", 0.0) - payload.get("S3", 0.0)
@@ -550,8 +586,11 @@ def sync_arduino_for_mode(mode: str) -> None:
 
 
 def clear_blend_accumulator() -> None:
+    now = time.time()
     state.sensor.blend = 0.0
     state.sensor.raw_blend = 0.0
+    state.experience_started_at = now
+    state.last_blend_update_at = now
 
 
 def schedule_experience_tail(flow_revision: int) -> None:
