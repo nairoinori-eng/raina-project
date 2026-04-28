@@ -34,11 +34,21 @@ Write-Host "Backend PUBLIC_URL: $PublicUrl"
 Write-Host "Frontend URL: http://localhost:$FrontendPort"
 Write-Host ""
 
+$PythonCommand = "py -3"
+try {
+  $pythonCheck = & python -c "import sys; print(sys.executable)" 2>$null
+  if (-not [string]::IsNullOrWhiteSpace($pythonCheck)) {
+    $PythonCommand = "python"
+  }
+} catch {
+  $PythonCommand = "py -3"
+}
+
 $BackendCommand = @"
 `$env:PUBLIC_URL='$PublicUrl'
 `$env:PORT='$BackendPort'
 cd '$BackendDir'
-python app.py
+$PythonCommand app.py
 "@
 
 $FrontendCommand = @"
