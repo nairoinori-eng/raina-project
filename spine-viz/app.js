@@ -2677,9 +2677,16 @@ socket.on('sensor_data', (data) => {
 
 socket.on('state_change', (data) => {
   if (data.mode === 'START_GUIDE') { startGuide(); return; }
-  if (data.mode === 'EXPERIENCE') { enterExperience(); }
   if (data.mode === 'IDLE') { resetToIdle(); return; }
-  currentMode = data.mode;
+  if (data.mode === 'EXPERIENCE') {
+    if (currentMode !== 'EXPERIENCE') {
+      enterExperience();
+    } else {
+      currentMode = 'EXPERIENCE';
+    }
+  } else if (data.mode) {
+    currentMode = data.mode;
+  }
   if (data.blend !== undefined) mergeIncomingBlend(data.blend);
   if (data.threshold !== undefined && thresholdSlider && thresholdVal) {
     thresholdSlider.value = String(data.threshold);
