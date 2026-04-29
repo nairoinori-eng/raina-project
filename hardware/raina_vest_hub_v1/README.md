@@ -1,4 +1,8 @@
-# RAINA 背心中转控制板 v1.0
+# RAINA 背心中转控制板 v1.0（不推荐下单）
+
+> 重要：v1 的 Arduino Nano 直插封装来自手写坐标，导入嘉立创EDA后存在封装和引脚可靠性风险。不要直接用 v1 下单。
+>
+> 推荐改用 `hardware/raina_vest_hub_v2_terminal`：Arduino Nano 不直接插板，而是通过 8P 线连接到中转板，PCB 上只保留传感器分压和马达驱动，风险更低。
 
 这是一块用于替代面包板的 Arduino Nano 扩展 PCB 方案。目标是把电阻、三极管、接口全部固定到一块小板上，背心内只保留 FSR 压力传感器、振动马达和延长线。
 
@@ -8,6 +12,7 @@
 
 - `raina_vest_hub_v1.kicad_pro`
 - `raina_vest_hub_v1.kicad_pcb`
+- `raina_vest_hub_v1.easyeda.json`
 
 使用方法：
 
@@ -18,6 +23,23 @@
 5. 没问题后导出 Gerber，再上传嘉立创打样。
 
 注意：这版是为了毕业设计快速落地做的手工布线小板，不是工业量产板。下单前必须人工检查 DRC，尤其是 S9012 脚位。
+
+Nano 插座按 USB 朝上校准：
+
+- A0/A1/A2/A3 在左排第 4/5/6/7 脚。
+- 5V 在左排第 12 脚。
+- GND 在左排第 14 脚。
+- D5 在右排第 8 脚。
+- D6 在右排第 9 脚。
+
+如果你导入后看到 D5/D6 不在这两个位置，不要下单。
+
+如果你使用嘉立创EDA标准版，可以直接导入 `raina_vest_hub_v1.easyeda.json`：
+
+1. 打开嘉立创EDA标准版。
+2. 选择“文件 / 导入 / EasyEDA 文件”。
+3. 选择 `raina_vest_hub_v1.easyeda.json`。
+4. 打开后先运行 DRC，再检查接口方向和 S9012 脚位。
 
 ## 1. 默认假设
 
