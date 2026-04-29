@@ -2,6 +2,23 @@
 
 这是一块用于替代面包板的 Arduino Nano 扩展 PCB 方案。目标是把电阻、三极管、接口全部固定到一块小板上，背心内只保留 FSR 压力传感器、振动马达和延长线。
 
+## 0. 可直接打开的 PCB 文件
+
+本目录已经包含一套 KiCad PCB 工程：
+
+- `raina_vest_hub_v1.kicad_pro`
+- `raina_vest_hub_v1.kicad_pcb`
+
+使用方法：
+
+1. 安装 KiCad。
+2. 打开 `raina_vest_hub_v1.kicad_pro`。
+3. 进入 PCB 编辑器检查板子。
+4. 核对 S9012 实物脚位、Arduino Nano 插入方向、JST 插座方向。
+5. 没问题后导出 Gerber，再上传嘉立创打样。
+
+注意：这版是为了毕业设计快速落地做的手工布线小板，不是工业量产板。下单前必须人工检查 DRC，尤其是 S9012 脚位。
+
 ## 1. 默认假设
 
 - 主控：Arduino Nano，使用排针插到 PCB 上。
