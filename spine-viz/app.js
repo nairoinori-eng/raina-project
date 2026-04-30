@@ -2300,19 +2300,17 @@ for (const fl of flowerInstances) {
       : 0.50 + Math.random() * 0.10;
     flAlphas[flIdx] = layerAlpha;
 
-    // 颜色：按高度渐变（顶部偏暖杏，底部偏冷灰）+ 瓣内渐变
+    // 颜色：按高度明显渐变（顶部暖杏 → 底部冷蓝粉）
     const distNorm = flDistFromCenter[flIdx];
-    // heightShift: 顶部(paramT≈0)偏正(暖), 底部(paramT≈1)偏负(冷)
-    const heightShift = (1 - host.stemParamT) * 0.30 - 0.10; // 顶+0.20, 底-0.10
+    // heightCV: 顶(paramT≈0)→+0.6(暖杏黄), 底(paramT≈1)→-0.7(冷蓝灰)
+    const heightCV = (1 - host.stemParamT) * 1.3 - 0.70;
     let cv;
     if (isStamen) {
-      cv = 0.80 + Math.random() * 0.15 + heightShift * 0.3;
+      cv = 0.75 + Math.random() * 0.15;
     } else if (isEdge) {
-      cv = (pt.petalIndex % 2 === 0)
-        ? 0.55 + Math.random() * 0.15 + heightShift
-        : -(0.05 + Math.random() * 0.10) + heightShift * 0.5;
+      cv = heightCV * 0.8 + (Math.random() - 0.5) * 0.10;
     } else {
-      cv = distNorm * 0.30 + heightShift + (Math.random() - 0.5) * 0.08;
+      cv = heightCV + distNorm * 0.15 + (Math.random() - 0.5) * 0.10;
     }
     flColorVars[flIdx] = cv;
     flIdx++;
@@ -2417,21 +2415,23 @@ const flowerVertexShader = /* glsl */`
   }
 `;
 
-// ── 花朵颜色：暖白带微色，三套统一 ──
+// ── 花朵颜色：暖白基底，HL/AC1/AC2 有明显色相差（高度渐变用）──
+// base 暖白，highlight 暖杏黄，accent1 淡粉，accent2 淡蓝灰
+// 顶部花 cv>0 偏 highlight（暖杏），底部花 cv<0 偏 accent（冷粉蓝）
 const FLOWER_A_COLOR = new THREE.Color(0xd8c8b8);  // 暖白
-const FLOWER_A_HL    = new THREE.Color(0xf0e8d8);  // 亮暖白
-const FLOWER_A_AC1   = new THREE.Color(0xe0c8b0);  // 微暖粉
-const FLOWER_A_AC2   = new THREE.Color(0xc8b8b0);  // 微灰暖
+const FLOWER_A_HL    = new THREE.Color(0xf0c878);  // 暖杏黄（明显暖）
+const FLOWER_A_AC1   = new THREE.Color(0xe0a0a8);  // 淡玫粉（明显粉）
+const FLOWER_A_AC2   = new THREE.Color(0xa0b8d0);  // 淡蓝灰（明显冷）
 
 const FLOWER_MID_COLOR = new THREE.Color(0xd8c8b8);
-const FLOWER_MID_HL    = new THREE.Color(0xf0e8d0);
-const FLOWER_MID_AC1   = new THREE.Color(0xdcc0a8);
-const FLOWER_MID_AC2   = new THREE.Color(0xc8b8b0);
+const FLOWER_MID_HL    = new THREE.Color(0xf0c878);
+const FLOWER_MID_AC1   = new THREE.Color(0xe0a0a8);
+const FLOWER_MID_AC2   = new THREE.Color(0xa0b8d0);
 
 const FLOWER_B_COLOR = new THREE.Color(0xd0c4b8);
-const FLOWER_B_HL    = new THREE.Color(0xf0e8d0);
-const FLOWER_B_AC1   = new THREE.Color(0xd8c0a8);
-const FLOWER_B_AC2   = new THREE.Color(0xc0b4b0);
+const FLOWER_B_HL    = new THREE.Color(0xe8c080);
+const FLOWER_B_AC1   = new THREE.Color(0xd8a0a8);
+const FLOWER_B_AC2   = new THREE.Color(0x98b0c8);
 
 const flowerMat = new THREE.ShaderMaterial({
   vertexShader: flowerVertexShader,
