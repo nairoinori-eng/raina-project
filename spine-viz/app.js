@@ -1960,13 +1960,13 @@ for (const leaf of leafInstances) {
     // 粒子大小：叶脉亮，边缘稍大，内部中等；整体乘 sizeMult 让小叶子等比缩小
     let baseSize;
     if (pt.isVein) baseSize = 0.028 + Math.random() * 0.008;
-    else if (pt.isEdge) baseSize = 0.026 + Math.random() * 0.008;
+    else if (pt.isEdge) baseSize = 0.030 + Math.random() * 0.008;
     else baseSize = 0.022 + Math.random() * 0.010;
     lfSizes[lfIdx] = baseSize * sizeMult;
 
     // alpha：叶脉更亮
-    lfAlphas[lfIdx] = pt.isEdge ? 0.78 + Math.random() * 0.12  // 边缘更亮，轮廓清晰
-      : (pt.isVein ? 0.70 : 0.45) + Math.random() * 0.12;
+    lfAlphas[lfIdx] = pt.isEdge ? 0.90 + Math.random() * 0.10  // 边缘高亮描边
+      : (pt.isVein ? 0.65 : 0.40) + Math.random() * 0.10;
 
     // 色系驱动 colorVar
     // 叶脉保持深绿（negative small），普通粒子按yNorm渐变到色系色
