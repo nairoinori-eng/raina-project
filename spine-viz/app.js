@@ -1965,7 +1965,8 @@ for (const leaf of leafInstances) {
     lfSizes[lfIdx] = baseSize * sizeMult;
 
     // alpha：叶脉更亮
-    lfAlphas[lfIdx] = (pt.isVein ? 0.75 : 0.50) + Math.random() * 0.12;
+    lfAlphas[lfIdx] = pt.isEdge ? 0.78 + Math.random() * 0.12  // 边缘更亮，轮廓清晰
+      : (pt.isVein ? 0.70 : 0.45) + Math.random() * 0.12;
 
     // 色系驱动 colorVar
     // 叶脉保持深绿（negative small），普通粒子按yNorm渐变到色系色
@@ -2817,9 +2818,15 @@ function updateExperience(t) {
   smoothBlend   = Math.max(0, Math.min(1, smoothBlend + blendVelocity));
 
   const breathe       = breatheCurve(t);
-  const breatheExpand = 1 + breathe * 0.20;
+  // 呼吸脉动随 blend 微增（不夸张）
+  const expandAmt = 0.15 + smoothBlend * 0.10; // 0.15→0.25
+  const breatheExpand = 1 + breathe * expandAmt;
 
   if (!branchEditMode) spineGroup.rotation.y = Math.sin(t * 0.52) * 0.35;
+
+  // 呼吸镜头感：相机随呼吸微微前后移动
+  const camBreathZ = 5.0 + breathe * smoothBlend * 0.12; // blend高时吸气靠近
+  camera.position.z = camBreathZ;
 
   // Layer A + B
   spineMat.uniforms.uFormation.value        = 1.0;
@@ -2957,8 +2964,9 @@ function updateExperience(t) {
     diffuseGeo.attributes.aAlpha.needsUpdate   = true;
   }
 
-  // Bloom 随呼吸调整（blend 高时反而收敛，防过曝）
-  bloomPass.strength = userBloomStrength + breathe * 0.06 - smoothBlend * 0.03;
+  // Bloom 随呼吸脉动（blend 高时光晕跟呼吸强挂钩）
+  const breathBloomPulse = breathe * (0.04 + smoothBlend * 0.10); // blend高时脉动更强
+  bloomPass.strength = userBloomStrength + breathBloomPulse;
 }
 
 
