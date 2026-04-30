@@ -1769,6 +1769,9 @@ for (const src of leafSources) {
     const cy = stemCY + tangentWorldY / outLen * offsetAlongTangent;
     const sParamT = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
 
+    // 跳过正面叶子（stemSX 接近 0 = 脊柱正面，会遮挡骨骼）
+    if (Math.abs(sx) < 0.10) continue;
+
     // Y密度检查：同一y高度±0.18内已有3片，跳过
     let nearbyCount = 0;
     for (const py of placedYs) {
