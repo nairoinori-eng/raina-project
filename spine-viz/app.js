@@ -2192,9 +2192,10 @@ for (let i = 0; i < sortedLeaves.length && flowerPlaced < N_FLOWER_TARGET; i++) 
   flowerPlacedXYs.push([host.stemSX, host.stemSY]);
   flowerPlaced++;
 
-  // 平均大小调大，差异仍保留
-  const sizeRand = 0.7 + Math.random() * 0.6; // 0.7~1.3
-  const scale = (0.14 + host.scale * 0.40) * sizeRand;
+  // 中段大、头尾小（重心居中）
+  const centerBias = 1.0 - Math.pow(host.stemParamT * 2 - 1, 2); // 0=头尾, 1=中间
+  const sizeRand = 0.7 + Math.random() * 0.5;
+  const scale = (0.10 + host.scale * 0.35) * sizeRand * (0.55 + centerBias * 0.55);
 
   // 花朝外（远离脊柱）
   const isRight = host.stemSX > 0;
@@ -2300,19 +2301,18 @@ for (const fl of flowerInstances) {
       : 0.50 + Math.random() * 0.10;
     flAlphas[flIdx] = layerAlpha;
 
-    // 颜色：从上到下 白→淡粉→粉（单色系渐变）
+    // 颜色：白→淡紫→薰衣草，大部分偏浅，底部才有明显紫
     const distNorm = flDistFromCenter[flIdx];
-    // pinkAmount: 顶(paramT≈0)→0(白), 底(paramT≈1)→0.8(粉)
-    const pinkAmount = host.stemParamT * 0.80;
+    // purpleAmount: 顶→0(白), 底→用平方让大部分偏浅
+    const rawT = host.stemParamT;
+    const purpleAmount = rawT * rawT * 0.70; // 平方曲线，上3/4几乎是白
     let cv;
     if (isStamen) {
-      cv = 0.75 + Math.random() * 0.15; // 花蕊鹅黄
+      cv = 0.75 + Math.random() * 0.15;
     } else if (isEdge) {
-      // 描边跟随高度粉色程度
-      cv = -(pinkAmount * 0.6 + Math.random() * 0.08);
+      cv = -(purpleAmount * 0.7 + Math.random() * 0.06);
     } else {
-      // 填充：负值走 AC1(粉色)，pinkAmount 越大越粉
-      cv = -(pinkAmount + (Math.random() - 0.5) * 0.10);
+      cv = -(purpleAmount + (Math.random() - 0.5) * 0.08);
     }
     flColorVars[flIdx] = cv;
     flIdx++;
@@ -2417,22 +2417,21 @@ const flowerVertexShader = /* glsl */`
   }
 `;
 
-// ── 花朵颜色：白→淡粉→粉 单色系渐变 ──
-// base=暖白, HL=鹅黄(花蕊), AC1=明确粉色(渐变终点), AC2=深粉(更浓)
-const FLOWER_A_COLOR = new THREE.Color(0xe0d8d0);  // 暖白
-const FLOWER_A_HL    = new THREE.Color(0xf0e0a8);  // 鹅黄（花蕊用）
-const FLOWER_A_AC1   = new THREE.Color(0xe8a0b0);  // 粉色
-const FLOWER_A_AC2   = new THREE.Color(0xd88098);  // 深粉
+// ── 花朵颜色：白→淡紫→薰衣草（大部分偏浅）──
+const FLOWER_A_COLOR = new THREE.Color(0xe0dce0);  // 冷白
+const FLOWER_A_HL    = new THREE.Color(0xf0e0a8);  // 鹅黄（花蕊）
+const FLOWER_A_AC1   = new THREE.Color(0xc8b8d8);  // 淡紫
+const FLOWER_A_AC2   = new THREE.Color(0xb0a0c8);  // 薰衣草
 
-const FLOWER_MID_COLOR = new THREE.Color(0xe0d8d0);
+const FLOWER_MID_COLOR = new THREE.Color(0xe0dce0);
 const FLOWER_MID_HL    = new THREE.Color(0xf0e0a8);
-const FLOWER_MID_AC1   = new THREE.Color(0xe8a0b0);
-const FLOWER_MID_AC2   = new THREE.Color(0xd88098);
+const FLOWER_MID_AC1   = new THREE.Color(0xc8b8d8);
+const FLOWER_MID_AC2   = new THREE.Color(0xb0a0c8);
 
-const FLOWER_B_COLOR = new THREE.Color(0xd8d0c8);
+const FLOWER_B_COLOR = new THREE.Color(0xd8d4d8);
 const FLOWER_B_HL    = new THREE.Color(0xe8d8a0);
-const FLOWER_B_AC1   = new THREE.Color(0xe098a8);
-const FLOWER_B_AC2   = new THREE.Color(0xd07890);
+const FLOWER_B_AC1   = new THREE.Color(0xc0b0d0);
+const FLOWER_B_AC2   = new THREE.Color(0xa898c0);
 
 const flowerMat = new THREE.ShaderMaterial({
   vertexShader: flowerVertexShader,
