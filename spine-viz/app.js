@@ -1272,9 +1272,10 @@ const vineVertexShader = /* glsl */`
       float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
       vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
 
-      // blend 高时藤蔓 X 外扩（直立态弧度拉大，增加视觉张力）
-      float spreadFactor = 1.0 + smoothstep(0.5, 1.0, uBlend) * 0.35;
-      pos2d.x *= spreadFactor;
+      // blend 高时藤蔓有机外扩（不同高度不同幅度，弧度不均匀）
+      float spreadBlend = smoothstep(0.5, 1.0, uBlend) * 0.35;
+      float spreadWave = 0.4 + 0.6 * sin(aParamT * 3.14159 * 2.5 + aVineId * 2.1);
+      pos2d.x += pos2d.x * spreadBlend * spreadWave;
 
       // 随风摇曳
       float swayBase = 1.0 - aParamT * 0.3;
@@ -2044,9 +2045,10 @@ const leafVertexShader = /* glsl */`
     // 1. 叶柄位置（双态插值）
     float lb = clamp((uBlend - (1.0 - stemParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 stemPos = mix(aStemCurved, aStemStraight, lb);
-    // 同步藤蔓外扩
-    float spreadFactor = 1.0 + smoothstep(0.5, 1.0, uBlend) * 0.35;
-    stemPos.x *= spreadFactor;
+    // 同步藤蔓有机外扩
+    float spreadBlend = smoothstep(0.5, 1.0, uBlend) * 0.35;
+    float spreadWave = 0.4 + 0.6 * sin(stemParamT * 3.14159 * 2.5 + hostVineId * 2.1);
+    stemPos.x += stemPos.x * spreadBlend * spreadWave;
 
     // 2. 叶柄跟随藤蔓摇曳（与对应藤蔓摇曳公式一致）
     float swayBase = 1.0 - stemParamT * 0.3;
@@ -2354,9 +2356,10 @@ const flowerVertexShader = /* glsl */`
     // 1. 花朵中心（双态插值）
     float lb = clamp((uBlend - (1.0 - stemParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 stemPos = mix(aStemCurved, aStemStraight, lb);
-    // 同步藤蔓外扩
-    float spreadFactor = 1.0 + smoothstep(0.5, 1.0, uBlend) * 0.35;
-    stemPos.x *= spreadFactor;
+    // 同步藤蔓有机外扩
+    float spreadBlend = smoothstep(0.5, 1.0, uBlend) * 0.35;
+    float spreadWave = 0.4 + 0.6 * sin(stemParamT * 3.14159 * 2.5 + hostVineId * 2.1);
+    stemPos.x += stemPos.x * spreadBlend * spreadWave;
 
     // 2. 摇曳
     float swayBase = 1.0 - stemParamT * 0.3;
