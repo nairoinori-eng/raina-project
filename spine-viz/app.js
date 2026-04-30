@@ -2154,14 +2154,13 @@ const sortedLeaves = leafInstances
 
 // 数量增加到 40%
 const N_FLOWER_TARGET = Math.max(12, Math.round(leafInstances.length * 0.40));
-const flowerPlacedXYs = []; // 已放花的位置，防重叠
-for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
+const flowerPlacedXYs = [];
+let flowerPlaced = 0;
+for (let i = 0; i < sortedLeaves.length && flowerPlaced < N_FLOWER_TARGET; i++) {
   const host = sortedLeaves[i];
 
-  // 跳过正面叶子（stemSX 接近 0 = 骨骼正面，花会覆盖骨骼）
   if (Math.abs(host.stemSX) < 0.12) continue;
 
-  // 距离检查：避免两朵花重叠在同一位置
   let tooClose = false;
   for (const [ox, oy] of flowerPlacedXYs) {
     const dx = ox - host.stemSX, dy = oy - host.stemSY;
@@ -2169,6 +2168,7 @@ for (let i = 0; i < Math.min(N_FLOWER_TARGET, sortedLeaves.length); i++) {
   }
   if (tooClose) continue;
   flowerPlacedXYs.push([host.stemSX, host.stemSY]);
+  flowerPlaced++;
 
   // 平均大小调大，差异仍保留
   const sizeRand = 0.7 + Math.random() * 0.6; // 0.7~1.3
