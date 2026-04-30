@@ -2300,19 +2300,19 @@ for (const fl of flowerInstances) {
       : 0.50 + Math.random() * 0.10;
     flAlphas[flIdx] = layerAlpha;
 
-    // 颜色：描边用深色(base)，填充瓣内渐变+撞色
+    // 颜色：按高度渐变（顶部偏暖杏，底部偏冷灰）+ 瓣内渐变
     const distNorm = flDistFromCenter[flIdx];
+    // heightShift: 顶部(paramT≈0)偏正(暖), 底部(paramT≈1)偏负(冷)
+    const heightShift = (1 - host.stemParamT) * 0.30 - 0.10; // 顶+0.20, 底-0.10
     let cv;
     if (isStamen) {
-      cv = 0.85 + Math.random() * 0.15;
+      cv = 0.80 + Math.random() * 0.15 + heightShift * 0.3;
     } else if (isEdge) {
-      // 描边：暖金 + 淡粉交替（两种轮廓色）
       cv = (pt.petalIndex % 2 === 0)
-        ? 0.60 + Math.random() * 0.15   // 偶数瓣暖金描边
-        : -(0.10 + Math.random() * 0.10); // 奇数瓣淡粉描边
+        ? 0.55 + Math.random() * 0.15 + heightShift
+        : -(0.05 + Math.random() * 0.10) + heightShift * 0.5;
     } else {
-      // 统一暖白，根→尖微渐变，瓣间只有细微色温差
-      cv = distNorm * 0.35 + (Math.random() - 0.5) * 0.10;
+      cv = distNorm * 0.30 + heightShift + (Math.random() - 0.5) * 0.08;
     }
     flColorVars[flIdx] = cv;
     flIdx++;
