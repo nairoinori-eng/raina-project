@@ -2462,6 +2462,77 @@ const flowerPoints = new THREE.Points(flowerGeo, flowerMat);
 flowerPoints.frustumCulled = false;
 spineGroup.add(flowerPoints);
 
+// ============================================================
+// 9c. 花粉弥散（花蕊释放粒子，缓慢飘向远方）
+// ============================================================
+const POLLEN_PER_FLOWER = 6;
+const N_POLLEN = flowerInstances.length * POLLEN_PER_FLOWER;
+const pollenPos     = new Float32Array(N_POLLEN * 3);
+const pollenSizes   = new Float32Array(N_POLLEN);
+const pollenAlphas  = new Float32Array(N_POLLEN);
+const pollenCVars   = new Float32Array(N_POLLEN);
+
+// 每个花粉粒子的状态
+const pollenLife     = new Float32Array(N_POLLEN); // 0~1 生命进度
+const pollenSpeed    = new Float32Array(N_POLLEN); // 生命速度
+const pollenOriginSX = new Float32Array(N_POLLEN); // 花蕊直立态位置
+const pollenOriginSY = new Float32Array(N_POLLEN);
+const pollenOriginCX = new Float32Array(N_POLLEN); // 花蕊弯曲态位置
+const pollenOriginCY = new Float32Array(N_POLLEN);
+const pollenDriftDir = new Float32Array(N_POLLEN); // 飘动方向 ±1
+const pollenPhase    = new Float32Array(N_POLLEN); // 摇摆相位
+const pollenParamT   = new Float32Array(N_POLLEN); // 宿主 stemParamT
+const pollenHostVine = new Float32Array(N_POLLEN); // 宿主 vineId
+
+for (let fi = 0; fi < flowerInstances.length; fi++) {
+  const fl = flowerInstances[fi];
+  const host = fl.hostLeaf;
+  const upOffset = 0.04;
+  for (let p = 0; p < POLLEN_PER_FLOWER; p++) {
+    const idx = fi * POLLEN_PER_FLOWER + p;
+    pollenOriginCX[idx] = host.stemCX;
+    pollenOriginCY[idx] = host.stemCY + upOffset;
+    pollenOriginSX[idx] = host.stemSX;
+    pollenOriginSY[idx] = host.stemSY + upOffset;
+    pollenDriftDir[idx] = host.stemSX > 0 ? 1 : -1; // 左花往左飘，右花往右飘
+    pollenLife[idx] = Math.random(); // 错开初始相位
+    pollenSpeed[idx] = 0.08 + Math.random() * 0.06; // 6~10 秒一个周期
+    pollenPhase[idx] = Math.random() * Math.PI * 2;
+    pollenParamT[idx] = host.stemParamT;
+    pollenHostVine[idx] = host.hostVineId;
+    pollenSizes[idx] = 0.022 + Math.random() * 0.010;
+    pollenCVars[idx] = 0.50 + Math.random() * 0.30; // 暖白偏金
+    pollenAlphas[idx] = 0;
+    pollenPos[idx * 3] = host.stemCX;
+    pollenPos[idx * 3 + 1] = host.stemCY + upOffset;
+    pollenPos[idx * 3 + 2] = 0.10;
+  }
+}
+
+const pollenGeo = new THREE.BufferGeometry();
+pollenGeo.setAttribute('position', new THREE.BufferAttribute(pollenPos, 3));
+pollenGeo.setAttribute('aSize',    new THREE.BufferAttribute(pollenSizes, 1));
+pollenGeo.setAttribute('aAlpha',   new THREE.BufferAttribute(pollenAlphas, 1));
+pollenGeo.setAttribute('aColorVar',new THREE.BufferAttribute(pollenCVars, 1));
+
+const pollenMat = new THREE.ShaderMaterial({
+  vertexShader, fragmentShader,
+  uniforms: {
+    uColor:     { value: new THREE.Color(0xe0d8d0) },
+    uHighlight: { value: new THREE.Color(0xf0e0a8) },
+    uAccent1:   { value: new THREE.Color(0xc8b8d8) },
+    uAccent2:   { value: new THREE.Color(0xc8b8d8) },
+    uAlphaBoost: { value: 1.0 },
+  },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+
+const pollenPoints = new THREE.Points(pollenGeo, pollenMat);
+pollenPoints.frustumCulled = false;
+spineGroup.add(pollenPoints);
+
 
 // ============================================================
 // 10. ambGeo (Layer E)
@@ -2964,6 +3035,50 @@ function updateExperience(t) {
   lerpMid(flowerMat.uniforms.uHighlight.value, FLOWER_A_HL,    FLOWER_MID_HL,    FLOWER_B_HL,    colorBlend);
   lerpMid(flowerMat.uniforms.uAccent1  .value, FLOWER_A_AC1,   FLOWER_MID_AC1,   FLOWER_B_AC1,   colorBlend);
   lerpMid(flowerMat.uniforms.uAccent2  .value, FLOWER_A_AC2,   FLOWER_MID_AC2,   FLOWER_B_AC2,   colorBlend);
+
+  // 花粉弥散更新
+  const pp = pollenGeo.attributes.position.array;
+  const pa = pollenGeo.attributes.aAlpha.array;
+  for (let i = 0; i < N_POLLEN; i++) {
+    pollenLife[i] += pollenSpeed[i] * 0.016;
+    if (pollenLife[i] >= 1.0) pollenLife[i] -= 1.0;
+
+    const life = pollenLife[i];
+    const flowerIdx = Math.floor(i / POLLEN_PER_FLOWER);
+    const gp = flowerInstances[flowerIdx].growGroup;
+    const flowerGrown = flowerGrowProgress[gp];
+    if (flowerGrown < 0.95) {
+      pa[i] = 0;
+      continue;
+    }
+
+    // 花蕊位置（跟随 blend + 外扩）
+    const lb = Math.min(1, smoothBlend / 0.72);
+    const spreadAmt = Math.max(0, (smoothBlend - 0.5) * 2) * 0.60;
+    const hostVine = pollenHostVine[i];
+    const paramT = pollenParamT[i];
+    const spreadW = hostVine < 0.5 ? (0.4 + 0.6 * Math.sin(paramT * Math.PI * 2.5)) : 0;
+    let ox = pollenOriginCX[i] + (pollenOriginSX[i] - pollenOriginCX[i]) * lb;
+    ox += ox * spreadAmt * spreadW;
+    const oy = pollenOriginCY[i] + (pollenOriginSY[i] - pollenOriginCY[i]) * lb;
+
+    // 缓慢飘动：横向朝外 + 微微上升 + 正弦摇摆
+    const dir = pollenDriftDir[i];
+    const driftX = dir * life * life * 0.50;
+    const driftY = life * 0.18 + Math.sin(t * 0.4 + pollenPhase[i]) * 0.03;
+    const swayX = Math.sin(t * 0.25 + pollenPhase[i] * 2) * 0.025 * life;
+
+    pp[i * 3]     = ox + driftX + swayX;
+    pp[i * 3 + 1] = oy + driftY;
+    pp[i * 3 + 2] = 0.08;
+
+    // alpha：淡入 → 稳定 → 淡出
+    const fadeIn  = Math.min(1, life * 5);
+    const fadeOut = Math.max(0, 1 - (life - 0.6) * 2.5);
+    pa[i] = 0.22 * fadeIn * fadeOut;
+  }
+  pollenGeo.attributes.position.needsUpdate = true;
+  pollenGeo.attributes.aAlpha.needsUpdate = true;
 
   // Layer C
   for (let i = 0; i < N_DIFF; i++) {
