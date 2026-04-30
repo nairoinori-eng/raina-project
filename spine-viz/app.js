@@ -2142,59 +2142,6 @@ const leafPoints = new THREE.Points(leafGeo, leafMat);
 leafPoints.frustumCulled = false;
 spineGroup.add(leafPoints);
 
-// ============================================================
-// 9a. 脊柱暖色辉光（呼吸脉动的暖金光晕）
-// ============================================================
-const N_GLOW_BEACONS = 13; // 每节椎体一个
-const glowBeaconPos = new Float32Array(N_GLOW_BEACONS * 3);
-const glowBeaconSizes = new Float32Array(N_GLOW_BEACONS);
-const glowBeaconAlphas = new Float32Array(N_GLOW_BEACONS);
-const glowBeaconCVars = new Float32Array(N_GLOW_BEACONS);
-const glowCurvedXB = new Float32Array(N_GLOW_BEACONS);
-const glowStraightXB = new Float32Array(N_GLOW_BEACONS);
-const glowYB = new Float32Array(N_GLOW_BEACONS);
-
-for (let i = 0; i < N_GLOW_BEACONS; i++) {
-  const t = i / (N_GLOW_BEACONS - 1);
-  const cp = curveCurved.getPoint(t);
-  const sp = curveStraight.getPoint(t);
-  glowCurvedXB[i] = cp.x;
-  glowStraightXB[i] = sp.x;
-  glowYB[i] = cp.y;
-  glowBeaconPos[i * 3] = cp.x;
-  glowBeaconPos[i * 3 + 1] = cp.y;
-  glowBeaconPos[i * 3 + 2] = 0.05;
-  glowBeaconSizes[i] = 0.55 + Math.random() * 0.15;
-  glowBeaconAlphas[i] = 0;
-  glowBeaconCVars[i] = 0.6 + Math.random() * 0.3;
-}
-
-const glowBeaconGeo = new THREE.BufferGeometry();
-glowBeaconGeo.setAttribute('position', new THREE.BufferAttribute(glowBeaconPos, 3));
-glowBeaconGeo.setAttribute('aSize', new THREE.BufferAttribute(glowBeaconSizes, 1));
-glowBeaconGeo.setAttribute('aAlpha', new THREE.BufferAttribute(glowBeaconAlphas, 1));
-glowBeaconGeo.setAttribute('aColorVar', new THREE.BufferAttribute(glowBeaconCVars, 1));
-
-// 暖金辉光色（独立 material，不跟随骨骼色变）
-const GLOW_COLOR = new THREE.Color(0xc89858); // 暖琥珀
-const GLOW_HL    = new THREE.Color(0xf0d898); // 亮暖金
-const glowBeaconMat = new THREE.ShaderMaterial({
-  vertexShader, fragmentShader,
-  uniforms: {
-    uColor:     { value: GLOW_COLOR },
-    uHighlight: { value: GLOW_HL },
-    uAccent1:   { value: GLOW_COLOR },
-    uAccent2:   { value: GLOW_COLOR },
-    uAlphaBoost: { value: 1.0 },
-  },
-  transparent: true,
-  blending: THREE.AdditiveBlending,
-  depthWrite: false,
-});
-
-const glowBeaconPoints = new THREE.Points(glowBeaconGeo, glowBeaconMat);
-glowBeaconPoints.frustumCulled = false;
-spineGroup.add(glowBeaconPoints);
 
 
 // ============================================================
@@ -3017,20 +2964,6 @@ function updateExperience(t) {
     diffuseGeo.attributes.aSize.needsUpdate    = true;
     diffuseGeo.attributes.aAlpha.needsUpdate   = true;
   }
-
-  // 暖色辉光脉动
-  const glowAlphaBase = smoothBlend * 0.04; // blend 高时才亮
-  const glowBreathPulse = breathe * smoothBlend * 0.03;
-  const gp = glowBeaconGeo.attributes.position.array;
-  const ga = glowBeaconGeo.attributes.aAlpha.array;
-  for (let i = 0; i < N_GLOW_BEACONS; i++) {
-    const lb = Math.min(1, smoothBlend / 0.72);
-    gp[i * 3] = glowCurvedXB[i] + (glowStraightXB[i] - glowCurvedXB[i]) * lb;
-    gp[i * 3 + 1] = glowYB[i];
-    ga[i] = glowAlphaBase + glowBreathPulse;
-  }
-  glowBeaconGeo.attributes.position.needsUpdate = true;
-  glowBeaconGeo.attributes.aAlpha.needsUpdate = true;
 
   // Bloom 随呼吸脉动（blend 高时光晕跟呼吸强挂钩）
   const breathBloomPulse = breathe * (0.04 + smoothBlend * 0.10); // blend高时脉动更强
