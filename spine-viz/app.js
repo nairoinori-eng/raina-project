@@ -3047,7 +3047,10 @@ function updateExperience(t) {
   const pa = pollenGeo.attributes.aAlpha.array;
   for (let i = 0; i < N_POLLEN; i++) {
     pollenLife[i] += pollenSpeed[i] * 0.016;
-    if (pollenLife[i] >= 1.0) pollenLife[i] -= 1.0;
+    if (pollenLife[i] >= 1.0) {
+      // 飘完后回到花蕊，随机等一小段再重新出发
+      pollenLife[i] = -(Math.random() * 0.12);
+    }
 
     const life = pollenLife[i];
     // 找到所属花朵
@@ -3059,8 +3062,16 @@ function updateExperience(t) {
     const flowerGrown = flowerGrowProgress[gp];
     if (flowerGrown < 0.95) {
       pa[i] = 0;
-      // 花没开时持续重置 life，这样开花后从花蕊重新出发
-      pollenLife[i] = Math.random() * 0.15; // 错开一点避免同时出发
+      // 花没开时：每颗花粉分配不同的延迟，开花后依次出发
+      const localIdx = i - pollenFlowerStart[flowerIdx];
+      pollenLife[i] = -(localIdx * 0.07 + Math.random() * 0.03); // 负值=等待中
+      continue;
+    }
+
+    // life < 0 表示还在等待出发
+    if (pollenLife[i] < 0) {
+      pollenLife[i] += pollenSpeed[i] * 0.016;
+      pa[i] = 0;
       continue;
     }
 
