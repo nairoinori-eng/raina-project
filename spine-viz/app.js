@@ -847,7 +847,7 @@ const N_VINES = 3; // vineId 0=主藤蔓, 1/2=点缀藤蔓（依次生长）
 // 螺旋缠绕：x=R*sin(θ), z=R*cos(θ)，永远在骨骼外圈
 const ACCENT_VINES = [
   { radius: 0.34, freq: 2.5, phase: Math.PI * 0.35, ppv: 15000, width: 0.012, alpha: 0.85 },
-  { radius: 0.26, freq: 3.5, phase: Math.PI * 1.30, ppv: 12000, width: 0.010, alpha: 0.80 },
+  { radius: 0.26, freq: 3.5, phase: Math.PI * 1.30, ppv: 0, width: 0.010, alpha: 0.80 },  // 暂关
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
@@ -1593,7 +1593,7 @@ function walkVineForLeaves(vineId, sourceArr, maxLeaves) {
 
 walkVineForLeaves(0, leafSources, 12); // 主藤
 walkVineForLeaves(1, leafSources, 4);  // 辅藤A
-walkVineForLeaves(2, leafSources, 3);  // 辅藤B
+// walkVineForLeaves(2, leafSources, 3);  // 辅藤B（已关闭）
 
 // 主藤下部大弯曲（seg 11）强制放 2 片叶子
 {
