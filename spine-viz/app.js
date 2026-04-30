@@ -2195,7 +2195,7 @@ for (let i = 0; i < sortedLeaves.length && flowerPlaced < N_FLOWER_TARGET; i++) 
   // 中段大、头尾小（重心居中）
   const centerBias = 1.0 - Math.pow(host.stemParamT * 2 - 1, 2); // 0=头尾, 1=中间
   const sizeRand = 0.7 + Math.random() * 0.5;
-  const scale = (0.10 + host.scale * 0.35) * sizeRand * (0.55 + centerBias * 0.55);
+  const scale = (0.14 + host.scale * 0.40) * sizeRand * (0.60 + centerBias * 0.45);
 
   // 花朝外（远离脊柱）
   const isRight = host.stemSX > 0;
