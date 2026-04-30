@@ -2465,7 +2465,7 @@ spineGroup.add(flowerPoints);
 // ============================================================
 // 9c. 花粉弥散（花蕊释放粒子，缓慢飘向远方）
 // ============================================================
-const POLLEN_PER_FLOWER = 6;
+const POLLEN_PER_FLOWER = 12;
 const N_POLLEN = flowerInstances.length * POLLEN_PER_FLOWER;
 const pollenPos     = new Float32Array(N_POLLEN * 3);
 const pollenSizes   = new Float32Array(N_POLLEN);
@@ -2496,7 +2496,7 @@ for (let fi = 0; fi < flowerInstances.length; fi++) {
     pollenOriginSY[idx] = host.stemSY + upOffset;
     pollenDriftDir[idx] = host.stemSX > 0 ? 1 : -1; // 左花往左飘，右花往右飘
     pollenLife[idx] = Math.random(); // 错开初始相位
-    pollenSpeed[idx] = 0.08 + Math.random() * 0.06; // 6~10 秒一个周期
+    pollenSpeed[idx] = 0.04 + Math.random() * 0.04; // 12~20 秒一个周期（更慢更远）
     pollenPhase[idx] = Math.random() * Math.PI * 2;
     pollenParamT[idx] = host.stemParamT;
     pollenHostVine[idx] = host.hostVineId;
@@ -3064,17 +3064,17 @@ function updateExperience(t) {
 
     // 缓慢飘动：横向朝外 + 微微上升 + 正弦摇摆
     const dir = pollenDriftDir[i];
-    const driftX = dir * life * life * 0.50;
-    const driftY = life * 0.18 + Math.sin(t * 0.4 + pollenPhase[i]) * 0.03;
-    const swayX = Math.sin(t * 0.25 + pollenPhase[i] * 2) * 0.025 * life;
+    const driftX = dir * life * life * 2.5; // 飘到屏幕边缘（±2.5）
+    const driftY = life * 0.40 + Math.sin(t * 0.4 + pollenPhase[i]) * 0.05;
+    const swayX = Math.sin(t * 0.25 + pollenPhase[i] * 2) * 0.04 * life;
 
     pp[i * 3]     = ox + driftX + swayX;
     pp[i * 3 + 1] = oy + driftY;
     pp[i * 3 + 2] = 0.08;
 
     // alpha：淡入 → 稳定 → 淡出
-    const fadeIn  = Math.min(1, life * 5);
-    const fadeOut = Math.max(0, 1 - (life - 0.6) * 2.5);
+    const fadeIn  = Math.min(1, life * 4);
+    const fadeOut = Math.max(0, 1 - (life - 0.80) * 5.0); // 80% 才开始淡出
     pa[i] = 0.55 * fadeIn * fadeOut;
   }
   pollenGeo.attributes.position.needsUpdate = true;
