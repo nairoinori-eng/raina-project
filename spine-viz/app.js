@@ -2063,20 +2063,24 @@ const leafVertexShader = /* glsl */`
       + sin(uTime * 2.2 + leafPhase * 0.7) * leafSwayAmp * 0.4
     );
 
-    // 4. 分组触发式生长：叶子按位置分4组，每组独立触发
+    // 4. 分组触发式生长：粒子从叶柄→叶尖逐步显现（不缩放）
     float myGrowth = aGrowGroup < 0.5 ? uLeafGrowths.x
                    : aGrowGroup < 1.5 ? uLeafGrowths.y
                    : aGrowGroup < 2.5 ? uLeafGrowths.z
                    : uLeafGrowths.w;
     float leafGrow = smoothstep(0.0, 1.0, myGrowth);
-    float sizeGrow = leafGrow;
 
-    // 5. 最终位置
-    vec2 pos2d = stemPos + aLocal * sizeGrow + leafSway * sizeGrow;
+    // yInLeaf: 0=叶柄, 1=叶尖
+    // 粒子在 yInLeaf < leafGrow 时显现，边缘柔化
+    float reveal = smoothstep(leafGrow - 0.15, leafGrow, yInLeaf);
+    float particleVisible = 1.0 - reveal; // leafGrow=1 时全部可见
+
+    // 5. 最终位置（始终在最终位置，不缩放）
+    vec2 pos2d = stemPos + aLocal + leafSway;
     vec3 pos = vec3(pos2d.x, pos2d.y, aLeafInfo.w);
 
-    float alpha = aAlpha * leafGrow;
-    float sz = aSize * sizeGrow;
+    float alpha = aAlpha * particleVisible;
+    float sz = aSize * step(0.01, particleVisible); // 不可见时 size=0
 
     vAlpha = alpha;
     vColorVar = aColorVar;
