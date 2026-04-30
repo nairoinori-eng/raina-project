@@ -2466,7 +2466,7 @@ spineGroup.add(flowerPoints);
 // 9c. 花粉弥散（花蕊释放粒子，缓慢飘向远方）
 // ============================================================
 // 每朵花花粉数量不同（8~18）
-const pollenPerFlower = flowerInstances.map(() => 8 + Math.floor(Math.random() * 11));
+const pollenPerFlower = flowerInstances.map(() => 15 + Math.floor(Math.random() * 16));
 const pollenFlowerStart = []; // 每朵花花粉起始索引
 let N_POLLEN = 0;
 for (let fi = 0; fi < flowerInstances.length; fi++) {
