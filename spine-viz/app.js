@@ -57,7 +57,7 @@ const curveStraight = new THREE.CatmullRomCurve3(SPINE_STRAIGHT);
 // 2. 粒子数量
 // ============================================================
 
-const N_BONE  = 80000;                 // Layer A（极致精细）
+const N_BONE  = 60000;                 // Layer A（减量，结构处密集填充处稀疏）
 const N_VERT  = 39000;                 // Layer B (13 × 3000)
 const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 
@@ -444,8 +444,8 @@ for (let i = 0; i < N_BONE; i++) {
   const effectiveOuter = TUBE_OUTER * taperFactor * widthScale * gapWidth;
   const effectiveInner = TUBE_INNER * taperFactor * widthScale * gapWidth;
 
-  // 25% 粒子填充管壁内部
-  const isInterior = Math.random() < 0.25;
+  // 15% 粒子填充管壁内部（稀疏），85% 在管壁上（密集强调结构）
+  const isInterior = Math.random() < 0.15;
 
   // 左右两壁分布（保持中空感）+ 大角度范围（Z深度立体感）
   const sideSign = Math.random() < 0.5 ? 1 : -1;
@@ -466,8 +466,8 @@ for (let i = 0; i < N_BONE; i++) {
   bOffStraightY[i] = 0;
 
   if (isInterior) {
-    bBaseS[i] = (0.028 + Math.random() * 0.024) * Math.max(0.3, taperFactor) * gapFactor;
-    bBaseA[i] = (0.10 + Math.random() * 0.07) * Math.max(0.3, taperFactor) * gapFactor;
+    bBaseS[i] = (0.024 + Math.random() * 0.020) * Math.max(0.3, taperFactor) * gapFactor;
+    bBaseA[i] = (0.06 + Math.random() * 0.04) * Math.max(0.3, taperFactor) * gapFactor;
   } else {
     const wallRatio = effectiveOuter > effectiveInner
       ? (r - effectiveInner) / (effectiveOuter - effectiveInner) : 0;
