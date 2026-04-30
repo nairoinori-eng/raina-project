@@ -1272,6 +1272,10 @@ const vineVertexShader = /* glsl */`
       float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
       vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
 
+      // blend 高时藤蔓 X 外扩（直立态弧度拉大，增加视觉张力）
+      float spreadFactor = 1.0 + smoothstep(0.5, 1.0, uBlend) * 0.35;
+      pos2d.x *= spreadFactor;
+
       // 随风摇曳
       float swayBase = 1.0 - aParamT * 0.3;
       float vineAmp = aVineId < 0.5 ? 1.0 : aVineId < 1.5 ? 1.4 : 0.7;
