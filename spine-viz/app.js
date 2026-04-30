@@ -2465,8 +2465,14 @@ spineGroup.add(flowerPoints);
 // ============================================================
 // 9c. 花粉弥散（花蕊释放粒子，缓慢飘向远方）
 // ============================================================
-const POLLEN_PER_FLOWER = 12;
-const N_POLLEN = flowerInstances.length * POLLEN_PER_FLOWER;
+// 每朵花花粉数量不同（8~18）
+const pollenPerFlower = flowerInstances.map(() => 8 + Math.floor(Math.random() * 11));
+const pollenFlowerStart = []; // 每朵花花粉起始索引
+let N_POLLEN = 0;
+for (let fi = 0; fi < flowerInstances.length; fi++) {
+  pollenFlowerStart.push(N_POLLEN);
+  N_POLLEN += pollenPerFlower[fi];
+}
 const pollenPos     = new Float32Array(N_POLLEN * 3);
 const pollenSizes   = new Float32Array(N_POLLEN);
 const pollenAlphas  = new Float32Array(N_POLLEN);
@@ -2488,8 +2494,8 @@ for (let fi = 0; fi < flowerInstances.length; fi++) {
   const fl = flowerInstances[fi];
   const host = fl.hostLeaf;
   const upOffset = 0.04;
-  for (let p = 0; p < POLLEN_PER_FLOWER; p++) {
-    const idx = fi * POLLEN_PER_FLOWER + p;
+  for (let p = 0; p < pollenPerFlower[fi]; p++) {
+    const idx = pollenFlowerStart[fi] + p;
     pollenOriginCX[idx] = host.stemCX;
     pollenOriginCY[idx] = host.stemCY + upOffset;
     pollenOriginSX[idx] = host.stemSX;
@@ -2500,7 +2506,7 @@ for (let fi = 0; fi < flowerInstances.length; fi++) {
     pollenPhase[idx] = Math.random() * Math.PI * 2;
     pollenParamT[idx] = host.stemParamT;
     pollenHostVine[idx] = host.hostVineId;
-    pollenSizes[idx] = 0.040 + Math.random() * 0.015;
+    pollenSizes[idx] = 0.028 + Math.random() * 0.010;
     pollenCVars[idx] = 0.50 + Math.random() * 0.30; // 暖白偏金
     pollenAlphas[idx] = 0;
     pollenPos[idx * 3] = host.stemCX;
@@ -3044,7 +3050,11 @@ function updateExperience(t) {
     if (pollenLife[i] >= 1.0) pollenLife[i] -= 1.0;
 
     const life = pollenLife[i];
-    const flowerIdx = Math.floor(i / POLLEN_PER_FLOWER);
+    // 找到所属花朵
+    let flowerIdx = 0;
+    for (let fi = 1; fi < flowerInstances.length; fi++) {
+      if (i >= pollenFlowerStart[fi]) flowerIdx = fi; else break;
+    }
     const gp = flowerInstances[flowerIdx].growGroup;
     const flowerGrown = flowerGrowProgress[gp];
     if (flowerGrown < 0.95) {
