@@ -2175,7 +2175,7 @@ const sortedLeaves = leafInstances
   .sort((a, b) => b.scale - a.scale);
 
 // 数量增加到 40%
-const N_FLOWER_TARGET = Math.max(12, Math.round(leafInstances.length * 0.40));
+const N_FLOWER_TARGET = Math.max(8, Math.round(leafInstances.length * 0.30));
 const flowerPlacedXYs = [];
 let flowerPlaced = 0;
 for (let i = 0; i < sortedLeaves.length && flowerPlaced < N_FLOWER_TARGET; i++) {
