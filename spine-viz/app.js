@@ -1763,9 +1763,9 @@ for (const src of leafSources) {
   for (let g = 0; g < groupSize; g++) {
     // 叶柄位置：沿切线方向微偏（簇内分散）
     const offsetAlongTangent = (g - (groupSize - 1) / 2) * 0.03;
-    const sx = stemSX + tangentWorldX / outLen * offsetAlongTangent;
+    let sx = stemSX + tangentWorldX / outLen * offsetAlongTangent;
     const sy = stemSY + tangentWorldY / outLen * offsetAlongTangent;
-    const cx = stemCX + tangentWorldX / outLen * offsetAlongTangent;
+    let cx = stemCX + tangentWorldX / outLen * offsetAlongTangent;
     const cy = stemCY + tangentWorldY / outLen * offsetAlongTangent;
     const sParamT = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
 
