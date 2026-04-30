@@ -1273,7 +1273,7 @@ const vineVertexShader = /* glsl */`
       vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
 
       // blend 高时藤蔓有机外扩（不同高度不同幅度，弧度不均匀）
-      float spreadBlend = smoothstep(0.5, 1.0, uBlend) * 0.35;
+      float spreadBlend = smoothstep(0.5, 1.0, uBlend) * 0.60;
       float spreadWave = 0.4 + 0.6 * sin(aParamT * 3.14159 * 2.5 + aVineId * 2.1);
       pos2d.x += pos2d.x * spreadBlend * spreadWave;
 
@@ -2046,7 +2046,7 @@ const leafVertexShader = /* glsl */`
     float lb = clamp((uBlend - (1.0 - stemParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 stemPos = mix(aStemCurved, aStemStraight, lb);
     // 同步藤蔓有机外扩
-    float spreadBlend = smoothstep(0.5, 1.0, uBlend) * 0.35;
+    float spreadBlend = smoothstep(0.5, 1.0, uBlend) * 0.60;
     float spreadWave = 0.4 + 0.6 * sin(stemParamT * 3.14159 * 2.5 + hostVineId * 2.1);
     stemPos.x += stemPos.x * spreadBlend * spreadWave;
 
@@ -2357,7 +2357,7 @@ const flowerVertexShader = /* glsl */`
     float lb = clamp((uBlend - (1.0 - stemParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 stemPos = mix(aStemCurved, aStemStraight, lb);
     // 同步藤蔓有机外扩
-    float spreadBlend = smoothstep(0.5, 1.0, uBlend) * 0.35;
+    float spreadBlend = smoothstep(0.5, 1.0, uBlend) * 0.60;
     float spreadWave = 0.4 + 0.6 * sin(stemParamT * 3.14159 * 2.5 + hostVineId * 2.1);
     stemPos.x += stemPos.x * spreadBlend * spreadWave;
 
