@@ -2500,7 +2500,7 @@ for (let fi = 0; fi < flowerInstances.length; fi++) {
     pollenPhase[idx] = Math.random() * Math.PI * 2;
     pollenParamT[idx] = host.stemParamT;
     pollenHostVine[idx] = host.hostVineId;
-    pollenSizes[idx] = 0.022 + Math.random() * 0.010;
+    pollenSizes[idx] = 0.040 + Math.random() * 0.015;
     pollenCVars[idx] = 0.50 + Math.random() * 0.30; // 暖白偏金
     pollenAlphas[idx] = 0;
     pollenPos[idx * 3] = host.stemCX;
@@ -3075,7 +3075,7 @@ function updateExperience(t) {
     // alpha：淡入 → 稳定 → 淡出
     const fadeIn  = Math.min(1, life * 5);
     const fadeOut = Math.max(0, 1 - (life - 0.6) * 2.5);
-    pa[i] = 0.22 * fadeIn * fadeOut;
+    pa[i] = 0.55 * fadeIn * fadeOut;
   }
   pollenGeo.attributes.position.needsUpdate = true;
   pollenGeo.attributes.aAlpha.needsUpdate = true;
