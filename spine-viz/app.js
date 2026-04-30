@@ -2044,6 +2044,9 @@ const leafVertexShader = /* glsl */`
     // 1. 叶柄位置（双态插值）
     float lb = clamp((uBlend - (1.0 - stemParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 stemPos = mix(aStemCurved, aStemStraight, lb);
+    // 同步藤蔓外扩
+    float spreadFactor = 1.0 + smoothstep(0.5, 1.0, uBlend) * 0.35;
+    stemPos.x *= spreadFactor;
 
     // 2. 叶柄跟随藤蔓摇曳（与对应藤蔓摇曳公式一致）
     float swayBase = 1.0 - stemParamT * 0.3;
@@ -2351,6 +2354,9 @@ const flowerVertexShader = /* glsl */`
     // 1. 花朵中心（双态插值）
     float lb = clamp((uBlend - (1.0 - stemParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 stemPos = mix(aStemCurved, aStemStraight, lb);
+    // 同步藤蔓外扩
+    float spreadFactor = 1.0 + smoothstep(0.5, 1.0, uBlend) * 0.35;
+    stemPos.x *= spreadFactor;
 
     // 2. 摇曳
     float swayBase = 1.0 - stemParamT * 0.3;
