@@ -3059,6 +3059,8 @@ function updateExperience(t) {
     const flowerGrown = flowerGrowProgress[gp];
     if (flowerGrown < 0.95) {
       pa[i] = 0;
+      // 花没开时持续重置 life，这样开花后从花蕊重新出发
+      pollenLife[i] = Math.random() * 0.15; // 错开一点避免同时出发
       continue;
     }
 
