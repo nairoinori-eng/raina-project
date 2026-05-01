@@ -3256,10 +3256,6 @@ document.getElementById('btn-skip').addEventListener('click', () => {
   console.log('[raina] 跳过引导，直接进入体验');
 });
 document.getElementById('btn-reset').addEventListener('click', () => resetToIdle());
-document.getElementById('btn-skip').addEventListener('click', () => {
-  if (currentMode === 'IDLE') startGuide();
-  if (currentMode === 'GUIDE') enterExperience();
-});
 
 // ── 引导进度/速度控制 ──
 const guideProgressSlider = document.getElementById('guide-progress-slider');
