@@ -2746,12 +2746,12 @@ spineGroup.add(flowPoints);
 // ============================================================
 // 10c. 节拍器粒子球（GUIDE 段 2c "呼吸节拍器"可视化）
 // ============================================================
-// 2500 粒子组成密集圆盘 + 边缘尖刺/拖尾粒子
-// - 核心粒子（70%）：填满整个圆盘，含中心
+// 5000 粒子组成密集圆盘 + 边缘尖刺/拖尾粒子（粒子小但密集，靠 bloom 出辉光）
+// - 核心粒子（70%）：填满整个圆盘，含中心（uniform area 分布）
 // - 尖刺粒子（30%）：吸气时径向延伸出去，形成拖尾
 // - 高频径向震荡 + 角度抖动 让圆有"活气" + "震荡感"
 // 不放在 spineGroup，独立于脊柱旋转。位置在屏幕中央 + 略前置。
-const PACER_PCOUNT = 2500;
+const PACER_PCOUNT = 5000;
 const pacerGeo = new THREE.BufferGeometry();
 const pacerPosArr    = new Float32Array(PACER_PCOUNT * 3);
 const pacerAngleArr  = new Float32Array(PACER_PCOUNT);
@@ -2820,8 +2820,8 @@ const pacerMat = new THREE.ShaderMaterial({
       vRadF    = aRadF;
       vSpike   = aSpike;
       vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-      // 边缘粒子略小，中心粒子略大；尖刺粒子最小
-      float pSize = 0.022 + aSeed * 0.014 + (1.0 - aRadF) * 0.008 - aSpike * 0.008;
+      // 粒子尺寸保持小（依赖密度+halo+intensity 出质感，而非增大粒子）
+      float pSize = 0.022 + aSeed * 0.014 + (1.0 - aRadF) * 0.006 - aSpike * 0.004;
       gl_PointSize = pSize * (300.0 / -mvPos.z);
       gl_Position = projectionMatrix * mvPos;
     }
@@ -2839,15 +2839,16 @@ const pacerMat = new THREE.ShaderMaterial({
       float d = length(gl_PointCoord - vec2(0.5));
       if (d > 0.5) discard;
       // 颜色策略：
-      //  - 中心(vRadF 低): 冷淡紫
+      //  - 中心(vRadF 低): 饱和紫
       //  - 边缘(vRadF 高): 暖白
-      //  - 尖刺粒子: 暖色 rim 强调
-      vec3 c = mix(uColorCool, uColorWarm, vRadF * (0.4 + vBreathe * 0.5));
-      c = mix(c, uColorRim, vSpike * 0.7);
-      // 中心粒子更亮（compensate for 距离感）
-      float intensity = 1.0 + (1.0 - vRadF) * 0.3;
+      //  - 尖刺粒子: 热粉/珊瑚色 rim 强调
+      vec3 c = mix(uColorCool, uColorWarm, vRadF * (0.5 + vBreathe * 0.4));
+      c = mix(c, uColorRim, vSpike * 0.85);
+      // 中心粒子额外增亮 + 尖刺粒子也增强（突出 rim）
+      float intensity = 1.2 + (1.0 - vRadF) * 0.40 + vSpike * 0.30;
+      // 粒子内部：硬核 + 适度 halo（不过大避免糊掉，靠 bloom 出整体辉光）
       float core = exp(-d * d * 24.0);
-      float halo = exp(-d * d * 10.0) * 0.25;
+      float halo = exp(-d * d * 9.0) * 0.30;
       gl_FragColor = vec4(c * intensity, (core + halo) * vAlpha);
     }
   `,
@@ -2855,9 +2856,9 @@ const pacerMat = new THREE.ShaderMaterial({
     uTime:      { value: 0 },
     uBreathe:   { value: 0 },
     uActive:    { value: 0 },
-    uColorCool: { value: new THREE.Color(0x9a8ec8) },  // 中心淡紫
-    uColorWarm: { value: new THREE.Color(0xfae8c0) },  // 边缘暖白
-    uColorRim:  { value: new THREE.Color(0xff9a78) },  // 尖刺暖橘（突出 rim）
+    uColorCool: { value: new THREE.Color(0x6c5fb8) },  // 中心饱和紫（更深）
+    uColorWarm: { value: new THREE.Color(0xfff2d0) },  // 边缘纯暖白
+    uColorRim:  { value: new THREE.Color(0xff6080) },  // 尖刺热粉（参考图 #3 风格）
   },
   transparent: true,
   blending: THREE.AdditiveBlending,
@@ -3156,12 +3157,12 @@ function updateGuide(t) {
     bloomPass.strength = 0.16 - seg2T * 0.04;  // 0.16 → 0.12
 
   } else if (e < 74) {
-    // ─── 46-74s：段 2c 节拍器跟做（脊柱保留淡 alpha + 同步节拍器呼吸）───
+    // ─── 46-74s：段 2c 节拍器跟做（脊柱保留淡 alpha + 同步节拍器呼吸 + 节拍器粒子球需要更高 bloom）───
     spineMat.uniforms.uFormation.value        = 1.0;
     spineMat.uniforms.uGuideAlpha.value       = 0.30;
     spineMat.uniforms.uSegmentHighlight.value = 0.0;
     comparisonMat.opacity = 0;
-    bloomPass.strength = 0.10;
+    bloomPass.strength = 0.20;
 
     // 节拍器呼吸进度（0=收缩底, 1=吸到顶）→ 驱动脊柱呼吸幅度
     const pacerT = overlays.getPacerBreatheT();
