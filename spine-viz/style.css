@@ -356,3 +356,53 @@ body {
   letter-spacing: 0.15em; color: rgba(220,210,255,0.8);
   min-height: 1.5em;
 }
+
+
+/* ============================================================
+   BGM 控制按钮（右下角圆形按钮）
+   ============================================================ */
+#bgm-toggle {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(0, 0, 0, 0.5);
+  color: rgba(255, 255, 255, 0.7);
+  cursor: pointer;
+  z-index: 50;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  backdrop-filter: blur(8px);
+  transition: color 0.2s, background 0.2s, border-color 0.2s, transform 0.2s;
+}
+#bgm-toggle:hover {
+  color: rgba(255, 255, 255, 1);
+  background: rgba(40, 30, 70, 0.6);
+  border-color: rgba(167, 139, 250, 0.55);
+  transform: scale(1.06);
+}
+#bgm-toggle:focus { outline: none; }
+#bgm-toggle:focus-visible {
+  outline: 2px solid rgba(167, 139, 250, 0.8);
+  outline-offset: 2px;
+}
+
+/* 默认（暂停）：显示三角，隐藏声波 */
+#bgm-toggle .bgm-icon-playing { opacity: 0; }
+#bgm-toggle .bgm-icon-paused  { opacity: 1; }
+
+/* 播放中：隐藏三角，显示声波动画 */
+#bgm-toggle.playing .bgm-icon-paused  { opacity: 0; }
+#bgm-toggle.playing .bgm-icon-playing { opacity: 1; }
+#bgm-toggle.playing .bgm-wave-1 { animation: bgm-wave 1.4s infinite ease-in-out; }
+#bgm-toggle.playing .bgm-wave-2 { animation: bgm-wave 1.4s infinite ease-in-out 0.2s; }
+#bgm-toggle.playing .bgm-wave-3 { animation: bgm-wave 1.4s infinite ease-in-out 0.4s; }
+@keyframes bgm-wave {
+  0%, 100% { opacity: 0.25; }
+  50%      { opacity: 1; }
+}

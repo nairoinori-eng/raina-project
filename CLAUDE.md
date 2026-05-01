@@ -10,9 +10,9 @@
 ## 项目信息
 
 - 项目：raina-project — 正念呼吸可视化（Three.js 粒子脊柱）
-- 主文件：`spine-viz/main.js`
+- 主文件：`spine-viz/app.js`
 - 启动预览：`cd spine-viz && npm run dev -- --host`
-- 开发分支：`claude/add-capabilities-docs-CdrcV`
+- 主分支：`main`（从 main 出新分支开发）
 
 ## 架构概览
 
