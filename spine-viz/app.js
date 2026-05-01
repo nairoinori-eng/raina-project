@@ -1188,9 +1188,9 @@ for (const si of DRIFT_SEG_INDICES) {
     vnVineId[particleIdx]    = 0;
     vnPhase[particleIdx]     = Math.random() * 3.0;
 
-    // 根部实 → 缓慢变淡 → 屏幕边缘消失
+    // 根部实 → 缓慢变淡 → 远端保留地板透明度（避免被 2.25× 振幅扩散后看不见）
     const fadeAlpha = rawT < 1.0 ? 0.75 - rawT * 0.10
-                    : Math.max(0.0, 0.65 * (1.0 - (rawT - 1.0) / 4.0));
+                    : Math.max(0.30, 0.65 - (rawT - 1.0) * 0.10);
     vnAlphas[particleIdx]    = fadeAlpha;
     vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
     vnColorVars[particleIdx] = 0.1 + Math.random() * 0.2;
