@@ -992,6 +992,8 @@ const vnSizes     = new Float32Array(N_VINE_TOTAL);
 const vnAlphas    = new Float32Array(N_VINE_TOTAL);
 const vnColorVars = new Float32Array(N_VINE_TOTAL);
 const vnPhase     = new Float32Array(N_VINE_TOTAL);
+// 弥散粒子的"远端度"：0=分支根部/普通藤蔓，1=分支尖端，>1 飘出尖端到屏幕边缘（最大 5）
+const vnDriftT    = new Float32Array(N_VINE_TOTAL);
 
 let particleIdx = 0;
 for (let vi = 0; vi < vineData.length; vi++) {
@@ -1190,6 +1192,7 @@ for (const si of DRIFT_SEG_INDICES) {
     vnAlphas[particleIdx]    = fadeAlpha;
     vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
     vnColorVars[particleIdx] = 0.1 + Math.random() * 0.2;
+    vnDriftT[particleIdx]    = rawT;
 
     particleIdx++;
   }
@@ -1223,6 +1226,7 @@ vineGeo.setAttribute('aZPos',        new THREE.BufferAttribute(vnZPos, 1));
 vineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(vnParamT, 1));
 vineGeo.setAttribute('aVineId',      new THREE.BufferAttribute(vnVineId, 1));
 vineGeo.setAttribute('aVinePhase',   new THREE.BufferAttribute(vnPhase, 1));
+vineGeo.setAttribute('aDriftT',      new THREE.BufferAttribute(vnDriftT, 1));
 
 // 藤蔓 vertex shader：GPU双态插值 + 触发式生长 + 能量脉冲
 const vineVertexShader = /* glsl */`
@@ -1235,6 +1239,7 @@ const vineVertexShader = /* glsl */`
   attribute float aSize;
   attribute float aAlpha;
   attribute float aColorVar;
+  attribute float aDriftT;
 
   uniform float uBlend;
   uniform float uTime;
@@ -1286,6 +1291,22 @@ const vineVertexShader = /* glsl */`
       float swayX = sin(uTime * 0.35 * vineFreq + aParamT * 3.0 + aVinePhase) * 0.03 * swayBase * vineAmp;
       float swayY = sin(uTime * 0.6 * vineFreq + aParamT * 8.0 + aVinePhase * 2.0) * 0.06 * swayBase * vineAmp
                   + sin(uTime * 1.2 * vineFreq + aParamT * 14.0) * 0.02 * swayBase * vineAmp;
+
+      // 弥散粒子惯性拖尾：远端摇幅放大 + 相位延迟 + 慢速大漂浮
+      // aDriftT: 0=普通藤蔓/分支根部（无效果），1=分支尖端，>1 飘出尖端到屏幕边缘（最大 5）
+      if (aDriftT > 0.05) {
+        float dist = aDriftT;                          // 0~5
+        float lag  = dist * 0.45;                       // 越远端相位延迟越大（惯性表现）
+        // 主摇晃：远端跟着藤主体摆动，但延后一拍且幅度成倍放大
+        swayX += sin(uTime * 0.42 - lag + aVinePhase * 1.3)        * 0.055 * dist;
+        swayY += cos(uTime * 0.55 - lag + aVinePhase * 0.9)        * 0.032 * dist;
+        // 慢速大漂浮（低频，营造"被风吹散"的拖尾扇形）
+        swayX += sin(uTime * 0.13 - lag * 1.6 + aColorVar * 5.0)   * 0.085 * dist;
+        swayY += sin(uTime * 0.17 - lag * 1.6 + aColorVar * 3.2)   * 0.045 * dist;
+        // 高频小晃动（增加有机感，避免太规律）
+        swayX += sin(uTime * 1.10 - lag * 0.5 + aVinePhase * 4.0)  * 0.012 * dist;
+      }
+
       pos2d.x += swayX;
       pos2d.y += swayY;
 
@@ -2418,17 +2439,17 @@ const flowerVertexShader = /* glsl */`
 `;
 
 // ── 花朵颜色：白→淡紫→薰衣草（大部分偏浅）──
-const FLOWER_A_COLOR = new THREE.Color(0xe0dce0);  // 冷白
+const FLOWER_A_COLOR = new THREE.Color(0xe6d8dc);  // 淡粉珠光（脱去纯白感）
 const FLOWER_A_HL    = new THREE.Color(0xf0e0a8);  // 鹅黄（花蕊）
 const FLOWER_A_AC1   = new THREE.Color(0xc8b8d8);  // 淡紫
 const FLOWER_A_AC2   = new THREE.Color(0xb0a0c8);  // 薰衣草
 
-const FLOWER_MID_COLOR = new THREE.Color(0xe0dce0);
+const FLOWER_MID_COLOR = new THREE.Color(0xe2dde8);  // 淡紫白（过渡）
 const FLOWER_MID_HL    = new THREE.Color(0xf0e0a8);
 const FLOWER_MID_AC1   = new THREE.Color(0xc8b8d8);
 const FLOWER_MID_AC2   = new THREE.Color(0xb0a0c8);
 
-const FLOWER_B_COLOR = new THREE.Color(0xd8d4d8);
+const FLOWER_B_COLOR = new THREE.Color(0xd6d8e8);  // 清冷蓝白
 const FLOWER_B_HL    = new THREE.Color(0xe8d8a0);
 const FLOWER_B_AC1   = new THREE.Color(0xc0b0d0);
 const FLOWER_B_AC2   = new THREE.Color(0xa898c0);
