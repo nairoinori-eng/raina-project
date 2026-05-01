@@ -2709,10 +2709,11 @@ const flowMat = new THREE.ShaderMaterial({
       // alpha curve: 头部淡入(15%)，中段持平(15-70%)，尾部淡出(70-100%)
       float a1 = (progress < 0.15) ? progress / 0.15 : 1.0;
       float a2 = (progress > 0.70) ? (1.0 - progress) / 0.30 : 1.0;
-      vAlpha = clamp(a1 * a2, 0.0, 1.0) * uActive;
+      vAlpha = clamp(a1 * a2, 0.0, 1.0) * uActive * 0.35;
 
       vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-      gl_PointSize = (3.5 + aPathSeed * 4.0) * (300.0 / -mvPos.z);
+      // size 跟其他粒子系统对齐（世界单位 0.03~0.06，屏幕缩放 300/-z）
+      gl_PointSize = (0.035 + aPathSeed * 0.025) * (300.0 / -mvPos.z);
       gl_Position = projectionMatrix * mvPos;
     }
   `,
@@ -2723,7 +2724,7 @@ const flowMat = new THREE.ShaderMaterial({
       float d = length(gl_PointCoord - vec2(0.5));
       if (d > 0.5) discard;
       float core = exp(-d * d * 24.0);
-      float halo = exp(-d * d * 10.0) * 0.30;
+      float halo = exp(-d * d * 10.0) * 0.15;
       gl_FragColor = vec4(uColor, (core + halo) * vAlpha);
     }
   `,

@@ -220,10 +220,10 @@ body {
   gap: 1.1em;
 }
 
-/* 单行字幕：默认透明，.vis 时显示。淡入淡出加长以适配文学性脚本。 */
+/* 单行字幕：默认透明，.vis 时显示。fade in/out 短一些避免句间重叠。 */
 .intro-line {
   opacity: 0;
-  transition: opacity 1.4s ease;
+  transition: opacity 0.7s ease;
   font-size: clamp(0.85rem, 1.4vw, 1.2rem);
   font-weight: 300;
   line-height: 1.7;

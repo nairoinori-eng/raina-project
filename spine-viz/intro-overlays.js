@@ -174,18 +174,14 @@ export class IntroOverlays {
 
   // ── 叙事字幕（组内堆叠）+ 倒数（居中）──
   _updateText(t) {
-    // 叙事行：独立显示/淡出（淡出窗口加长到 1.2s 以适配文学节奏）
+    // 叙事行：纯 CSS transition 控制 fade in/out（避免手动 opacity 跟 CSS 冲突）
     for (const line of this._lines) {
       const { p, start, groupEnd } = line;
       if (t >= start && t < groupEnd) {
         p.classList.add('vis');
-        const rem = groupEnd - t;
-        p.style.opacity = rem < 1.2 ? Math.max(0, rem / 1.2) : '';
-        // 三维锚定的字幕：每帧把锚点投影到屏幕
         if (line.anchor) this._positionAnchored(line);
       } else {
         p.classList.remove('vis');
-        p.style.opacity = '';
       }
     }
 
