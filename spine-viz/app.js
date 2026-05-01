@@ -1292,19 +1292,16 @@ const vineVertexShader = /* glsl */`
       float swayY = sin(uTime * 0.6 * vineFreq + aParamT * 8.0 + aVinePhase * 2.0) * 0.06 * swayBase * vineAmp
                   + sin(uTime * 1.2 * vineFreq + aParamT * 14.0) * 0.02 * swayBase * vineAmp;
 
-      // 弥散粒子惯性拖尾：远端摇幅放大 + 相位延迟 + 慢速大漂浮
-      // aDriftT: 0=普通藤蔓/分支根部（无效果），1=分支尖端，>1 飘出尖端到屏幕边缘（最大 5）
-      if (aDriftT > 0.05) {
-        float dist = aDriftT;                          // 0~5
-        float lag  = dist * 0.45;                       // 越远端相位延迟越大（惯性表现）
-        // 主摇晃：远端跟着藤主体摆动，但延后一拍且幅度成倍放大
-        swayX += sin(uTime * 0.42 - lag + aVinePhase * 1.3)        * 0.055 * dist;
-        swayY += cos(uTime * 0.55 - lag + aVinePhase * 0.9)        * 0.032 * dist;
-        // 慢速大漂浮（低频，营造"被风吹散"的拖尾扇形）
-        swayX += sin(uTime * 0.13 - lag * 1.6 + aColorVar * 5.0)   * 0.085 * dist;
-        swayY += sin(uTime * 0.17 - lag * 1.6 + aColorVar * 3.2)   * 0.045 * dist;
-        // 高频小晃动（增加有机感，避免太规律）
-        swayX += sin(uTime * 1.10 - lag * 0.5 + aVinePhase * 4.0)  * 0.012 * dist;
+      // 弥散粒子惯性拖尾：仅"飘出分支尖端的部分"叠加惯性，曲线本身不动（避免分支变粗）
+      // aDriftT: 0~0.95 = 在分支曲线上（不动），1.0 = 分支尖端，1~5 = 飘出后越来越远
+      float driftDist = max(0.0, aDriftT - 1.0);  // 0=曲线上/尖端, 4=屏幕边缘
+      if (driftDist > 0.0) {
+        float lag = driftDist * 0.4;  // 远端相位延迟（惯性感）
+        swayX += sin(uTime * 0.42 - lag + aVinePhase * 1.3)        * 0.020 * driftDist;
+        swayY += cos(uTime * 0.55 - lag + aVinePhase * 0.9)        * 0.013 * driftDist;
+        // 慢速大漂浮（低频拖尾扇形）
+        swayX += sin(uTime * 0.13 - lag * 1.6 + aColorVar * 5.0)   * 0.030 * driftDist;
+        swayY += sin(uTime * 0.17 - lag * 1.6 + aColorVar * 3.2)   * 0.020 * driftDist;
       }
 
       pos2d.x += swayX;
@@ -2439,20 +2436,21 @@ const flowerVertexShader = /* glsl */`
 `;
 
 // ── 花朵颜色：白→淡紫→薰衣草（大部分偏浅）──
-const FLOWER_A_COLOR = new THREE.Color(0xe6d8dc);  // 淡粉珠光（脱去纯白感）
+// ── 花朵颜色：统一淡蓝白基调（不分 blend 阶段，花朵主要在体验后段才出现）──
+const FLOWER_A_COLOR = new THREE.Color(0xc0d0ec);  // 淡蓝白主色
 const FLOWER_A_HL    = new THREE.Color(0xf0e0a8);  // 鹅黄（花蕊）
-const FLOWER_A_AC1   = new THREE.Color(0xc8b8d8);  // 淡紫
-const FLOWER_A_AC2   = new THREE.Color(0xb0a0c8);  // 薰衣草
+const FLOWER_A_AC1   = new THREE.Color(0xc8b8d8);  // 淡紫（强调 1）
+const FLOWER_A_AC2   = new THREE.Color(0xb0a0c8);  // 薰衣草（强调 2）
 
-const FLOWER_MID_COLOR = new THREE.Color(0xe2dde8);  // 淡紫白（过渡）
+const FLOWER_MID_COLOR = new THREE.Color(0xc0d0ec);
 const FLOWER_MID_HL    = new THREE.Color(0xf0e0a8);
 const FLOWER_MID_AC1   = new THREE.Color(0xc8b8d8);
 const FLOWER_MID_AC2   = new THREE.Color(0xb0a0c8);
 
-const FLOWER_B_COLOR = new THREE.Color(0xd6d8e8);  // 清冷蓝白
-const FLOWER_B_HL    = new THREE.Color(0xe8d8a0);
-const FLOWER_B_AC1   = new THREE.Color(0xc0b0d0);
-const FLOWER_B_AC2   = new THREE.Color(0xa898c0);
+const FLOWER_B_COLOR = new THREE.Color(0xc0d0ec);
+const FLOWER_B_HL    = new THREE.Color(0xf0e0a8);
+const FLOWER_B_AC1   = new THREE.Color(0xc8b8d8);
+const FLOWER_B_AC2   = new THREE.Color(0xb0a0c8);
 
 const flowerMat = new THREE.ShaderMaterial({
   vertexShader: flowerVertexShader,
