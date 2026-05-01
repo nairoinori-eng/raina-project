@@ -251,16 +251,56 @@ export class IntroOverlays {
     if (rib)   rib.classList.remove('anim');
   }
 
-  // ── 呼吸节拍器 ──
+  // ── 呼吸节拍器：3 轮跟做 ──
+  // 轮 1（47-55s）：完整指令（吸气-把气送向凹陷的那一侧 / 撑开-让肋骨从内部张开 / 呼气-慢慢让气出来）
+  // 轮 2（55-63s）：简化（吸气 / 撑开 / 呼气）
+  // 轮 3（63-71s）：纯视觉，无字（71-74s 由 TEXT_SCHEDULE 显示"感受这道气流..."）
+  // 同时计算 _pacerBreatheT 供 app.js 同步脊柱呼吸
   _updatePacer(t) {
-    if (t < PACER_START || t >= PACER_END) { this.$pacer.classList.remove('vis'); return; }
+    if (t < PACER_START || t >= PACER_END) {
+      this.$pacer.classList.remove('vis');
+      this._pacerBreatheT = 0;
+      return;
+    }
     this.$pacer.classList.add('vis');
-    const ct = (t - PACER_START) % BREATH_CYCLE;
-    let scale, label;
-    if (ct < INHALE) { scale = 0.5 + (ct / INHALE) * 0.8; label = '吸气'; }
-    else if (ct < INHALE + HOLD) { scale = 1.3; label = '撑开'; }
-    else { scale = 1.3 - ((ct - INHALE - HOLD) / (BREATH_CYCLE - INHALE - HOLD)) * 0.8; label = '呼气'; }
+
+    const elapsed = t - PACER_START;
+    const cycleIndex = Math.floor(elapsed / BREATH_CYCLE);  // 0 / 1 / 2
+    const ct = elapsed % BREATH_CYCLE;
+
+    let breatheT, phase;
+    if (ct < INHALE) {
+      breatheT = ct / INHALE;
+      phase = 'inhale';
+    } else if (ct < INHALE + HOLD) {
+      breatheT = 1.0;
+      phase = 'hold';
+    } else {
+      breatheT = 1 - (ct - INHALE - HOLD) / (BREATH_CYCLE - INHALE - HOLD);
+      phase = 'exhale';
+    }
+    this._pacerBreatheT = breatheT;
+
+    // 每轮文字
+    let label = '';
+    if (cycleIndex === 0) {
+      if (phase === 'inhale')      label = '吸气 — 把气送向凹陷的那一侧';
+      else if (phase === 'hold')   label = '撑开 — 让肋骨从内部张开';
+      else                         label = '呼气 — 慢慢让气出来';
+    } else if (cycleIndex === 1) {
+      if (phase === 'inhale')      label = '吸气';
+      else if (phase === 'hold')   label = '撑开';
+      else                         label = '呼气';
+    }
+    // cycle 2 (轮 3): 无字
+
+    const scale = 0.5 + breatheT * 0.8;
     this.$ring.style.transform = `scale(${scale})`;
     this.$label.textContent = label;
+  }
+
+  // 给 app.js 用：返回当前节拍器呼吸进度（0=收缩底, 1=吸到顶/撑开峰）
+  getPacerBreatheT() {
+    return this._pacerBreatheT || 0;
   }
 }

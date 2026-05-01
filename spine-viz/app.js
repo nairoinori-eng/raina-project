@@ -2918,23 +2918,33 @@ function updateGuide(t) {
     bloomPass.strength = 0.16 - seg2T * 0.04;  // 0.16 → 0.12
 
   } else if (e < 74) {
-    // ─── 46-74s：段 2c 节拍器跟做（脊柱保留淡 alpha，避免空白）───
-    // 批次 2 会让 spineMat.uBreathe 同步节拍器节奏
+    // ─── 46-74s：段 2c 节拍器跟做（脊柱保留淡 alpha + 同步节拍器呼吸）───
     spineMat.uniforms.uFormation.value        = 1.0;
     spineMat.uniforms.uGuideAlpha.value       = 0.30;
-    spineMat.uniforms.uBreathe.value          = 0.15;
     spineMat.uniforms.uSegmentHighlight.value = 0.0;
     comparisonMat.opacity = 0;
     bloomPass.strength = 0.10;
 
+    // 节拍器呼吸进度（0=收缩底, 1=吸到顶）→ 驱动脊柱呼吸幅度
+    const pacerT = overlays.getPacerBreatheT();
+    spineMat.uniforms.uBreathe.value       = 0.10 + pacerT * 0.30;
+    spineMat.uniforms.uBreatheExpand.value = 1.0 + pacerT * 0.07;
+
   } else {
-    // ─── 74-82s：段 3 入静（脊柱 alpha 回到 1.0，准备 EXPERIENCE）───
+    // ─── 74-82s：段 3 入静（脊柱回归 + 微暖色温 + 轻微呼吸）───
     const seg3T = (e - 74) / 8;
     const guideAlpha = 0.30 + seg3T * 0.70;  // 0.30 → 1.0
     spineMat.uniforms.uFormation.value        = 1.0;
     spineMat.uniforms.uGuideAlpha.value       = guideAlpha;
 
-    // 轻微呼吸式起伏（预告 EXPERIENCE 机制）
+    // 微暖色温（lerp 0 → 8% 向 GOLD 偏移，预告 EXPERIENCE 的暖色系）
+    const warmth = seg3T * 0.08;
+    spineMat.uniforms.uColor.value.lerpColors(COLOR_DARK, COLOR_GOLD, warmth);
+    spineMat.uniforms.uHighlight.value.lerpColors(HL_DARK, HL_GOLD, warmth);
+    diffuseMat.uniforms.uColor.value.lerpColors(COLOR_DARK, COLOR_GOLD, warmth);
+    diffuseMat.uniforms.uHighlight.value.lerpColors(HL_DARK, HL_GOLD, warmth);
+
+    // 轻微呼吸式起伏
     const breathe = breatheCurve(t) * 0.20 * seg3T;
     spineMat.uniforms.uBreathe.value          = breathe;
     spineMat.uniforms.uBreatheExpand.value    = 1 + breathe * 0.06;
