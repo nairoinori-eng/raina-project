@@ -2655,6 +2655,94 @@ composer.addPass(bloomPass);
 
 
 // ============================================================
+// 10b. 光流粒子（GUIDE 段 2a/b "送气方向"可视化）
+// ============================================================
+// 一道淡暖光从胸腔位置流向凹陷一侧（左下），仅在段 2a/b 36-44s 激活
+const FLOW_COUNT = 300;
+const flowGeo = new THREE.BufferGeometry();
+const flowPosArr = new Float32Array(FLOW_COUNT * 3); // 占位
+const flowSpawnArr = new Float32Array(FLOW_COUNT);   // 0~cycleTotal 的 stagger
+const flowSeedArr  = new Float32Array(FLOW_COUNT);   // 0~1 路径变量
+for (let i = 0; i < FLOW_COUNT; i++) {
+  flowSpawnArr[i] = (i / FLOW_COUNT) * 2.8;          // 在 2.8s 内均匀错开
+  flowSeedArr[i]  = Math.random();
+}
+flowGeo.setAttribute('position',     new THREE.BufferAttribute(flowPosArr, 3));
+flowGeo.setAttribute('aSpawnDelay',  new THREE.BufferAttribute(flowSpawnArr, 1));
+flowGeo.setAttribute('aPathSeed',    new THREE.BufferAttribute(flowSeedArr, 1));
+
+const flowMat = new THREE.ShaderMaterial({
+  vertexShader: /* glsl */`
+    attribute float aSpawnDelay;
+    attribute float aPathSeed;
+    uniform float uTime;
+    uniform float uActive;
+    varying float vAlpha;
+    void main() {
+      float lifetime = 2.5;
+      float cycle = 2.8;
+      float localT = mod(uTime - aSpawnDelay, cycle);
+      float progress = clamp(localT / lifetime, 0.0, 1.0);
+
+      // 起点（胸腔附近，y ≈ 0.4，x 在脊柱中线附近）
+      vec3 start = vec3(
+        0.05 + (aPathSeed - 0.5) * 0.15,
+        0.40 + (aPathSeed - 0.5) * 0.30,
+        (aPathSeed - 0.5) * 0.10
+      );
+      // 终点（左下，飘出屏幕外）
+      vec3 end = vec3(
+        -1.40 + (aPathSeed - 0.5) * 0.30,
+        -0.20 + (aPathSeed - 0.5) * 0.40,
+        (aPathSeed - 0.5) * 0.10
+      );
+      // 弧线插值（quadratic Bezier，控制点上抬形成弧）
+      vec3 ctrl = mix(start, end, 0.5);
+      ctrl.y += 0.45;
+      vec3 a = mix(start, ctrl, progress);
+      vec3 b = mix(ctrl, end, progress);
+      vec3 pos = mix(a, b, progress);
+      // 微飘动
+      pos.x += sin(uTime * 1.5 + aPathSeed * 10.0) * 0.025 * (1.0 - progress);
+      pos.y += cos(uTime * 1.3 + aPathSeed * 8.0)  * 0.020;
+
+      // alpha curve: 头部淡入(15%)，中段持平(15-70%)，尾部淡出(70-100%)
+      float a1 = (progress < 0.15) ? progress / 0.15 : 1.0;
+      float a2 = (progress > 0.70) ? (1.0 - progress) / 0.30 : 1.0;
+      vAlpha = clamp(a1 * a2, 0.0, 1.0) * uActive;
+
+      vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
+      gl_PointSize = (3.5 + aPathSeed * 4.0) * (300.0 / -mvPos.z);
+      gl_Position = projectionMatrix * mvPos;
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform vec3 uColor;
+    varying float vAlpha;
+    void main() {
+      float d = length(gl_PointCoord - vec2(0.5));
+      if (d > 0.5) discard;
+      float core = exp(-d * d * 24.0);
+      float halo = exp(-d * d * 10.0) * 0.30;
+      gl_FragColor = vec4(uColor, (core + halo) * vAlpha);
+    }
+  `,
+  uniforms: {
+    uTime:   { value: 0 },
+    uActive: { value: 0 },
+    uColor:  { value: new THREE.Color(0xfae8c0) },  // 淡暖白
+  },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+
+const flowPoints = new THREE.Points(flowGeo, flowMat);
+flowPoints.frustumCulled = false;
+spineGroup.add(flowPoints);
+
+
+// ============================================================
 // 11. 状态 / blend 控制 + 引导动画状态
 // ============================================================
 
@@ -2707,6 +2795,7 @@ function enterExperience() {
   vineMat.uniforms.uFormation.value   = 1.0;
   leafPoints.visible = true;
   comparisonMat.opacity = 0;
+  flowMat.uniforms.uActive.value = 0;  // 关掉光流（仅 GUIDE 段 2a/b 用）
   updateDebugUI();
   console.log('[raina] 呼吸体验阶段开始');
 }
@@ -2720,6 +2809,7 @@ function resetToIdle() {
   spineMat.uniforms.uGuideAlpha.value = 1.0;
   vineMat.uniforms.uFormation.value   = 0.0;
   leafPoints.visible = false;
+  flowMat.uniforms.uActive.value = 0;
 
   // 重置藤蔓
   for (let v = 0; v < N_VINES; v++) {
@@ -2839,6 +2929,14 @@ function updateGuide(t) {
   // 更新叠加层
   overlays.updateGuide(guideElapsed);
 
+  // 光流粒子（段 2a/b "送往凹陷的那一侧" 期间激活，36-44s）
+  flowMat.uniforms.uTime.value = t;
+  let flowActive = 0;
+  if (guideElapsed >= 36 && guideElapsed < 38)      flowActive = (guideElapsed - 36) / 2;
+  else if (guideElapsed >= 38 && guideElapsed < 42) flowActive = 1.0;
+  else if (guideElapsed >= 42 && guideElapsed < 44) flowActive = 1 - (guideElapsed - 42) / 2;
+  flowMat.uniforms.uActive.value = flowActive;
+
   // 脊柱旋转：全程保持轻摆动（移除"病理段冻结"，新脚本无此概念）
   if (!branchEditMode) {
     const rotTarget = Math.sin(t * 0.52) * 0.35;
@@ -2907,7 +3005,7 @@ function updateGuide(t) {
     bloomPass.strength = 0.16;
 
   } else if (e < 46) {
-    // ─── 32-46s：段 2a/b 学法引入（脊柱 alpha 1.0 → 0.5，让位给节拍器）───
+    // ─── 32-46s：段 2a/b 学法引入（脊柱 alpha 1.0 → 0.5，让位给节拍器 + 光流）───
     const seg2T = (e - 32) / 14;
     const guideAlpha = 1.0 - seg2T * 0.5;  // 1.0 → 0.5
     spineMat.uniforms.uFormation.value        = 1.0;
