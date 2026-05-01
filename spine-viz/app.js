@@ -2744,77 +2744,120 @@ spineGroup.add(flowPoints);
 
 
 // ============================================================
-// 10c. 节拍器粒子环（GUIDE 段 2c "呼吸节拍器"可视化）
+// 10c. 节拍器粒子球（GUIDE 段 2c "呼吸节拍器"可视化）
 // ============================================================
-// 144 粒子排成圆圈，呼吸时径向扩张/收缩。
+// 2500 粒子组成密集圆盘 + 边缘尖刺/拖尾粒子
+// - 核心粒子（70%）：填满整个圆盘，含中心
+// - 尖刺粒子（30%）：吸气时径向延伸出去，形成拖尾
+// - 高频径向震荡 + 角度抖动 让圆有"活气" + "震荡感"
 // 不放在 spineGroup，独立于脊柱旋转。位置在屏幕中央 + 略前置。
-const PACER_PCOUNT = 144;
+const PACER_PCOUNT = 2500;
 const pacerGeo = new THREE.BufferGeometry();
-const pacerPosArr   = new Float32Array(PACER_PCOUNT * 3);
-const pacerAngleArr = new Float32Array(PACER_PCOUNT);
-const pacerSeedArr  = new Float32Array(PACER_PCOUNT);
+const pacerPosArr    = new Float32Array(PACER_PCOUNT * 3);
+const pacerAngleArr  = new Float32Array(PACER_PCOUNT);
+const pacerSeedArr   = new Float32Array(PACER_PCOUNT);
+const pacerRadFArr   = new Float32Array(PACER_PCOUNT);  // 0~1 基础半径因子
+const pacerSpikeArr  = new Float32Array(PACER_PCOUNT);  // 0=核心, >0=尖刺粒子
 for (let i = 0; i < PACER_PCOUNT; i++) {
-  // 不完美等分（加微随机）让圆有呼吸感
-  pacerAngleArr[i] = (i / PACER_PCOUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.04;
+  pacerAngleArr[i] = Math.random() * Math.PI * 2;
   pacerSeedArr[i]  = Math.random();
+
+  const isSpike = Math.random() < 0.30;
+  if (isSpike) {
+    // 尖刺粒子：边缘附近，吸气时延伸出去
+    pacerRadFArr[i]  = 0.65 + Math.random() * 0.40;  // 0.65~1.05 基础
+    pacerSpikeArr[i] = 0.35 + Math.random() * 0.65;  // 0.35~1.00 延伸幅度
+  } else {
+    // 核心粒子：填满圆盘，sqrt 分布让粒子按面积均匀分布
+    pacerRadFArr[i]  = Math.sqrt(Math.random()) * 0.95;  // 0~0.95
+    pacerSpikeArr[i] = 0;
+  }
 }
 pacerGeo.setAttribute('position', new THREE.BufferAttribute(pacerPosArr, 3));
 pacerGeo.setAttribute('aAngle',   new THREE.BufferAttribute(pacerAngleArr, 1));
 pacerGeo.setAttribute('aSeed',    new THREE.BufferAttribute(pacerSeedArr, 1));
+pacerGeo.setAttribute('aRadF',    new THREE.BufferAttribute(pacerRadFArr, 1));
+pacerGeo.setAttribute('aSpike',   new THREE.BufferAttribute(pacerSpikeArr, 1));
 
 const pacerMat = new THREE.ShaderMaterial({
   vertexShader: /* glsl */`
     attribute float aAngle;
     attribute float aSeed;
+    attribute float aRadF;   // 0~1 基础半径因子
+    attribute float aSpike;  // 0=核心, >0=尖刺
     uniform float uTime;
     uniform float uBreathe;  // 0=收缩底, 1=吸到顶
-    uniform float uActive;   // 0-1 整体淡入淡出
+    uniform float uActive;
     varying float vAlpha;
     varying float vBreathe;
     varying float vSeed;
+    varying float vRadF;
+    varying float vSpike;
     void main() {
-      // 半径随 breathe 扩张：0.42 → 0.78
-      float radius = 0.42 + uBreathe * 0.36;
-      // 微随机径向飘动（每粒子独立）
-      radius += sin(uTime * 1.2 + aSeed * 12.0) * 0.018 * (0.5 + uBreathe * 0.5);
-      // 角度微抖动（让圆有"活气"）
-      float angle = aAngle + sin(uTime * 0.5 + aSeed * 6.28) * 0.025;
+      // 整体缩放：呼气时 0.65 倍，吸气时 1.10 倍
+      float scale = 0.65 + uBreathe * 0.45;
+      // 基础半径分布
+      float baseR = 0.18 + aRadF * 0.42;  // 0.18~0.60
+      // 尖刺延伸：吸气越深，尖刺越长
+      float spikeBoost = aSpike * uBreathe * 0.55;
+      float radius = (baseR + spikeBoost) * scale;
+      // 高频径向震荡（边缘更明显） — 震荡感
+      float vibe = sin(uTime * 4.5 + aAngle * 7.0 + aSeed * 9.0) * 0.022 * aRadF;
+      radius += vibe;
+      // 拖尾：尖刺粒子额外随时间脉动，模拟外飞拖尾
+      float trail = sin(uTime * 1.8 + aSeed * 11.0) * 0.05 * aSpike * uBreathe;
+      radius += trail;
+      // 角度微抖
+      float angle = aAngle + sin(uTime * 0.7 + aSeed * 5.0) * 0.04 * (0.4 + aRadF * 0.6);
       vec3 pos = vec3(
         cos(angle) * radius,
         sin(angle) * radius,
-        (aSeed - 0.5) * 0.04
+        (aSeed - 0.5) * 0.06
       );
       vAlpha   = uActive;
       vBreathe = uBreathe;
       vSeed    = aSeed;
+      vRadF    = aRadF;
+      vSpike   = aSpike;
       vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-      // size 跟其他粒子一致（世界 0.025-0.05）
-      gl_PointSize = (0.030 + aSeed * 0.025) * (300.0 / -mvPos.z);
+      // 边缘粒子略小，中心粒子略大；尖刺粒子最小
+      float pSize = 0.022 + aSeed * 0.014 + (1.0 - aRadF) * 0.008 - aSpike * 0.008;
+      gl_PointSize = pSize * (300.0 / -mvPos.z);
       gl_Position = projectionMatrix * mvPos;
     }
   `,
   fragmentShader: /* glsl */`
     uniform vec3 uColorCool;
     uniform vec3 uColorWarm;
+    uniform vec3 uColorRim;
     varying float vAlpha;
     varying float vBreathe;
     varying float vSeed;
+    varying float vRadF;
+    varying float vSpike;
     void main() {
       float d = length(gl_PointCoord - vec2(0.5));
       if (d > 0.5) discard;
-      // 颜色随呼吸 lerp（吸气暖白，呼气淡紫）
-      vec3 c = mix(uColorCool, uColorWarm, vBreathe * 0.7 + vSeed * 0.15);
+      // 颜色策略：
+      //  - 中心(vRadF 低): 冷淡紫
+      //  - 边缘(vRadF 高): 暖白
+      //  - 尖刺粒子: 暖色 rim 强调
+      vec3 c = mix(uColorCool, uColorWarm, vRadF * (0.4 + vBreathe * 0.5));
+      c = mix(c, uColorRim, vSpike * 0.7);
+      // 中心粒子更亮（compensate for 距离感）
+      float intensity = 1.0 + (1.0 - vRadF) * 0.3;
       float core = exp(-d * d * 24.0);
-      float halo = exp(-d * d * 10.0) * 0.30;
-      gl_FragColor = vec4(c, (core + halo) * vAlpha);
+      float halo = exp(-d * d * 10.0) * 0.25;
+      gl_FragColor = vec4(c * intensity, (core + halo) * vAlpha);
     }
   `,
   uniforms: {
     uTime:      { value: 0 },
     uBreathe:   { value: 0 },
     uActive:    { value: 0 },
-    uColorCool: { value: new THREE.Color(0xa090d0) },  // 淡紫蓝
-    uColorWarm: { value: new THREE.Color(0xfae8c0) },  // 淡暖白
+    uColorCool: { value: new THREE.Color(0x9a8ec8) },  // 中心淡紫
+    uColorWarm: { value: new THREE.Color(0xfae8c0) },  // 边缘暖白
+    uColorRim:  { value: new THREE.Color(0xff9a78) },  // 尖刺暖橘（突出 rim）
   },
   transparent: true,
   blending: THREE.AdditiveBlending,
