@@ -345,10 +345,10 @@ body {
 #intro-pacer.vis { opacity: 1; }
 
 .pacer-ring {
+  /* 圆环视觉由 Three.js 粒子接管，CSS ring 隐藏但保留布局占位 */
   width: 140px; height: 140px; border-radius: 50%;
-  border: 1.5px solid rgba(240, 230, 200, 0.45);
-  background: radial-gradient(circle, rgba(255, 240, 200, 0.06) 0%, transparent 100%);
-  transition: transform 0.2s ease-out;
+  border: none; background: transparent;
+  visibility: hidden;
 }
 .pacer-label {
   font-size: 0.95rem; font-weight: 300;

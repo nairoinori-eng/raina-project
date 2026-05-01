@@ -2744,6 +2744,91 @@ spineGroup.add(flowPoints);
 
 
 // ============================================================
+// 10c. 节拍器粒子环（GUIDE 段 2c "呼吸节拍器"可视化）
+// ============================================================
+// 144 粒子排成圆圈，呼吸时径向扩张/收缩。
+// 不放在 spineGroup，独立于脊柱旋转。位置在屏幕中央 + 略前置。
+const PACER_PCOUNT = 144;
+const pacerGeo = new THREE.BufferGeometry();
+const pacerPosArr   = new Float32Array(PACER_PCOUNT * 3);
+const pacerAngleArr = new Float32Array(PACER_PCOUNT);
+const pacerSeedArr  = new Float32Array(PACER_PCOUNT);
+for (let i = 0; i < PACER_PCOUNT; i++) {
+  // 不完美等分（加微随机）让圆有呼吸感
+  pacerAngleArr[i] = (i / PACER_PCOUNT) * Math.PI * 2 + (Math.random() - 0.5) * 0.04;
+  pacerSeedArr[i]  = Math.random();
+}
+pacerGeo.setAttribute('position', new THREE.BufferAttribute(pacerPosArr, 3));
+pacerGeo.setAttribute('aAngle',   new THREE.BufferAttribute(pacerAngleArr, 1));
+pacerGeo.setAttribute('aSeed',    new THREE.BufferAttribute(pacerSeedArr, 1));
+
+const pacerMat = new THREE.ShaderMaterial({
+  vertexShader: /* glsl */`
+    attribute float aAngle;
+    attribute float aSeed;
+    uniform float uTime;
+    uniform float uBreathe;  // 0=收缩底, 1=吸到顶
+    uniform float uActive;   // 0-1 整体淡入淡出
+    varying float vAlpha;
+    varying float vBreathe;
+    varying float vSeed;
+    void main() {
+      // 半径随 breathe 扩张：0.42 → 0.78
+      float radius = 0.42 + uBreathe * 0.36;
+      // 微随机径向飘动（每粒子独立）
+      radius += sin(uTime * 1.2 + aSeed * 12.0) * 0.018 * (0.5 + uBreathe * 0.5);
+      // 角度微抖动（让圆有"活气"）
+      float angle = aAngle + sin(uTime * 0.5 + aSeed * 6.28) * 0.025;
+      vec3 pos = vec3(
+        cos(angle) * radius,
+        sin(angle) * radius,
+        (aSeed - 0.5) * 0.04
+      );
+      vAlpha   = uActive;
+      vBreathe = uBreathe;
+      vSeed    = aSeed;
+      vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
+      // size 跟其他粒子一致（世界 0.025-0.05）
+      gl_PointSize = (0.030 + aSeed * 0.025) * (300.0 / -mvPos.z);
+      gl_Position = projectionMatrix * mvPos;
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform vec3 uColorCool;
+    uniform vec3 uColorWarm;
+    varying float vAlpha;
+    varying float vBreathe;
+    varying float vSeed;
+    void main() {
+      float d = length(gl_PointCoord - vec2(0.5));
+      if (d > 0.5) discard;
+      // 颜色随呼吸 lerp（吸气暖白，呼气淡紫）
+      vec3 c = mix(uColorCool, uColorWarm, vBreathe * 0.7 + vSeed * 0.15);
+      float core = exp(-d * d * 24.0);
+      float halo = exp(-d * d * 10.0) * 0.30;
+      gl_FragColor = vec4(c, (core + halo) * vAlpha);
+    }
+  `,
+  uniforms: {
+    uTime:      { value: 0 },
+    uBreathe:   { value: 0 },
+    uActive:    { value: 0 },
+    uColorCool: { value: new THREE.Color(0xa090d0) },  // 淡紫蓝
+    uColorWarm: { value: new THREE.Color(0xfae8c0) },  // 淡暖白
+  },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+
+const pacerPoints = new THREE.Points(pacerGeo, pacerMat);
+pacerPoints.frustumCulled = false;
+// 位置：屏幕中央，略微前置（在脊柱前面）
+pacerPoints.position.set(0, 0, 1.5);
+scene.add(pacerPoints);
+
+
+// ============================================================
 // 11. 状态 / blend 控制 + 引导动画状态
 // ============================================================
 
@@ -2797,6 +2882,7 @@ function enterExperience() {
   leafPoints.visible = true;
   comparisonMat.opacity = 0;
   flowMat.uniforms.uActive.value = 0;  // 关掉光流（仅 GUIDE 段 2a/b 用）
+  pacerMat.uniforms.uActive.value = 0; // 关掉节拍器粒子环
   updateDebugUI();
   console.log('[raina] 呼吸体验阶段开始');
 }
@@ -2811,6 +2897,7 @@ function resetToIdle() {
   vineMat.uniforms.uFormation.value   = 0.0;
   leafPoints.visible = false;
   flowMat.uniforms.uActive.value = 0;
+  pacerMat.uniforms.uActive.value = 0;
 
   // 重置藤蔓
   for (let v = 0; v < N_VINES; v++) {
@@ -2937,6 +3024,15 @@ function updateGuide(t) {
   else if (guideElapsed >= 38 && guideElapsed < 42) flowActive = 1.0;
   else if (guideElapsed >= 42 && guideElapsed < 44) flowActive = 1 - (guideElapsed - 42) / 2;
   flowMat.uniforms.uActive.value = flowActive;
+
+  // 节拍器粒子环（段 2c 期间激活，46-73s，跟节拍器圆环 47-71s 略放宽）
+  pacerMat.uniforms.uTime.value = t;
+  pacerMat.uniforms.uBreathe.value = overlays.getPacerBreatheT();
+  let pacerActive = 0;
+  if (guideElapsed >= 46 && guideElapsed < 47)      pacerActive = guideElapsed - 46;
+  else if (guideElapsed >= 47 && guideElapsed < 71) pacerActive = 1.0;
+  else if (guideElapsed >= 71 && guideElapsed < 73) pacerActive = 1 - (guideElapsed - 71) / 2;
+  pacerMat.uniforms.uActive.value = pacerActive;
 
   // 脊柱旋转：全程保持轻摆动（移除"病理段冻结"，新脚本无此概念）
   if (!branchEditMode) {
