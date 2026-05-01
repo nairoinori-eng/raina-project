@@ -3247,12 +3247,7 @@ exposureSlider.addEventListener('input', () => {
 document.getElementById('btn-start').addEventListener('click', () => startGuide());
 document.getElementById('btn-skip').addEventListener('click', () => {
   // 跳过引导直接进入体验模式
-  currentMode = 'EXPERIENCE';
-  overlays.clearAll();
-  spineMat.uniforms.uFormation.value  = 1.0;
-  spineMat.uniforms.uGuideAlpha.value = 1.0;
-  vineMat.uniforms.uFormation.value   = 1.0;
-  updateDebugUI();
+  enterExperience();
   console.log('[raina] 跳过引导，直接进入体验');
 });
 document.getElementById('btn-reset').addEventListener('click', () => resetToIdle());
