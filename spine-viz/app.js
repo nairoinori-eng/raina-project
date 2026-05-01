@@ -853,8 +853,8 @@ const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
 // ── 分支尖端弥散粒子 ──
 // 从3个分支尖端弥散（位置从实际曲线计算，不硬编码）
-const DRIFT_SEG_INDICES = [7, 9, 12]; // VINE1中弥散的3个分支段
-const DRIFT_PPV = 5000; // 每个分支弥散粒子数
+const DRIFT_SEG_INDICES = [9, 12]; // VINE1中弥散的2个分支段
+const DRIFT_PPV = 8000; // 每个分支弥散粒子数
 const DRIFT_TOTAL = DRIFT_SEG_INDICES.length * DRIFT_PPV;
 
 // ── 藤蔓拓扑分析（自动检测主干/分支/末梢）──
@@ -1299,11 +1299,11 @@ const vineVertexShader = /* glsl */`
       float driftDist = max(0.0, aDriftT - 1.0);  // 0=曲线上/尖端, 4=屏幕边缘
       if (driftDist > 0.0) {
         float lag = driftDist * 0.4;  // 远端相位延迟（惯性感）
-        swayX += sin(uTime * 0.42 - lag + aVinePhase * 1.3)        * 0.020 * driftDist;
-        swayY += cos(uTime * 0.55 - lag + aVinePhase * 0.9)        * 0.013 * driftDist;
+        swayX += sin(uTime * 0.42 - lag + aVinePhase * 1.3)        * 0.045 * driftDist;
+        swayY += cos(uTime * 0.55 - lag + aVinePhase * 0.9)        * 0.030 * driftDist;
         // 慢速大漂浮（低频拖尾扇形）
-        swayX += sin(uTime * 0.13 - lag * 1.6 + aColorVar * 5.0)   * 0.030 * driftDist;
-        swayY += sin(uTime * 0.17 - lag * 1.6 + aColorVar * 3.2)   * 0.020 * driftDist;
+        swayX += sin(uTime * 0.13 - lag * 1.6 + aColorVar * 5.0)   * 0.070 * driftDist;
+        swayY += sin(uTime * 0.17 - lag * 1.6 + aColorVar * 3.2)   * 0.045 * driftDist;
       }
 
       pos2d.x += swayX;
