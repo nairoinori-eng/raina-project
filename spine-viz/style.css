@@ -220,16 +220,15 @@ body {
   gap: 1.1em;
 }
 
-/* 单行字幕：默认透明，.vis 时显示 */
+/* 单行字幕：默认透明，.vis 时显示。淡入淡出加长以适配文学性脚本。 */
 .intro-line {
   opacity: 0;
-  transition: opacity 0.9s ease;
+  transition: opacity 1.4s ease;
   font-size: clamp(0.85rem, 1.4vw, 1.2rem);
   font-weight: 300;
   line-height: 1.7;
   letter-spacing: 0.1em;
   color: rgba(220, 215, 245, 0.92);
-  white-space: nowrap;
   text-align: left;
   text-shadow: 0 0 20px rgba(120, 80, 200, 0.45), 0 0 8px rgba(40, 20, 80, 0.6);
   margin: 0;

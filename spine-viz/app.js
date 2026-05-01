@@ -298,7 +298,7 @@ const spineFragmentShader = /* glsl */`
   uniform vec3 uHighlight;
   uniform vec3 uAccent1;
   uniform vec3 uAccent2;
-  uniform float uSegmentHighlight;  // 0 = normal, 1 = thoracic orange + lumbar cyan
+  uniform float uSegmentHighlight;  // 0 = normal, 1 = 凸起侧暖白光晕 + 凹陷侧暗化
   uniform float uAlphaBoost; // 高清模式亮度补偿
   varying float vAlpha;
   varying float vColorVar;
@@ -315,21 +315,20 @@ const spineFragmentShader = /* glsl */`
       c = mix(uColor, uAccent2, clamp((-vColorVar - 0.5) * 2.0, 0.0, 1.0));
     }
     c = clamp(c, 0.0, 0.88);
-    // Segment highlight: 只高亮弯曲最严重的区域
+    // 段 1 知病: 凸起一侧（胸椎）→ 暖白光晕；凹陷一侧（腰椎）→ 暗化
     // 胸椎峰值 @ t ≈ 0.33 (T7)，腰椎峰值 @ t ≈ 0.75 (L3)
-    // 用 AC1_DARK (鲜橘红) 和 AC2_DARK (鲜翡翠) 保证色板一致性
     if (uSegmentHighlight > 0.0) {
-      vec3 thoracicCol = vec3(1.0, 0.408, 0.251);   // AC1_DARK 0xff6840
-      vec3 lumbarCol   = vec3(0.125, 0.878, 0.753);  // AC2_DARK 0x20e0c0
       // 胸椎区域：t 从 0.12 升起，0.33 峰值，0.52 落下
       float thorZone = smoothstep(0.12, 0.28, vParamT)
                      * (1.0 - smoothstep(0.38, 0.52, vParamT));
       // 腰椎区域：t 从 0.58 升起，0.75 峰值，0.95 落下
       float lumbZone = smoothstep(0.58, 0.72, vParamT)
                      * (1.0 - smoothstep(0.82, 0.95, vParamT));
-      vec3 hlColor = thoracicCol * thorZone + lumbarCol * lumbZone;
-      float hlStrength = max(thorZone, lumbZone);
-      c = mix(c, hlColor * 1.5, hlStrength * uSegmentHighlight);
+      // 凸起侧（胸椎）：温暖光晕（淡暖白）
+      vec3 warmthCol = vec3(0.95, 0.85, 0.65);
+      c = mix(c, warmthCol * 1.4, thorZone * uSegmentHighlight * 0.7);
+      // 凹陷侧（腰椎）：暗化（变暗 65%，保留色相）
+      c = mix(c, c * 0.35, lumbZone * uSegmentHighlight * 0.7);
     }
     float core  = exp(-d * d * 24.0);
     float halo  = exp(-d * d * 10.0) * 0.12;
@@ -2821,7 +2820,8 @@ function updateIdle(t) {
   bloomPass.strength = 0.08;
 }
 
-// ── GUIDE 更新（60s 认知引导时间线）─────────────────────────
+// ── GUIDE 更新（82s 认知引导时间线 v2）─────────────────────────
+// 段 1 知病 (4-32s) → 段 2a/b 学法引入 (32-46s) → 段 2c 节拍器 (46-74s) → 段 3 入静 (74-82s)
 function updateGuide(t) {
   // 手动进度优先，否则用速度倍率
   if (guideManualProgress >= 0) {
@@ -2830,8 +2830,8 @@ function updateGuide(t) {
     guideElapsed = (performance.now() / 1000 - guideStartTime) * guideSpeed;
   }
 
-  // 检查结束（86s 完整引导）
-  if (guideElapsed >= 86) {
+  // 检查结束（82s 完整引导）
+  if (guideElapsed >= 82) {
     enterExperience();
     return;
   }
@@ -2839,11 +2839,9 @@ function updateGuide(t) {
   // 更新叠加层
   overlays.updateGuide(guideElapsed);
 
-  // 脊柱旋转：病理解释段 (26-40s) 冻结，其余阶段正常摆动
-  const inPathology = (guideElapsed >= 26 && guideElapsed < 40);
+  // 脊柱旋转：全程保持轻摆动（移除"病理段冻结"，新脚本无此概念）
   if (!branchEditMode) {
-    const rotTarget = inPathology ? 0 : Math.sin(t * 0.52) * 0.35;
-    // 平滑过渡避免跳变
+    const rotTarget = Math.sin(t * 0.52) * 0.35;
     spineGroup.rotation.y += (rotTarget - spineGroup.rotation.y) * 0.08;
   }
 
@@ -2851,7 +2849,7 @@ function updateGuide(t) {
   spineMat.uniforms.uTime.value = t;
   vineMat.uniforms.uTime.value  = t;
 
-  // blend 在引导期间保持0
+  // blend 在引导期间保持 0
   spineMat.uniforms.uBlend.value = 0.0;
 
   // 颜色：固定在暗蓝紫（blend=0 的颜色）
@@ -2873,9 +2871,9 @@ function updateGuide(t) {
   // 默认重置段相关 uniform
   spineMat.uniforms.uBreatheExpand.value = 1.0;
 
-  if (e < 3) {
-    // ─── 0-3s：粒子快速凝聚成脊柱 ───
-    const formation = e / 3;
+  if (e < 4) {
+    // ─── 0-4s：粒子凝聚成脊柱 ───
+    const formation = e / 4;
     spineMat.uniforms.uFormation.value        = formation;
     spineMat.uniforms.uGuideAlpha.value       = 1.0;
     spineMat.uniforms.uBreathe.value          = 0.0;
@@ -2883,68 +2881,66 @@ function updateGuide(t) {
     comparisonMat.opacity = 0;
     bloomPass.strength = 0.08 + formation * 0.08;
 
-  } else if (e < 26) {
-    // ─── 3-26s：情感叙事段，脊柱正常展示 ───
-    const pulse = smoothstep(0, 1, (e - 4) / 3) * 0.35;
-    spineMat.uniforms.uFormation.value        = 1.0;
-    spineMat.uniforms.uGuideAlpha.value       = 1.0;
-    spineMat.uniforms.uBreathe.value          = pulse;
-    spineMat.uniforms.uSegmentHighlight.value = 0.0;
-    comparisonMat.opacity = 0;
+  } else if (e < 32) {
+    // ─── 4-32s：段 1 知病（脊柱呼吸式脉动 + 中段光晕/阴影）───
+    spineMat.uniforms.uFormation.value  = 1.0;
+    spineMat.uniforms.uGuideAlpha.value = 1.0;
+
+    // 微呼吸式脉动
+    const pulse = smoothstep(0, 1, (e - 4) / 3) * 0.30;
+    spineMat.uniforms.uBreathe.value = pulse;
+
+    // 段 1 中段（12-30s）光晕/阴影：12-15s 淡入 / 15-28s 持平 / 28-30s 淡出
+    let segHL = 0;
+    if (e >= 12 && e < 15)      segHL = (e - 12) / 3;
+    else if (e >= 15 && e < 28) segHL = 1.0;
+    else if (e >= 28 && e < 30) segHL = 1 - (e - 28) / 2;
+    spineMat.uniforms.uSegmentHighlight.value = segHL;
+
+    // 对比线（"数字标定了弯折的弧度"出现时短暂淡入）：13-19s
+    let lineOp = 0;
+    if (e >= 13 && e < 15)      lineOp = ((e - 13) / 2) * 0.25;
+    else if (e >= 15 && e < 17) lineOp = 0.25;
+    else if (e >= 17 && e < 19) lineOp = (1 - (e - 17) / 2) * 0.25;
+    comparisonMat.opacity = lineOp;
+
     bloomPass.strength = 0.16;
 
-  } else if (e < 40) {
-    // ─── 26-40s：病理解释（胸椎橙 / 腰椎青高亮 + 正常脊柱对比线）───
-    // 段高亮在 26-28s 内淡入，38-40s 淡出
-    let segHL = 1.0;
-    if (e < 28) segHL = (e - 26) / 2;
-    else if (e > 38) segHL = (40 - e) / 2;
-    // 对比线在 28-32s 淡入，36-40s 淡出
-    let lineOp = 0;
-    if (e >= 28 && e < 32) lineOp = ((e - 28) / 4) * 0.45;
-    else if (e >= 32 && e < 36) lineOp = 0.45;
-    else if (e >= 36 && e < 40) lineOp = (1 - (e - 36) / 4) * 0.45;
-
-    spineMat.uniforms.uFormation.value        = 1.0;
-    spineMat.uniforms.uGuideAlpha.value       = 1.0;
-    spineMat.uniforms.uBreathe.value          = 0.35;
-    spineMat.uniforms.uSegmentHighlight.value = segHL;
-    comparisonMat.opacity = lineOp;
-    bloomPass.strength = 0.18;
-
-  } else if (e < 44) {
-    // ─── 40-44s：脊柱淡出，准备进入教学 ───
-    const segT = (e - 40) / 4;
-    const guideAlpha = Math.max(0, 1 - segT * 1.2);
+  } else if (e < 46) {
+    // ─── 32-46s：段 2a/b 学法引入（脊柱 alpha 1.0 → 0.5，让位给节拍器）───
+    const seg2T = (e - 32) / 14;
+    const guideAlpha = 1.0 - seg2T * 0.5;  // 1.0 → 0.5
     spineMat.uniforms.uFormation.value        = 1.0;
     spineMat.uniforms.uGuideAlpha.value       = guideAlpha;
-    spineMat.uniforms.uBreathe.value          = 0.35 * guideAlpha;
+    spineMat.uniforms.uBreathe.value          = 0.30 * (1 - seg2T * 0.5);
     spineMat.uniforms.uSegmentHighlight.value = 0.0;
     comparisonMat.opacity = 0;
-    bloomPass.strength = 0.18 * guideAlpha + 0.04;
+    bloomPass.strength = 0.16 - seg2T * 0.04;  // 0.16 → 0.12
 
-  } else if (e < 76) {
-    // ─── 44-76s：人体轮廓教学段 + 呼吸节拍器（脊柱隐藏）───
+  } else if (e < 74) {
+    // ─── 46-74s：段 2c 节拍器跟做（脊柱保留淡 alpha，避免空白）───
+    // 批次 2 会让 spineMat.uBreathe 同步节拍器节奏
     spineMat.uniforms.uFormation.value        = 1.0;
-    spineMat.uniforms.uGuideAlpha.value       = 0.0;
-    spineMat.uniforms.uBreathe.value          = 0.0;
+    spineMat.uniforms.uGuideAlpha.value       = 0.30;
+    spineMat.uniforms.uBreathe.value          = 0.15;
     spineMat.uniforms.uSegmentHighlight.value = 0.0;
     comparisonMat.opacity = 0;
-    bloomPass.strength = 0.04;
+    bloomPass.strength = 0.10;
 
   } else {
-    // ─── 76-86s："现在换你试试" + 3-2-1-开始 → 过渡 ───
-    const segT = (e - 76) / 10;
-    const guideAlpha = Math.min(1, segT * 3.0);
-    const breathe = guideAlpha * breatheCurve(t) * 0.5;
-
+    // ─── 74-82s：段 3 入静（脊柱 alpha 回到 1.0，准备 EXPERIENCE）───
+    const seg3T = (e - 74) / 8;
+    const guideAlpha = 0.30 + seg3T * 0.70;  // 0.30 → 1.0
     spineMat.uniforms.uFormation.value        = 1.0;
     spineMat.uniforms.uGuideAlpha.value       = guideAlpha;
+
+    // 轻微呼吸式起伏（预告 EXPERIENCE 机制）
+    const breathe = breatheCurve(t) * 0.20 * seg3T;
     spineMat.uniforms.uBreathe.value          = breathe;
-    spineMat.uniforms.uBreatheExpand.value    = 1 + breathe * 0.1;
+    spineMat.uniforms.uBreatheExpand.value    = 1 + breathe * 0.06;
     spineMat.uniforms.uSegmentHighlight.value = 0.0;
     comparisonMat.opacity = 0;
-    bloomPass.strength = 0.04 + guideAlpha * 0.14;
+    bloomPass.strength = 0.10 + seg3T * 0.08;
   }
 }
 
@@ -3293,7 +3289,7 @@ function updateDebugUI() {
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
   // 同步引导进度滑块
   if (guideProgressSlider && currentMode === 'GUIDE' && guideManualProgress < 0) {
-    guideProgressSlider.value = Math.min(86, guideElapsed);
+    guideProgressSlider.value = Math.min(82, guideElapsed);
     if (guideProgressVal) guideProgressVal.textContent = guideElapsed.toFixed(1);
   }
 }

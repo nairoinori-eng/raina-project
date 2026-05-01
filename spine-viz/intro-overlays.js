@@ -1,51 +1,44 @@
 /**
- * IntroOverlays — 86s 认知引导的 HTML/CSS 叠加层管理
+ * IntroOverlays — 82s 认知引导的 HTML/CSS 叠加层管理
  *
- * 字幕结构：按叙事段分组（group A/B/C），每组的句子按时间先后
- * 逐句出现并堆叠在前一句下方，整组左对齐在屏幕左侧。
- * 组结束时一起淡出，下一组接着在相同位置从头开始。
+ * 字幕：每行独立显示 + 淡入淡出（不再分组堆叠）
+ *   start / end 是行的开始与结束时间（秒）
+ *   anchor: 'thoracic' | 'lumbar' → 锚定到脊柱 3D 峰值点
+ *   countdown: true → 居中单独显示（保留给段 2c 收尾诗句等）
  */
 
-// ── 叙事段分组的结束时间（组内句子一起淡出）──
-const GROUP_ENDS = { A: 26, B: 40, C: 64 };
-
 // ── 文字时间表 ──
-//   group: 'A'|'B'|'C' → 叙事段分组；不带 group 的是倒数（居中单独显示）
 const TEXT_SCHEDULE = [
-  // 组 A：情感叙事 (4-26s)
-  { text: '这是我的脊柱。',                              start: 4,  group: 'A' },
-  { text: '十五岁那年，医生说它弯了。',                    start: 9,  group: 'A' },
-  { text: '胸椎向右 <span class="hl-o">28</span> 度，腰椎向左 <span class="hl-c">18</span> 度。',
-    start: 15, group: 'A' },
-  { text: '它已经这样，陪我十年了。',                      start: 21, group: 'A' },
+  // ─── 段 1 · 知病 (4-32s) ───
+  { text: '十五岁那年，我的脊柱向我宣告了它的偏离。',          start: 4,    end: 8.5  },
+  { text: '统计说，每一百人中，我们这样的会有两个。',          start: 8.5,  end: 12.5 },
+  { text: '胸椎右凸 28 度，腰椎左凸 18 度——数字标定了弯折的弧度。', start: 12.5, end: 17.5 },
+  { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 17.5, end: 20.5 },
+  { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 20.5, end: 25.5, anchor: 'thoracic', side: 'right' },
+  { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 25.5, end: 30, anchor: 'lumbar', side: 'left' },
+  { text: '我们便如此共生。',                                start: 30,   end: 32 },
 
-  // 组 B：病理解释 (27-40s) - 锚定到脊柱三维峰值点，每帧投影到屏幕
-  // anchor: 'thoracic' → SPINE_CURVED[4] 胸椎最右凸点
-  // anchor: 'lumbar'   → SPINE_CURVED[9] 腰椎最左凸点
-  // side: 字幕相对锚点的方向，'right' = 锚点右侧、'left' = 锚点左侧
-  { text: '凸起的那一侧，肋骨被撑得太开；',
-    start: 27, group: 'B', anchor: 'thoracic', side: 'right' },
-  { text: '凹陷的那一侧，肋骨被挤在一起。',
-    start: 33, group: 'B', anchor: 'lumbar',   side: 'left' },
+  // ─── 段 2a/b · 学法引入 (32-46s) ───
+  { text: '但呼吸，是身体里仍能调动的事。',                    start: 32,   end: 35 },
+  { text: '有一种呼吸——它不让气息均匀地涨满胸腔，',           start: 35,   end: 38.5 },
+  { text: '而是有方向地，专门送往凹陷的那一侧。',              start: 38.5, end: 41.5 },
+  { text: '让被挤压的肋骨，从内部，一次次轻轻推开。',          start: 41.5, end: 44 },
+  { text: '这就是施罗斯呼吸法（Schroth）。',                  start: 44,   end: 46 },
 
-  // 组 C：呼吸原理 (45-64s)
-  { text: '有一种呼吸，专门送气到凹陷的那一边，',           start: 45, group: 'C' },
-  { text: '把被挤扁的肋骨，重新撑开。',                    start: 52, group: 'C' },
-  { text: '跟我一起试试。',                               start: 58, group: 'C' },
+  // ─── 段 2c · 节拍器跟做 (46-74s) ───
+  { text: '现在，跟着试一次。', start: 46, end: 47, countdown: true },
+  // 47-71s: 节拍器 3 轮（pacer 自带 label，不在 TEXT_SCHEDULE 里）
+  { text: '感受这道气流，正抵达那片峡谷。', start: 71, end: 74, countdown: true },
 
-  // 64-76s：呼吸节拍器 × 2 循环（无主文字）
-
-  // 倒数（单独居中显示）
-  { text: '现在，换你试试。', start: 76, end: 79, countdown: true },
-  { text: '3',               start: 79, end: 80, countdown: true, big: true },
-  { text: '2',               start: 80, end: 81, countdown: true, big: true },
-  { text: '1',               start: 81, end: 82, countdown: true, big: true },
-  { text: '开始。',           start: 82, end: 86, countdown: true },
+  // ─── 段 3 · 入静 (74-82s) ───
+  { text: '接下来，跟着你的呼吸——',          start: 74, end: 78 },
+  { text: '让它，慢慢回到自己的形状。',        start: 78, end: 82 },
 ];
 
-// 呼吸节拍器：64-76s (12s = 2 x 6s 循环)
-const PACER_START = 64, PACER_END = 76;
-const BREATH_CYCLE = 6, INHALE = 3, HOLD = 1.5;
+// 呼吸节拍器：47-71s = 24s = 3 轮 × 8s
+// 每轮：3s 吸气 + 1.5s 撑开 + 3.5s 呼气
+const PACER_START = 47, PACER_END = 71;
+const BREATH_CYCLE = 8, INHALE = 3, HOLD = 1.5;
 
 export class IntroOverlays {
   constructor({ camera, spineGroup, anchors } = {}) {
@@ -73,7 +66,6 @@ export class IntroOverlays {
     this.$text = document.createElement('div');
     this.$text.id = 'intro-text';
 
-    const groupDivs = {};
     TEXT_SCHEDULE.forEach(entry => {
       if (entry.countdown) return;
       const p = document.createElement('p');
@@ -91,20 +83,18 @@ export class IntroOverlays {
         p.style.left = entry.pos.left;
         document.body.appendChild(p);
       } else {
-        // 堆叠：放进分组容器
-        if (!groupDivs[entry.group]) {
-          const g = document.createElement('div');
-          g.className = 'intro-group';
-          this.$text.appendChild(g);
-          groupDivs[entry.group] = g;
-        }
-        groupDivs[entry.group].appendChild(p);
+        // 批次 1: 不分组堆叠，每行 absolute 重叠在 #intro-text 同一位置
+        p.style.position = 'absolute';
+        p.style.top = '0';
+        p.style.left = '0';
+        p.style.width = '100%';
+        this.$text.appendChild(p);
       }
 
       this._lines.push({
         p,
         start: entry.start,
-        groupEnd: GROUP_ENDS[entry.group],
+        groupEnd: entry.end,
         anchor: entry.anchor || null,
         side: entry.side || null,
       });
@@ -184,13 +174,13 @@ export class IntroOverlays {
 
   // ── 叙事字幕（组内堆叠）+ 倒数（居中）──
   _updateText(t) {
-    // 叙事行：独立显示/淡出
+    // 叙事行：独立显示/淡出（淡出窗口加长到 1.2s 以适配文学节奏）
     for (const line of this._lines) {
       const { p, start, groupEnd } = line;
       if (t >= start && t < groupEnd) {
         p.classList.add('vis');
         const rem = groupEnd - t;
-        p.style.opacity = rem < 0.8 ? Math.max(0, rem / 0.8) : '';
+        p.style.opacity = rem < 1.2 ? Math.max(0, rem / 1.2) : '';
         // 三维锚定的字幕：每帧把锚点投影到屏幕
         if (line.anchor) this._positionAnchored(line);
       } else {
@@ -248,20 +238,17 @@ export class IntroOverlays {
     p.style.top = `${sy - h * 0.5}px`;
   }
 
-  // ── 人体（教学段 44-76s）──
-  _updateBody(t) {
-    if (t >= 44 && t < 76) this.$body.classList.add('vis');
-    else this.$body.classList.remove('vis');
-
+  // ── 人体剪影：批次 1 暂时隐藏（批次 2 重新设计或移除）──
+  _updateBody(_t) {
+    this.$body.classList.remove('vis');
     const dot = this.$body.querySelector('.glow-dot');
     const arrow = this.$body.querySelector('.arrow-ind');
     const chest = this.$body.querySelector('.chest-exp');
     const rib   = this.$body.querySelector('.rib-half');
-
-    if (t >= 44.5 && t < 58) dot.classList.add('vis'); else dot.classList.remove('vis');
-    if (t >= 52 && t < 58)   arrow.classList.add('vis'); else arrow.classList.remove('vis');
-    if (t >= 58 && t < 76) { chest.classList.add('vis'); rib.classList.add('anim'); }
-    else { chest.classList.remove('vis'); rib.classList.remove('anim'); }
+    if (dot)   dot.classList.remove('vis');
+    if (arrow) arrow.classList.remove('vis');
+    if (chest) chest.classList.remove('vis');
+    if (rib)   rib.classList.remove('anim');
   }
 
   // ── 呼吸节拍器 ──
