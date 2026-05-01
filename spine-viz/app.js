@@ -1042,9 +1042,11 @@ for (let vi = 0; vi < vineData.length; vi++) {
       // 藤蔓往右摆(tangent.x>0)=前面，往左摆=后面
       // 两根藤蔓反向，形成交织
       const yNorm = (vineYMax - sy) / vineYRange;
+      // Z 深度：正弦缠绕，沿藤蔓长度周期性前后穿插（2D 形状不变）
+      // 2.5 个周期 → 自然的编织感，两根藤蔓反相形成交织
       const vineFactor = vi === 0 ? 1 : -1;
-      const wrapR = 0.06;
-      vnZPos[particleIdx] = tangent.x * wrapR * vineFactor + gaussRand() * 0.008;
+      const wrapR = 0.10;
+      vnZPos[particleIdx] = Math.sin(yNorm * Math.PI * 2 * 2.5) * wrapR * vineFactor + gaussRand() * 0.008;
 
       vnParamT[particleIdx] = yNorm;
       vnVineId[particleIdx] = vi;
@@ -1052,7 +1054,7 @@ for (let vi = 0; vi < vineData.length; vi++) {
 
       const baseSize = depth === 0 ? 0.038 : depth === 1 ? 0.030 : 0.022;
       vnSizes[particleIdx] = baseSize + Math.random() * 0.010;
-      vnAlphas[particleIdx] = (depth === 0 ? 0.90 : 0.75) + Math.random() * 0.10;
+      vnAlphas[particleIdx] = (depth === 0 ? 0.55 : 0.45) + Math.random() * 0.10;
 
       // 颜色渐变：顶部暖亮 → 底部深冷 + Z深度立体
       const yNormColor = (vineYMax - sy) / vineYRange;
@@ -1342,13 +1344,20 @@ const vineVertexShader = /* glsl */`
       float xOcclusion = 1.0 - smoothstep(uSpineHalfW - 0.04, uSpineHalfW, dxWorld);
       // 深度相对：>0 粒子在骨骼前，<0 在骨骼后
       float zRel = pWorldZ - spineWorldZ;
-      float zDepthFade = 0.25 + 0.75 * smoothstep(-0.06, 0.01, zRel);
+      // 主藤(vineId=0) Z 浅(±0.10)，用宽阈值让脉冲从前到后平滑过渡
+      // 辅藤(vineId>0) Z 深(±0.3)，用标准阈值
+      float zLo = (aVineId < 0.5) ? -0.08 : -0.06;
+      float zHi = (aVineId < 0.5) ?  0.08 : 0.01;
+      float zDepthFade = 0.25 + 0.75 * smoothstep(zLo, zHi, zRel);
       float depthFade = mix(1.0, zDepthFade, xOcclusion);
 
       float effectivePulse = totalPulse * depthFade;
-      alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * 0.45);
+      // 主藤脉冲 boost 压低（alpha/size 膨胀是"亮"的主因，不是颜色）
+      float pulseAlpha = (aVineId < 0.5) ? 0.08 : 0.45;
+      float pulseSize  = (aVineId < 0.5) ? 0.08 : 0.5;
+      alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * pulseAlpha);
       alpha *= uFormation;  // hide vines during intro
-      sz = aSize * (1.0 + effectivePulse * 0.5);
+      sz = aSize * (1.0 + effectivePulse * pulseSize);
 
       vAlpha = alpha;
       vColorVar = aColorVar + totalPulse * 0.5;
@@ -2695,7 +2704,10 @@ function enterExperience() {
   // 确保 formation = 1, guideAlpha = 1
   spineMat.uniforms.uFormation.value  = 1.0;
   spineMat.uniforms.uGuideAlpha.value = 1.0;
+  spineMat.uniforms.uSegmentHighlight.value = 0.0;
   vineMat.uniforms.uFormation.value   = 1.0;
+  leafPoints.visible = true;
+  comparisonMat.opacity = 0;
   updateDebugUI();
   console.log('[raina] 呼吸体验阶段开始');
 }
@@ -2708,6 +2720,7 @@ function resetToIdle() {
   spineMat.uniforms.uFormation.value  = 0.0;
   spineMat.uniforms.uGuideAlpha.value = 1.0;
   vineMat.uniforms.uFormation.value   = 0.0;
+  leafPoints.visible = false;
 
   // 重置藤蔓
   for (let v = 0; v < N_VINES; v++) {
@@ -2794,6 +2807,7 @@ function updateIdle(t) {
   comparisonMat.opacity = 0;
   vineMat.uniforms.uFormation.value   = 0.0;
   vineMat.uniforms.uTime.value        = t;
+  leafPoints.visible = false;
 
   // IDLE 不旋转，粒子纯漂浮
   spineGroup.rotation.y = 0;
@@ -2850,8 +2864,9 @@ function updateGuide(t) {
   diffuseMat.uniforms.uAccent1.value.copy(AC1_DARK);
   diffuseMat.uniforms.uAccent2.value.copy(AC2_DARK);
 
-  // 藤蔓始终隐藏
+  // 藤蔓/叶子始终隐藏
   vineMat.uniforms.uFormation.value = 0.0;
+  leafPoints.visible = false;
 
   const e = guideElapsed;
 
@@ -3241,6 +3256,10 @@ document.getElementById('btn-skip').addEventListener('click', () => {
   console.log('[raina] 跳过引导，直接进入体验');
 });
 document.getElementById('btn-reset').addEventListener('click', () => resetToIdle());
+document.getElementById('btn-skip').addEventListener('click', () => {
+  if (currentMode === 'IDLE') startGuide();
+  if (currentMode === 'GUIDE') enterExperience();
+});
 
 // ── 引导进度/速度控制 ──
 const guideProgressSlider = document.getElementById('guide-progress-slider');
