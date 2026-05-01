@@ -3271,6 +3271,39 @@ function updateDebugUI() {
 
 
 // ============================================================
+// BGM 控制：右下角按钮 toggle 播放/暂停 + 调试面板音量滑块
+// ============================================================
+const bgmAudio = document.getElementById('bgm');
+const bgmToggle = document.getElementById('bgm-toggle');
+const bgmVolumeSlider = document.getElementById('bgm-volume-slider');
+const bgmVolumeVal = document.getElementById('bgm-volume-val');
+
+if (bgmAudio) {
+  bgmAudio.volume = 0.5;
+
+  if (bgmToggle) {
+    bgmToggle.addEventListener('click', () => {
+      if (bgmAudio.paused) {
+        bgmAudio.play().catch(err => console.warn('[bgm] play failed:', err));
+      } else {
+        bgmAudio.pause();
+      }
+    });
+    bgmAudio.addEventListener('play',  () => bgmToggle.classList.add('playing'));
+    bgmAudio.addEventListener('pause', () => bgmToggle.classList.remove('playing'));
+  }
+
+  if (bgmVolumeSlider) {
+    bgmVolumeSlider.addEventListener('input', () => {
+      const v = parseInt(bgmVolumeSlider.value, 10);
+      bgmAudio.volume = v / 100;
+      if (bgmVolumeVal) bgmVolumeVal.textContent = v;
+    });
+  }
+}
+
+
+// ============================================================
 // 15. 键盘快捷键
 // ============================================================
 
