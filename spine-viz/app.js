@@ -338,11 +338,12 @@ const spineFragmentShader = /* glsl */`
                      * (1.0 - smoothstep(0.38, 0.52, vParamT));
       float lumbZone = smoothstep(0.58, 0.72, vParamT)
                      * (1.0 - smoothstep(0.82, 0.95, vParamT));
+      // 凸起侧（胸椎）：暖白光晕
       vec3 warmthCol = vec3(0.95, 0.85, 0.65);
       c = mix(c, warmthCol * 1.4, thorZone * uSegmentHighlight * 0.7);
-      // 凹陷侧（腰椎）：深冷紫阴影（强 lerp + 暗化）
-      vec3 shadowCol = vec3(0.20, 0.16, 0.42);
-      c = mix(c, shadowCol, lumbZone * uSegmentHighlight * 0.85);
+      // 凹陷侧（腰椎）：冷蓝光晕（亮但冷色，跟胸椎暖白对比）
+      vec3 coolCol = vec3(0.50, 0.72, 0.98);
+      c = mix(c, coolCol * 1.3, lumbZone * uSegmentHighlight * 0.7);
     }
     // IDLE 微发光 + 拖尾粒子飞行期更强 halo
     float haloAmount = 0.12 + vIdleness * 0.22 + vTrailBoost * 0.65;
@@ -700,10 +701,16 @@ for (let i = 0; i < N_SPINE; i++) {
 spineGeo.setAttribute('aFormStart', new THREE.BufferAttribute(gpuFormStart, 1));
 spineGeo.setAttribute('aFormPower', new THREE.BufferAttribute(gpuFormPower, 1));
 
-// ── 拖尾光：随机选 6% 粒子在飞行中放大 + 加强 halo（视觉拖尾感）──
+// ── 拖尾光：选 ~3% 粒子作为拖尾粒子（头粒子 + 4 个时间偏移的尾巴 = 真实运动轨迹）──
+// 头粒子由 spine 渲染（自带 aTrailFlag 标记 → 飞行期 size + halo 加强）
+// 尾巴由独立的 trailGeo / trailPoints 渲染（位置回溯到稍早的 uFormation 时刻）
 const gpuTrailFlag = new Float32Array(N_SPINE);
+const trailIndicesArr = [];
 for (let i = 0; i < N_SPINE; i++) {
-  gpuTrailFlag[i] = (Math.random() < 0.06) ? 1.0 : 0.0;
+  if (Math.random() < 0.03) {
+    gpuTrailFlag[i] = 1.0;
+    trailIndicesArr.push(i);
+  }
 }
 spineGeo.setAttribute('aTrailFlag', new THREE.BufferAttribute(gpuTrailFlag, 1));
 
@@ -730,6 +737,155 @@ const spineMat = new THREE.ShaderMaterial({
 const spinePoints = new THREE.Points(spineGeo, spineMat);
 spinePoints.frustumCulled = false;
 spineGroup.add(spinePoints);
+
+// ── 拖尾尾巴粒子系统（真实运动轨迹）──
+// 每个拖尾粒子额外渲染 4 个尾巴样本，每个样本的 uFormation 时间向前回溯
+// → 飞行期看到一串光跟在拖尾粒子身后
+const N_TAIL_SAMPLES = 4;
+const N_TRAIL_TOTAL = trailIndicesArr.length * N_TAIL_SAMPLES;
+
+const trailGeo = new THREE.BufferGeometry();
+const tlPos          = new Float32Array(N_TRAIL_TOTAL * 3);
+const tlCurvedPos    = new Float32Array(N_TRAIL_TOTAL * 2);
+const tlStraightPos  = new Float32Array(N_TRAIL_TOTAL * 2);
+const tlCurvedOff    = new Float32Array(N_TRAIL_TOTAL * 2);
+const tlStraightOff  = new Float32Array(N_TRAIL_TOTAL * 2);
+const tlZPos         = new Float32Array(N_TRAIL_TOTAL);
+const tlParamT       = new Float32Array(N_TRAIL_TOTAL);
+const tlSize         = new Float32Array(N_TRAIL_TOTAL);
+const tlPhase        = new Float32Array(N_TRAIL_TOTAL);
+const tlColorVar     = new Float32Array(N_TRAIL_TOTAL);
+const tlFormStart    = new Float32Array(N_TRAIL_TOTAL);
+const tlFormPower    = new Float32Array(N_TRAIL_TOTAL);
+const tlTailIdx      = new Float32Array(N_TRAIL_TOTAL);
+
+let _wIdx = 0;
+for (const sIdx of trailIndicesArr) {
+  for (let s = 1; s <= N_TAIL_SAMPLES; s++) {  // s=1..4 (head 由 spine 渲染)
+    tlCurvedPos[_wIdx*2]     = gpuCurvedPos[sIdx*2];
+    tlCurvedPos[_wIdx*2 + 1] = gpuCurvedPos[sIdx*2 + 1];
+    tlStraightPos[_wIdx*2]     = gpuStraightPos[sIdx*2];
+    tlStraightPos[_wIdx*2 + 1] = gpuStraightPos[sIdx*2 + 1];
+    tlCurvedOff[_wIdx*2]     = gpuCurvedOff[sIdx*2];
+    tlCurvedOff[_wIdx*2 + 1] = gpuCurvedOff[sIdx*2 + 1];
+    tlStraightOff[_wIdx*2]     = gpuStraightOff[sIdx*2];
+    tlStraightOff[_wIdx*2 + 1] = gpuStraightOff[sIdx*2 + 1];
+    tlZPos[_wIdx]      = gpuZPos[sIdx];
+    tlParamT[_wIdx]    = gpuParamT[sIdx];
+    tlSize[_wIdx]      = spSizes[sIdx];
+    tlPhase[_wIdx]     = gpuPhase[sIdx];
+    tlColorVar[_wIdx]  = spColorVars[sIdx];
+    tlFormStart[_wIdx] = gpuFormStart[sIdx];
+    tlFormPower[_wIdx] = gpuFormPower[sIdx];
+    tlTailIdx[_wIdx]   = s;  // 1..4，越大越"后"，越淡越小
+    _wIdx++;
+  }
+}
+
+trailGeo.setAttribute('position',     new THREE.BufferAttribute(tlPos, 3));
+trailGeo.setAttribute('aCurvedPos',   new THREE.BufferAttribute(tlCurvedPos, 2));
+trailGeo.setAttribute('aStraightPos', new THREE.BufferAttribute(tlStraightPos, 2));
+trailGeo.setAttribute('aCurvedOff',   new THREE.BufferAttribute(tlCurvedOff, 2));
+trailGeo.setAttribute('aStraightOff', new THREE.BufferAttribute(tlStraightOff, 2));
+trailGeo.setAttribute('aZPos',        new THREE.BufferAttribute(tlZPos, 1));
+trailGeo.setAttribute('aParamT',      new THREE.BufferAttribute(tlParamT, 1));
+trailGeo.setAttribute('aSize',        new THREE.BufferAttribute(tlSize, 1));
+trailGeo.setAttribute('aPhase',       new THREE.BufferAttribute(tlPhase, 1));
+trailGeo.setAttribute('aColorVar',    new THREE.BufferAttribute(tlColorVar, 1));
+trailGeo.setAttribute('aFormStart',   new THREE.BufferAttribute(tlFormStart, 1));
+trailGeo.setAttribute('aFormPower',   new THREE.BufferAttribute(tlFormPower, 1));
+trailGeo.setAttribute('aTailIdx',     new THREE.BufferAttribute(tlTailIdx, 1));
+
+const trailMat = new THREE.ShaderMaterial({
+  vertexShader: /* glsl */`
+    attribute vec2  aCurvedPos;
+    attribute vec2  aStraightPos;
+    attribute vec2  aCurvedOff;
+    attribute vec2  aStraightOff;
+    attribute float aZPos;
+    attribute float aParamT;
+    attribute float aSize;
+    attribute float aPhase;
+    attribute float aColorVar;
+    attribute float aFormStart;
+    attribute float aFormPower;
+    attribute float aTailIdx;     // 1..4
+    uniform float uBlend;
+    uniform float uBreatheExpand;
+    uniform float uTime;
+    uniform float uFormation;
+    uniform float uGuideAlpha;
+    varying float vAlpha;
+    varying float vTailIdx;
+    void main() {
+      // 计算 head 位置（参考 spine vertex shader 的 formedPos）
+      float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
+      vec2 center = mix(aCurvedPos, aStraightPos, lb);
+      vec2 off    = mix(aCurvedOff, aStraightOff, lb);
+      vec3 formedPos = vec3(center.x + off.x * uBreatheExpand, center.y + off.y, aZPos);
+
+      // scatterPos 同 spine
+      float sX = aPhase * 2.7 + aParamT * 13.1 + aColorVar * 7.3;
+      float sY = aPhase * 5.1 + aParamT * 3.7  + aColorVar * 11.9;
+      float sZ = aPhase * 3.9 + aParamT * 19.7 + aColorVar * 2.3;
+      float rx = fract(sin(sX * 12.9898) * 43758.5453) * 2.0 - 1.0;
+      float ry = fract(sin(sY * 78.233)  * 43758.5453) * 2.0 - 1.0;
+      float rz = fract(sin(sZ * 45.164)  * 43758.5453) * 2.0 - 1.0;
+      vec3 scatterPos = vec3(rx * 7.5, ry * 5.0, rz * 2.5);
+      float driftSpd = 0.06 + fract(sX * 1.23) * 0.14;
+      scatterPos.x += sin(uTime * driftSpd + sX * 6.28) * 0.6;
+      scatterPos.y += cos(uTime * driftSpd * 0.75 + sY * 4.0) * 0.42;
+      scatterPos.x += sin(uTime * 0.05 + sZ * 2.0) * 0.22;
+
+      // 尾巴时间回溯：每段尾向前推 0.05 单位 uFormation
+      float effFormation = max(0.0, uFormation - aTailIdx * 0.05);
+      float localT = clamp((effFormation - aFormStart) / max(0.001, 1.0 - aFormStart), 0.0, 1.0);
+      float pFormation = 1.0 - pow(1.0 - localT, aFormPower);
+
+      vec3 pos = mix(scatterPos, formedPos, pFormation);
+
+      // 仅在飞行期可见（pFormation 严格在 0~1 之间）
+      float flightActive = step(0.02, pFormation) * (1.0 - step(0.99, pFormation));
+
+      // 尾巴越后越小越淡
+      float tailFalloff = 1.0 - aTailIdx * 0.18;  // 0.82, 0.64, 0.46, 0.28
+      vAlpha = flightActive * tailFalloff * 0.7 * uGuideAlpha;
+      vTailIdx = aTailIdx;
+
+      vec4 mv = modelViewMatrix * vec4(pos, 1.0);
+      float pSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06) * (0.85 - aTailIdx * 0.10);
+      gl_PointSize = pSize * (300.0 / -mv.z);
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform vec3 uTrailColor;
+    varying float vAlpha;
+    varying float vTailIdx;
+    void main() {
+      float d = length(gl_PointCoord - vec2(0.5));
+      if (d > 0.5) discard;
+      float core = exp(-d * d * 22.0);
+      float halo = exp(-d * d * 8.0) * 0.55;
+      gl_FragColor = vec4(uTrailColor, (core + halo) * vAlpha);
+    }
+  `,
+  uniforms: {
+    uBlend:         { value: 0.0 },
+    uBreatheExpand: { value: 1.0 },
+    uTime:          { value: 0.0 },
+    uFormation:     { value: 0.0 },
+    uGuideAlpha:    { value: 0.0 },
+    uTrailColor:    { value: new THREE.Color(0xfae8c0) },  // 淡暖白
+  },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+
+const trailPoints = new THREE.Points(trailGeo, trailMat);
+trailPoints.frustumCulled = false;
+spineGroup.add(trailPoints);
 
 // ── 正常直脊柱对比线（虚线，教学段使用）──
 const comparisonPoints = [];
@@ -2969,6 +3125,7 @@ function enterExperience() {
   comparisonMat.opacity = 0;
   flowMat.uniforms.uActive.value = 0;
   pacerMat.uniforms.uActive.value = 0;
+  trailMat.uniforms.uGuideAlpha.value = 0;  // 关掉拖尾尾巴（仅 GUIDE 飞行期用）
   updateDebugUI();
   console.log('[raina] 呼吸体验阶段开始');
 }
@@ -2985,6 +3142,7 @@ function resetToIdle() {
   diffusePoints.visible = false;       // IDLE 隐藏弥散流（避免脊柱中轴线闪烁）
   flowMat.uniforms.uActive.value = 0;
   pacerMat.uniforms.uActive.value = 0;
+  trailMat.uniforms.uGuideAlpha.value = 0;
 
   // 重置藤蔓
   for (let v = 0; v < N_VINES; v++) {
@@ -3132,6 +3290,7 @@ function updateGuide(t) {
   // 时间总是同步
   spineMat.uniforms.uTime.value = t;
   vineMat.uniforms.uTime.value  = t;
+  trailMat.uniforms.uTime.value = t;
 
   // blend 在引导期间保持 0
   spineMat.uniforms.uBlend.value = 0.0;
@@ -3237,6 +3396,11 @@ function updateGuide(t) {
     comparisonMat.opacity = 0;
     bloomPass.strength = 0.10 + seg3T * 0.08;
   }
+
+  // 拖尾尾巴系统：同步 spine 的 formation / guideAlpha / breatheExpand
+  trailMat.uniforms.uFormation.value     = spineMat.uniforms.uFormation.value;
+  trailMat.uniforms.uGuideAlpha.value    = spineMat.uniforms.uGuideAlpha.value;
+  trailMat.uniforms.uBreatheExpand.value = spineMat.uniforms.uBreatheExpand.value;
 }
 
 // ── EXPERIENCE 更新（原有呼吸体验逻辑）──────────────────────
