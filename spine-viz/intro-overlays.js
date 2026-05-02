@@ -9,43 +9,43 @@
  *   分组的行用 GROUP_ENDS 控制整体淡出时间
  */
 
-// 各分组的统一淡出时间（A 在"陆地"句结束时整体淡出，让 anchor 句单独显示；A2 装"我们便如此共生"）
-const GROUP_ENDS = { A: 20.5, A2: 32, B: 46, D: 82 };
+// 各分组的统一淡出时间（整体相比原版 +1s 留出"凝聚后停 1s 再上字"的留白）
+const GROUP_ENDS = { A: 22, A2: 33, B: 47, D: 83 };
 
 // ── 文字时间表 ──
 const TEXT_SCHEDULE = [
-  // ─── 段 1 · 知病 (4-20.5s) - 堆叠 group A ───
-  { text: '十五岁那年，我的脊柱向我宣告了它的偏离。',          start: 4,    group: 'A' },
-  { text: '统计说，每一百人中，我们这样的会有两个。',          start: 8.5,  group: 'A' },
-  { text: '胸椎右凸 <span class="hl-warm">28</span> 度，腰椎左凸 <span class="hl-warm">18</span> 度——', start: 12.5, group: 'A' },
-  { text: '数字标定了弯折的弧度。',                          start: 14.5, group: 'A' },
-  { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 17.5, group: 'A' },
-  // 锚定到脊柱 3D 点（独立显示，不进堆叠）
-  { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 20.5, end: 25.5, anchor: 'thoracic', side: 'right' },
-  { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 25.5, end: 30, anchor: 'lumbar', side: 'left' },
-  // 段 1 收尾：单独 group A2（"我们便如此共生"独立显示，不挤在前段堆叠里）
-  { text: '我们便如此共生。',                                start: 30,   group: 'A2' },
+  // ─── 段 1 · 知病 (5-22s) - 堆叠 group A ───
+  { text: '十五岁那年，我的脊柱向我宣告了它的偏离。',          start: 5,    group: 'A' },
+  { text: '统计说，每一百人中，我们这样的会有两个。',          start: 9.5,  group: 'A' },
+  // 数字"标签"锚定到脊柱凸起点（像穹窿/峡谷一样独立显示）
+  { text: '胸椎右凸 <span class="hl-warm">28</span> 度', start: 13.5, end: 17, anchor: 'thoracic', side: 'right' },
+  { text: '腰椎左凸 <span class="hl-warm">18</span> 度', start: 13.5, end: 17, anchor: 'lumbar', side: 'left' },
+  { text: '数字标定了弯折的弧度。',                          start: 15.5, group: 'A' },
+  { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 18.5, group: 'A' },
+  // 22s group A 整体淡出
+  { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 22,   end: 27,   anchor: 'thoracic', side: 'right' },
+  { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 27,   end: 31,   anchor: 'lumbar',   side: 'left' },
+  { text: '我们便如此共生。',                                start: 31,   group: 'A2' },
 
-  // ─── 段 2a/b · 学法引入 (32-46s) - 堆叠 group B ───
-  { text: '但呼吸，是身体里仍能调动的事。',                    start: 32,   group: 'B' },
-  { text: '有一种呼吸——它不让气息均匀地涨满胸腔，',           start: 35,   group: 'B' },
-  { text: '而是有方向地，专门送往凹陷的那一侧。',              start: 38.5, group: 'B' },
-  { text: '让被挤压的肋骨，从内部，一次次轻轻推开。',          start: 41.5, group: 'B' },
-  { text: '这就是施罗斯呼吸法（Schroth）。',                  start: 44,   group: 'B' },
+  // ─── 段 2a/b · 学法引入 (33-47s) - 堆叠 group B ───
+  { text: '但呼吸，是身体里仍能调动的事。',                    start: 33,   group: 'B' },
+  { text: '有一种呼吸——它不让气息均匀地涨满胸腔，',           start: 36,   group: 'B' },
+  { text: '而是有方向地，专门送往凹陷的那一侧。',              start: 39.5, group: 'B' },
+  { text: '让被挤压的肋骨，从内部，一次次轻轻推开。',          start: 42.5, group: 'B' },
+  { text: '这就是施罗斯呼吸法（Schroth）。',                  start: 45,   group: 'B' },
 
-  // ─── 段 2c · 节拍器跟做 (46-74s) ───
-  { text: '现在，跟着试一次。', start: 46, end: 47, countdown: true },
-  // 47-71s: 节拍器 3 轮（pacer 自带 label，不在 TEXT_SCHEDULE 里）
-  { text: '感受这道气流，正抵达那片峡谷。', start: 71, end: 74, countdown: true },
+  // ─── 段 2c · 节拍器跟做 (47-75s) ───
+  { text: '现在，跟着试一次。', start: 47, end: 48, countdown: true },
+  // 48-72s: 节拍器 3 轮（pacer 自带 label）
+  { text: '感受这道气流，正抵达那片峡谷。', start: 72, end: 75, countdown: true },
 
-  // ─── 段 3 · 入静 (74-82s) - 堆叠 group D ───
-  { text: '接下来，跟着你的呼吸——',          start: 74, group: 'D' },
-  { text: '让它，慢慢回到自己的形状。',        start: 78, group: 'D' },
+  // ─── 段 3 · 入静 (75-83s) - 堆叠 group D ───
+  { text: '接下来，跟着你的呼吸——',          start: 75, group: 'D' },
+  { text: '让它，慢慢回到自己的形状。',        start: 79, group: 'D' },
 ];
 
-// 呼吸节拍器：47-71s = 24s = 3 轮 × 8s
-// 每轮：3s 吸气 + 1.5s 撑开 + 3.5s 呼气
-const PACER_START = 47, PACER_END = 71;
+// 呼吸节拍器：48-72s = 24s = 3 轮 × 8s
+const PACER_START = 48, PACER_END = 72;
 const BREATH_CYCLE = 8, INHALE = 3, HOLD = 1.5;
 
 export class IntroOverlays {

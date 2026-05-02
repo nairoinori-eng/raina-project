@@ -268,8 +268,9 @@ const spineVertexShader = /* glsl */`
     scatterPos.y += cos(uTime * driftSpd * 0.75 + sY * 4.0) * 0.42;
     scatterPos.x += sin(uTime * 0.05 + sZ * 2.0) * 0.22;
 
-    // ── 每粒子的"个人化"凝聚进度：8 波次延迟 + 每波独立 ease 曲线 ──
-    float localT = clamp((uFormation - aFormStart) / max(0.001, 1.0 - aFormStart), 0.0, 1.0);
+    // ── 每粒子的"个人化"凝聚进度：5 波次，每波动画窗口固定 0.20 ──
+    // 不再用剩余时间(1-aFormStart)，改用固定 wave duration 0.20，让波次清晰不拖尾
+    float localT = clamp((uFormation - aFormStart) / 0.20, 0.0, 1.0);
     float pFormation = 1.0 - pow(1.0 - localT, aFormPower);
 
     // ── Blend between scatter and formed ──
@@ -672,19 +673,21 @@ spineGeo.setAttribute('aZPos',        new THREE.BufferAttribute(gpuZPos, 1));
 spineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(gpuParamT, 1));
 spineGeo.setAttribute('aPhase',       new THREE.BufferAttribute(gpuPhase, 1));
 
-// ── 凝聚动画：5 个时间波次，间隔加大让每波更分明 ──
-// 每波 ~7000 粒子同时启动；波内每粒子 ease 曲线独立（速度不完全一致）
+// ── 凝聚动画：5 个时间波次（无重叠，每波 0.20 占比） ──
+// 每波动画窗口固定 0.20，下一波在前一波刚结束就开始 → 视觉上 5 道清晰浪
+// 同波内每粒子 ease 曲线略不同（速度不完全一致），但波内时机几乎同步
 const N_FORM_WAVES = 5;
+const FORM_WAVE_DURATION = 0.20;          // shader 用，每波动画占 uFormation 0.20
 const waveStarts = [];
 for (let w = 0; w < N_FORM_WAVES; w++) {
-  waveStarts.push(w * 0.15);                 // 0, 0.15, 0.30, 0.45, 0.60（间隔 0.15）
+  waveStarts.push(w * FORM_WAVE_DURATION); // 0, 0.20, 0.40, 0.60, 0.80
 }
 const gpuFormStart = new Float32Array(N_SPINE);
 const gpuFormPower = new Float32Array(N_SPINE);
 for (let i = 0; i < N_SPINE; i++) {
   const wave = Math.floor(Math.random() * N_FORM_WAVES);
-  gpuFormStart[i] = waveStarts[wave] + (Math.random() - 0.5) * 0.04; // ±0.02 微抖
-  gpuFormPower[i] = 1.5 + Math.random() * 2.5;                       // ease 曲线 per-particle 独立 1.5~4.0
+  gpuFormStart[i] = waveStarts[wave] + (Math.random() - 0.5) * 0.025; // ±0.0125 微抖（小，保留浪感）
+  gpuFormPower[i] = 1.5 + Math.random() * 2.0;                        // ease 曲线 1.5~3.5（速度差异）
 }
 spineGeo.setAttribute('aFormStart', new THREE.BufferAttribute(gpuFormStart, 1));
 spineGeo.setAttribute('aFormPower', new THREE.BufferAttribute(gpuFormPower, 1));
@@ -854,7 +857,8 @@ const diffuseMat = new THREE.ShaderMaterial({
   blending:    THREE.AdditiveBlending,
   depthWrite:  false,
 });
-spineGroup.add(new THREE.Points(diffuseGeo, diffuseMat));
+const diffusePoints = new THREE.Points(diffuseGeo, diffuseMat);
+spineGroup.add(diffusePoints);
 
 
 // ============================================================
@@ -2948,9 +2952,10 @@ function enterExperience() {
   spineMat.uniforms.uSegmentHighlight.value = 0.0;
   vineMat.uniforms.uFormation.value   = 1.0;
   leafPoints.visible = true;
+  diffusePoints.visible = true;        // EXPERIENCE 期才显示弥散流
   comparisonMat.opacity = 0;
-  flowMat.uniforms.uActive.value = 0;  // 关掉光流（仅 GUIDE 段 2a/b 用）
-  pacerMat.uniforms.uActive.value = 0; // 关掉节拍器粒子环
+  flowMat.uniforms.uActive.value = 0;
+  pacerMat.uniforms.uActive.value = 0;
   updateDebugUI();
   console.log('[raina] 呼吸体验阶段开始');
 }
@@ -2964,6 +2969,7 @@ function resetToIdle() {
   spineMat.uniforms.uGuideAlpha.value = 1.0;
   vineMat.uniforms.uFormation.value   = 0.0;
   leafPoints.visible = false;
+  diffusePoints.visible = false;       // IDLE 隐藏弥散流（避免脊柱中轴线闪烁）
   flowMat.uniforms.uActive.value = 0;
   pacerMat.uniforms.uActive.value = 0;
 
@@ -3066,8 +3072,8 @@ function updateIdle(t) {
   bloomPass.strength = 0.08;
 }
 
-// ── GUIDE 更新（82s 认知引导时间线 v2）─────────────────────────
-// 段 1 知病 (4-32s) → 段 2a/b 学法引入 (32-46s) → 段 2c 节拍器 (46-74s) → 段 3 入静 (74-82s)
+// ── GUIDE 更新（83s 认知引导时间线 v3）─────────────────────────
+// 0-4s 凝聚 → 4-5s 留白停顿 → 段1 知病 (5-33s) → 段2a/b (33-47s) → 段2c (47-75s) → 段3 (75-83s)
 function updateGuide(t) {
   // 暂停优先：冻结 elapsed
   if (guidePaused) {
@@ -3078,8 +3084,8 @@ function updateGuide(t) {
     guideElapsed = (performance.now() / 1000 - guideStartTime) * guideSpeed;
   }
 
-  // 检查结束（82s 完整引导）
-  if (guideElapsed >= 82) {
+  // 检查结束（83s 完整引导）
+  if (guideElapsed >= 83) {
     enterExperience();
     return;
   }
@@ -3087,21 +3093,21 @@ function updateGuide(t) {
   // 更新叠加层
   overlays.updateGuide(guideElapsed);
 
-  // 光流粒子（段 2a/b "送往凹陷的那一侧" 期间激活，36-44s）
+  // 光流粒子（段 2a/b "送往凹陷的那一侧" 期间激活，37-45s）
   flowMat.uniforms.uTime.value = t;
   let flowActive = 0;
-  if (guideElapsed >= 36 && guideElapsed < 38)      flowActive = (guideElapsed - 36) / 2;
-  else if (guideElapsed >= 38 && guideElapsed < 42) flowActive = 1.0;
-  else if (guideElapsed >= 42 && guideElapsed < 44) flowActive = 1 - (guideElapsed - 42) / 2;
+  if (guideElapsed >= 37 && guideElapsed < 39)      flowActive = (guideElapsed - 37) / 2;
+  else if (guideElapsed >= 39 && guideElapsed < 43) flowActive = 1.0;
+  else if (guideElapsed >= 43 && guideElapsed < 45) flowActive = 1 - (guideElapsed - 43) / 2;
   flowMat.uniforms.uActive.value = flowActive;
 
-  // 节拍器粒子环（段 2c 期间激活，46-73s，跟节拍器圆环 47-71s 略放宽）
+  // 节拍器粒子环（段 2c 期间激活，47-74s，跟节拍器圆环 48-72s 略放宽）
   pacerMat.uniforms.uTime.value = t;
   pacerMat.uniforms.uBreathe.value = overlays.getPacerBreatheT();
   let pacerActive = 0;
-  if (guideElapsed >= 46 && guideElapsed < 47)      pacerActive = guideElapsed - 46;
-  else if (guideElapsed >= 47 && guideElapsed < 71) pacerActive = 1.0;
-  else if (guideElapsed >= 71 && guideElapsed < 73) pacerActive = 1 - (guideElapsed - 71) / 2;
+  if (guideElapsed >= 47 && guideElapsed < 48)      pacerActive = guideElapsed - 47;
+  else if (guideElapsed >= 48 && guideElapsed < 72) pacerActive = 1.0;
+  else if (guideElapsed >= 72 && guideElapsed < 74) pacerActive = 1 - (guideElapsed - 72) / 2;
   pacerMat.uniforms.uActive.value = pacerActive;
 
   // 脊柱旋转：全程保持轻摆动（移除"病理段冻结"，新脚本无此概念）
@@ -3127,9 +3133,10 @@ function updateGuide(t) {
   diffuseMat.uniforms.uAccent1.value.copy(AC1_DARK);
   diffuseMat.uniforms.uAccent2.value.copy(AC2_DARK);
 
-  // 藤蔓/叶子始终隐藏
+  // 藤蔓/叶子/弥散流在 GUIDE 期间隐藏（避免脊柱中轴线闪烁）
   vineMat.uniforms.uFormation.value = 0.0;
   leafPoints.visible = false;
+  diffusePoints.visible = false;
 
   const e = guideElapsed;
 
@@ -3146,34 +3153,34 @@ function updateGuide(t) {
     comparisonMat.opacity = 0;
     bloomPass.strength = 0.08 + formation * 0.08;
 
-  } else if (e < 32) {
-    // ─── 4-32s：段 1 知病（脊柱呼吸式脉动 + 中段光晕/阴影）───
+  } else if (e < 33) {
+    // ─── 4-33s：段 1 知病（4-5s 凝聚后停顿，5s 起开始上字）───
     spineMat.uniforms.uFormation.value  = 1.0;
     spineMat.uniforms.uGuideAlpha.value = 1.0;
 
     // 微呼吸式脉动
-    const pulse = smoothstep(0, 1, (e - 4) / 3) * 0.30;
+    const pulse = smoothstep(0, 1, (e - 5) / 3) * 0.30;
     spineMat.uniforms.uBreathe.value = pulse;
 
-    // 段 1 中段（12-30s）光晕/阴影：12-15s 淡入 / 15-28s 持平 / 28-30s 淡出
+    // 段 1 中段光晕/阴影：13-31s（让 anchor 28/18 度 + 穹窿/峡谷 期间脊柱有光影感）
     let segHL = 0;
-    if (e >= 12 && e < 15)      segHL = (e - 12) / 3;
-    else if (e >= 15 && e < 28) segHL = 1.0;
-    else if (e >= 28 && e < 30) segHL = 1 - (e - 28) / 2;
+    if (e >= 13 && e < 16)      segHL = (e - 13) / 3;
+    else if (e >= 16 && e < 29) segHL = 1.0;
+    else if (e >= 29 && e < 31) segHL = 1 - (e - 29) / 2;
     spineMat.uniforms.uSegmentHighlight.value = segHL;
 
-    // 对比线（"数字标定了弯折的弧度"出现时短暂淡入）：13-19s
+    // 对比线（"数字标定了弯折的弧度"出现时短暂淡入）：14-20s
     let lineOp = 0;
-    if (e >= 13 && e < 15)      lineOp = ((e - 13) / 2) * 0.25;
-    else if (e >= 15 && e < 17) lineOp = 0.25;
-    else if (e >= 17 && e < 19) lineOp = (1 - (e - 17) / 2) * 0.25;
+    if (e >= 14 && e < 16)      lineOp = ((e - 14) / 2) * 0.25;
+    else if (e >= 16 && e < 18) lineOp = 0.25;
+    else if (e >= 18 && e < 20) lineOp = (1 - (e - 18) / 2) * 0.25;
     comparisonMat.opacity = lineOp;
 
     bloomPass.strength = 0.16;
 
-  } else if (e < 46) {
-    // ─── 32-46s：段 2a/b 学法引入（脊柱 alpha 1.0 → 0.5，让位给节拍器 + 光流）───
-    const seg2T = (e - 32) / 14;
+  } else if (e < 47) {
+    // ─── 33-47s：段 2a/b 学法引入（脊柱 alpha 1.0 → 0.5，让位给节拍器 + 光流）───
+    const seg2T = (e - 33) / 14;
     const guideAlpha = 1.0 - seg2T * 0.5;  // 1.0 → 0.5
     spineMat.uniforms.uFormation.value        = 1.0;
     spineMat.uniforms.uGuideAlpha.value       = guideAlpha;
@@ -3182,22 +3189,22 @@ function updateGuide(t) {
     comparisonMat.opacity = 0;
     bloomPass.strength = 0.16 - seg2T * 0.04;  // 0.16 → 0.12
 
-  } else if (e < 74) {
-    // ─── 46-74s：段 2c 节拍器跟做（脊柱保留淡 alpha + 同步节拍器呼吸 + 节拍器粒子球需要更高 bloom）───
+  } else if (e < 75) {
+    // ─── 47-75s：段 2c 节拍器跟做（脊柱保留淡 alpha + 同步节拍器呼吸）───
     spineMat.uniforms.uFormation.value        = 1.0;
     spineMat.uniforms.uGuideAlpha.value       = 0.30;
     spineMat.uniforms.uSegmentHighlight.value = 0.0;
     comparisonMat.opacity = 0;
     bloomPass.strength = 0.20;
 
-    // 节拍器呼吸进度（0=收缩底, 1=吸到顶）→ 驱动脊柱呼吸幅度
+    // 节拍器呼吸进度 → 驱动脊柱呼吸幅度
     const pacerT = overlays.getPacerBreatheT();
     spineMat.uniforms.uBreathe.value       = 0.10 + pacerT * 0.30;
     spineMat.uniforms.uBreatheExpand.value = 1.0 + pacerT * 0.07;
 
   } else {
-    // ─── 74-82s：段 3 入静（脊柱回归 + 微暖色温 + 轻微呼吸）───
-    const seg3T = (e - 74) / 8;
+    // ─── 75-83s：段 3 入静（脊柱回归 + 微暖色温 + 轻微呼吸）───
+    const seg3T = (e - 75) / 8;
     const guideAlpha = 0.30 + seg3T * 0.70;  // 0.30 → 1.0
     spineMat.uniforms.uFormation.value        = 1.0;
     spineMat.uniforms.uGuideAlpha.value       = guideAlpha;
@@ -3586,7 +3593,7 @@ function updateDebugUI() {
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
   // 同步引导进度滑块
   if (guideProgressSlider && currentMode === 'GUIDE' && guideManualProgress < 0) {
-    guideProgressSlider.value = Math.min(82, guideElapsed);
+    guideProgressSlider.value = Math.min(83, guideElapsed);
     if (guideProgressVal) guideProgressVal.textContent = guideElapsed.toFixed(1);
   }
 }
