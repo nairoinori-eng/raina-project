@@ -255,6 +255,58 @@ body {
 /* 段 1 数字高亮：淡暖金，比正文略显眼但不破坏文学感 */
 .hl-warm { color: #e8c878; font-weight: 400; }
 
+/* 锚定文字的"科技风指引线"：开口圆 + 渐变细线，仅 anchor-r / anchor-l 类用 */
+.anchor-r,
+.anchor-l {
+  position: fixed;
+}
+/* 右侧（text 在 anchor 右）：leader 在 text 左 */
+.anchor-r {
+  padding-left: 60px;
+}
+.anchor-r::before {
+  content: '';
+  position: absolute;
+  left: 12px; top: 50%;
+  width: 38px; height: 1px;
+  background: linear-gradient(to right, rgba(232, 200, 120, 0.85), rgba(232, 200, 120, 0.30));
+  transform: translateY(-50%);
+}
+.anchor-r::after {
+  content: '';
+  position: absolute;
+  left: 4px; top: 50%;
+  width: 7px; height: 7px;
+  border: 1px solid rgba(232, 200, 120, 0.85);
+  border-radius: 50%;
+  background: transparent;
+  transform: translateY(-50%);
+  box-shadow: 0 0 6px rgba(232, 200, 120, 0.4);
+}
+/* 左侧（text 在 anchor 左）：leader 在 text 右 */
+.anchor-l {
+  padding-right: 60px;
+}
+.anchor-l::before {
+  content: '';
+  position: absolute;
+  right: 12px; top: 50%;
+  width: 38px; height: 1px;
+  background: linear-gradient(to left, rgba(232, 200, 120, 0.85), rgba(232, 200, 120, 0.30));
+  transform: translateY(-50%);
+}
+.anchor-l::after {
+  content: '';
+  position: absolute;
+  right: 4px; top: 50%;
+  width: 7px; height: 7px;
+  border: 1px solid rgba(232, 200, 120, 0.85);
+  border-radius: 50%;
+  background: transparent;
+  transform: translateY(-50%);
+  box-shadow: 0 0 6px rgba(232, 200, 120, 0.4);
+}
+
 /* ── 倒数字幕（居中单独显示）── */
 #intro-countdown {
   position: fixed;

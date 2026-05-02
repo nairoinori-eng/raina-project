@@ -9,23 +9,23 @@
  *   分组的行用 GROUP_ENDS 控制整体淡出时间
  */
 
-// 各分组的统一淡出时间（整体相比原版 +1s 留出"凝聚后停 1s 再上字"的留白）
-const GROUP_ENDS = { A: 22, A2: 33, B: 47, D: 83 };
+// 各分组的统一淡出时间
+const GROUP_ENDS = { A: 22.5, A2: 33, B: 47, D: 83 };
 
 // ── 文字时间表 ──
 const TEXT_SCHEDULE = [
-  // ─── 段 1 · 知病 (5-22s) - 堆叠 group A ───
+  // ─── 段 1 · 知病 (5-22.5s) - 堆叠 group A ───
   { text: '十五岁那年，我的脊柱向我宣告了它的偏离。',          start: 5,    group: 'A' },
   { text: '统计说，每一百人中，我们这样的会有两个。',          start: 9.5,  group: 'A' },
-  // 数字"标签"锚定到脊柱凸起点（像穹窿/峡谷一样独立显示）
-  { text: '胸椎右凸 <span class="hl-warm">28</span> 度', start: 13.5, end: 17, anchor: 'thoracic', side: 'right' },
-  { text: '腰椎左凸 <span class="hl-warm">18</span> 度', start: 13.5, end: 17, anchor: 'lumbar', side: 'left' },
-  { text: '数字标定了弯折的弧度。',                          start: 15.5, group: 'A' },
-  { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 18.5, group: 'A' },
-  // 22s group A 整体淡出
-  { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 22,   end: 27,   anchor: 'thoracic', side: 'right' },
-  { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 27,   end: 31,   anchor: 'lumbar',   side: 'left' },
-  { text: '我们便如此共生。',                                start: 31,   group: 'A2' },
+  // 数字"标签"锚定到脊柱凸起点 + 科技风指引线（先后出现，不同时）
+  { text: '胸椎右凸 <span class="hl-warm">28</span> 度', start: 13.5, end: 18,   anchor: 'thoracic', side: 'right', leader: true },
+  { text: '腰椎左凸 <span class="hl-warm">18</span> 度', start: 15.5, end: 18,   anchor: 'lumbar',   side: 'left',  leader: true },
+  { text: '数字标定了弯折的弧度。',                          start: 17.5, group: 'A' },
+  { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 19.5, group: 'A' },
+  // 22.5s group A 整体淡出
+  { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 22.5, end: 27.5, anchor: 'thoracic', side: 'right' },
+  { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 27.5, end: 31.5, anchor: 'lumbar',   side: 'left' },
+  { text: '我们便如此共生。',                                start: 31.5, group: 'A2' },
 
   // ─── 段 2a/b · 学法引入 (33-47s) - 堆叠 group B ───
   { text: '但呼吸，是身体里仍能调动的事。',                    start: 33,   group: 'B' },
@@ -85,6 +85,10 @@ export class IntroOverlays {
       if (entry.anchor) {
         // 三维锚定：每帧从 3D 点投影到屏幕，fixed 定位
         p.classList.add('intro-line-fixed');
+        // 科技风指引线（仅 leader: true 的医学数据用，加 anchor-r/anchor-l 控制 leader 位置）
+        if (entry.leader) {
+          p.classList.add(entry.side === 'right' ? 'anchor-r' : 'anchor-l');
+        }
         document.body.appendChild(p);
       } else if (entry.pos) {
         // 固定百分比定位（legacy）

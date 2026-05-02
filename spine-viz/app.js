@@ -268,9 +268,8 @@ const spineVertexShader = /* glsl */`
     scatterPos.y += cos(uTime * driftSpd * 0.75 + sY * 4.0) * 0.42;
     scatterPos.x += sin(uTime * 0.05 + sZ * 2.0) * 0.22;
 
-    // ── 每粒子的"个人化"凝聚进度：5 波次，每波动画窗口固定 0.20 ──
-    // 不再用剩余时间(1-aFormStart)，改用固定 wave duration 0.20，让波次清晰不拖尾
-    float localT = clamp((uFormation - aFormStart) / 0.20, 0.0, 1.0);
+    // ── 每粒子的"个人化"凝聚进度：5 波次延迟 + per-particle ease 曲线（回退原版）──
+    float localT = clamp((uFormation - aFormStart) / max(0.001, 1.0 - aFormStart), 0.0, 1.0);
     float pFormation = 1.0 - pow(1.0 - localT, aFormPower);
 
     // ── Blend between scatter and formed ──
@@ -332,7 +331,9 @@ const spineFragmentShader = /* glsl */`
                      * (1.0 - smoothstep(0.82, 0.95, vParamT));
       vec3 warmthCol = vec3(0.95, 0.85, 0.65);
       c = mix(c, warmthCol * 1.4, thorZone * uSegmentHighlight * 0.7);
-      c = mix(c, c * 0.35, lumbZone * uSegmentHighlight * 0.7);
+      // 凹陷侧（腰椎）：冷紫阴影（lerp 至冷暗色更可见，不只是单纯变暗）
+      vec3 shadowCol = vec3(0.32, 0.28, 0.50);
+      c = mix(c, shadowCol, lumbZone * uSegmentHighlight * 0.65);
     }
     // IDLE 状态 halo 略增 → 微微发光不过曝；formed 状态 halo 正常
     float haloAmount = 0.12 + vIdleness * 0.22;
@@ -673,21 +674,19 @@ spineGeo.setAttribute('aZPos',        new THREE.BufferAttribute(gpuZPos, 1));
 spineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(gpuParamT, 1));
 spineGeo.setAttribute('aPhase',       new THREE.BufferAttribute(gpuPhase, 1));
 
-// ── 凝聚动画：5 个时间波次（无重叠，每波 0.20 占比） ──
-// 每波动画窗口固定 0.20，下一波在前一波刚结束就开始 → 视觉上 5 道清晰浪
-// 同波内每粒子 ease 曲线略不同（速度不完全一致），但波内时机几乎同步
+// ── 凝聚动画：5 个时间波次（间隔 0.15，回退到 ease-out 原版）──
+// 用 (1 - aFormStart) 当分母，每粒子从起跑到 uFormation=1 平滑收尾
 const N_FORM_WAVES = 5;
-const FORM_WAVE_DURATION = 0.20;          // shader 用，每波动画占 uFormation 0.20
 const waveStarts = [];
 for (let w = 0; w < N_FORM_WAVES; w++) {
-  waveStarts.push(w * FORM_WAVE_DURATION); // 0, 0.20, 0.40, 0.60, 0.80
+  waveStarts.push(w * 0.15);                 // 0, 0.15, 0.30, 0.45, 0.60
 }
 const gpuFormStart = new Float32Array(N_SPINE);
 const gpuFormPower = new Float32Array(N_SPINE);
 for (let i = 0; i < N_SPINE; i++) {
   const wave = Math.floor(Math.random() * N_FORM_WAVES);
-  gpuFormStart[i] = waveStarts[wave] + (Math.random() - 0.5) * 0.025; // ±0.0125 微抖（小，保留浪感）
-  gpuFormPower[i] = 1.5 + Math.random() * 2.0;                        // ease 曲线 1.5~3.5（速度差异）
+  gpuFormStart[i] = waveStarts[wave] + (Math.random() - 0.5) * 0.04; // ±0.02 微抖
+  gpuFormPower[i] = 1.5 + Math.random() * 2.5;                       // ease 曲线 per-particle 1.5~4.0
 }
 spineGeo.setAttribute('aFormStart', new THREE.BufferAttribute(gpuFormStart, 1));
 spineGeo.setAttribute('aFormPower', new THREE.BufferAttribute(gpuFormPower, 1));
@@ -722,16 +721,14 @@ for (let i = 0; i <= 80; i++) {
   comparisonPoints.push(curveStraight.getPoint(i / 80));
 }
 const comparisonGeo = new THREE.BufferGeometry().setFromPoints(comparisonPoints);
-const comparisonMat = new THREE.LineDashedMaterial({
+// 改为实线（之前的 LineDashedMaterial 在脊柱旋转时虚线随之微抖，看起来像闪烁）
+const comparisonMat = new THREE.LineBasicMaterial({
   color: 0xbbbbcc,
   transparent: true,
   opacity: 0,
-  dashSize: 0.12,
-  gapSize: 0.10,
   linewidth: 1,
 });
 const comparisonLine = new THREE.Line(comparisonGeo, comparisonMat);
-comparisonLine.computeLineDistances();
 // 放在脊柱中线（x=0），代表"如果没弯曲应该在哪里"
 comparisonLine.position.z = -0.1;
 spineGroup.add(comparisonLine);
@@ -3162,18 +3159,18 @@ function updateGuide(t) {
     const pulse = smoothstep(0, 1, (e - 5) / 3) * 0.30;
     spineMat.uniforms.uBreathe.value = pulse;
 
-    // 段 1 中段光晕/阴影：13-31s（让 anchor 28/18 度 + 穹窿/峡谷 期间脊柱有光影感）
+    // 段 1 中段光晕/阴影：覆盖 28/18 度 anchor + 穹窿/峡谷 期间
     let segHL = 0;
-    if (e >= 13 && e < 16)      segHL = (e - 13) / 3;
-    else if (e >= 16 && e < 29) segHL = 1.0;
-    else if (e >= 29 && e < 31) segHL = 1 - (e - 29) / 2;
+    if (e >= 13 && e < 15.5)    segHL = (e - 13) / 2.5;        // 13-15.5 fade in
+    else if (e >= 15.5 && e < 31) segHL = 1.0;                  // 15.5-31 hold
+    else if (e >= 31 && e < 32.5) segHL = 1 - (e - 31) / 1.5;   // 31-32.5 fade out
     spineMat.uniforms.uSegmentHighlight.value = segHL;
 
-    // 对比线（"数字标定了弯折的弧度"出现时短暂淡入）：14-20s
+    // 对比线只在"数字标定"出现期间显示（17.5+），不再覆盖 28/18 度 anchor 区间
     let lineOp = 0;
-    if (e >= 14 && e < 16)      lineOp = ((e - 14) / 2) * 0.25;
-    else if (e >= 16 && e < 18) lineOp = 0.25;
-    else if (e >= 18 && e < 20) lineOp = (1 - (e - 18) / 2) * 0.25;
+    if (e >= 17.5 && e < 18.5)   lineOp = (e - 17.5) * 0.25;     // 17.5-18.5 fade in
+    else if (e >= 18.5 && e < 20) lineOp = 0.25;                  // 18.5-20 hold
+    else if (e >= 20 && e < 21.5) lineOp = (1 - (e - 20) / 1.5) * 0.25; // 20-21.5 fade out
     comparisonMat.opacity = lineOp;
 
     bloomPass.strength = 0.16;
