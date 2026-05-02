@@ -1,38 +1,44 @@
 /**
  * IntroOverlays — 82s 认知引导的 HTML/CSS 叠加层管理
  *
- * 字幕：每行独立显示 + 淡入淡出（不再分组堆叠）
+ * 字幕：
+ *   group 'A'/'B'/'D' → 同段内堆叠（新句出现在上一句下方），整段一起淡出
+ *   anchor → 锚定到脊柱 3D 峰值点（独立显示）
+ *   countdown: true → 居中单独显示（节拍器 prompts 等）
  *   start / end 是行的开始与结束时间（秒）
- *   anchor: 'thoracic' | 'lumbar' → 锚定到脊柱 3D 峰值点
- *   countdown: true → 居中单独显示（保留给段 2c 收尾诗句等）
+ *   分组的行用 GROUP_ENDS 控制整体淡出时间
  */
+
+// 各分组的统一淡出时间
+const GROUP_ENDS = { A: 32, B: 46, D: 82 };
 
 // ── 文字时间表 ──
 const TEXT_SCHEDULE = [
-  // ─── 段 1 · 知病 (4-32s) ───
-  { text: '十五岁那年，我的脊柱向我宣告了它的偏离。',          start: 4,    end: 8.5  },
-  { text: '统计说，每一百人中，我们这样的会有两个。',          start: 8.5,  end: 12.5 },
-  { text: '胸椎右凸 28 度，腰椎左凸 18 度——数字标定了弯折的弧度。', start: 12.5, end: 17.5 },
-  { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 17.5, end: 20.5 },
+  // ─── 段 1 · 知病 (4-32s) - 堆叠 group A ───
+  { text: '十五岁那年，我的脊柱向我宣告了它的偏离。',          start: 4,    group: 'A' },
+  { text: '统计说，每一百人中，我们这样的会有两个。',          start: 8.5,  group: 'A' },
+  { text: '胸椎右凸 28 度，腰椎左凸 18 度——数字标定了弯折的弧度。', start: 12.5, group: 'A' },
+  { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 17.5, group: 'A' },
+  // 锚定到脊柱 3D 点（独立显示，不进 group A 堆叠）
   { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 20.5, end: 25.5, anchor: 'thoracic', side: 'right' },
   { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 25.5, end: 30, anchor: 'lumbar', side: 'left' },
-  { text: '我们便如此共生。',                                start: 30,   end: 32 },
+  { text: '我们便如此共生。',                                start: 30,   group: 'A' },
 
-  // ─── 段 2a/b · 学法引入 (32-46s) ───
-  { text: '但呼吸，是身体里仍能调动的事。',                    start: 32,   end: 35 },
-  { text: '有一种呼吸——它不让气息均匀地涨满胸腔，',           start: 35,   end: 38.5 },
-  { text: '而是有方向地，专门送往凹陷的那一侧。',              start: 38.5, end: 41.5 },
-  { text: '让被挤压的肋骨，从内部，一次次轻轻推开。',          start: 41.5, end: 44 },
-  { text: '这就是施罗斯呼吸法（Schroth）。',                  start: 44,   end: 46 },
+  // ─── 段 2a/b · 学法引入 (32-46s) - 堆叠 group B ───
+  { text: '但呼吸，是身体里仍能调动的事。',                    start: 32,   group: 'B' },
+  { text: '有一种呼吸——它不让气息均匀地涨满胸腔，',           start: 35,   group: 'B' },
+  { text: '而是有方向地，专门送往凹陷的那一侧。',              start: 38.5, group: 'B' },
+  { text: '让被挤压的肋骨，从内部，一次次轻轻推开。',          start: 41.5, group: 'B' },
+  { text: '这就是施罗斯呼吸法（Schroth）。',                  start: 44,   group: 'B' },
 
   // ─── 段 2c · 节拍器跟做 (46-74s) ───
   { text: '现在，跟着试一次。', start: 46, end: 47, countdown: true },
   // 47-71s: 节拍器 3 轮（pacer 自带 label，不在 TEXT_SCHEDULE 里）
   { text: '感受这道气流，正抵达那片峡谷。', start: 71, end: 74, countdown: true },
 
-  // ─── 段 3 · 入静 (74-82s) ───
-  { text: '接下来，跟着你的呼吸——',          start: 74, end: 78 },
-  { text: '让它，慢慢回到自己的形状。',        start: 78, end: 82 },
+  // ─── 段 3 · 入静 (74-82s) - 堆叠 group D ───
+  { text: '接下来，跟着你的呼吸——',          start: 74, group: 'D' },
+  { text: '让它，慢慢回到自己的形状。',        start: 78, group: 'D' },
 ];
 
 // 呼吸节拍器：47-71s = 24s = 3 轮 × 8s
@@ -66,6 +72,7 @@ export class IntroOverlays {
     this.$text = document.createElement('div');
     this.$text.id = 'intro-text';
 
+    const groupDivs = {};
     TEXT_SCHEDULE.forEach(entry => {
       if (entry.countdown) return;
       const p = document.createElement('p');
@@ -83,18 +90,20 @@ export class IntroOverlays {
         p.style.left = entry.pos.left;
         document.body.appendChild(p);
       } else {
-        // 批次 1: 不分组堆叠，每行 absolute 重叠在 #intro-text 同一位置
-        p.style.position = 'absolute';
-        p.style.top = '0';
-        p.style.left = '0';
-        p.style.width = '100%';
-        this.$text.appendChild(p);
+        // 堆叠：放进分组容器（同段内多句累积显示在上一句下方）
+        if (!groupDivs[entry.group]) {
+          const g = document.createElement('div');
+          g.className = 'intro-group';
+          this.$text.appendChild(g);
+          groupDivs[entry.group] = g;
+        }
+        groupDivs[entry.group].appendChild(p);
       }
 
       this._lines.push({
         p,
         start: entry.start,
-        groupEnd: entry.end,
+        groupEnd: entry.end || GROUP_ENDS[entry.group],
         anchor: entry.anchor || null,
         side: entry.side || null,
       });

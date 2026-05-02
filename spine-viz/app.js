@@ -236,12 +236,13 @@ const spineVertexShader = /* glsl */`
   attribute float aAlpha;
   attribute float aPhase;
   attribute float aColorVar;
+  attribute float aFormStart;  // 0~0.4 每粒子起跑延迟（uFormation 进度），8 组分波
   uniform float uBlend;
   uniform float uBreatheExpand;
   uniform float uBreathe;
   uniform float uTime;
   uniform float uFormation;    // 0 = scattered (IDLE), 1 = formed (spine visible)
-  uniform float uGuideAlpha;   // overall alpha multiplier (0 during teaching)
+  uniform float uGuideAlpha;
   varying float vAlpha;
   varying float vColorVar;
   varying float vParamT;
@@ -253,35 +254,37 @@ const spineVertexShader = /* glsl */`
     vec3 formedPos = vec3(center.x + off.x * uBreatheExpand, center.y + off.y, aZPos);
 
     // ── Scattered position (IDLE star dust) ──
-    // Use per-axis independent seeds to avoid correlation
     float sX = aPhase * 2.7 + aParamT * 13.1 + aColorVar * 7.3;
     float sY = aPhase * 5.1 + aParamT * 3.7  + aColorVar * 11.9;
     float sZ = aPhase * 3.9 + aParamT * 19.7 + aColorVar * 2.3;
     float rx = fract(sin(sX * 12.9898) * 43758.5453) * 2.0 - 1.0;
     float ry = fract(sin(sY * 78.233)  * 43758.5453) * 2.0 - 1.0;
     float rz = fract(sin(sZ * 45.164)  * 43758.5453) * 2.0 - 1.0;
-    // Large spread across full screen (camera z=5 FOV 60, visible ~±2.9)
     vec3 scatterPos = vec3(rx * 7.5, ry * 5.0, rz * 2.5);
-    // Per-particle drift speed for organic floating
     float driftSpd = 0.06 + fract(sX * 1.23) * 0.14;
     scatterPos.x += sin(uTime * driftSpd + sX * 6.28) * 0.6;
     scatterPos.y += cos(uTime * driftSpd * 0.75 + sY * 4.0) * 0.42;
     scatterPos.x += sin(uTime * 0.05 + sZ * 2.0) * 0.22;
 
+    // ── 每粒子的"个人化"凝聚进度：分组延迟 + ease-out 曲线 ──
+    // 不同组在 uFormation 不同节点开始动，造成多波涌入的张力
+    float localT = clamp((uFormation - aFormStart) / max(0.001, 1.0 - aFormStart), 0.0, 1.0);
+    float pFormation = 1.0 - pow(1.0 - localT, 2.5);  // ease-out
+
     // ── Blend between scatter and formed ──
-    vec3 pos = mix(scatterPos, formedPos, uFormation);
+    vec3 pos = mix(scatterPos, formedPos, pFormation);
 
-    // ── Size: varied dust in IDLE (small + large mix), normal when formed ──
+    // ── Size: IDLE 粒子放大约 50% 让待机界面有"发光星点"感 ──
     float sizeRand = fract(sX * 3.14);
-    float idleSize = 0.015 + sizeRand * sizeRand * 0.09;
+    float idleSize = 0.025 + sizeRand * sizeRand * 0.13;
     float formedSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
-    float size = mix(idleSize, formedSize, uFormation);
+    float size = mix(idleSize, formedSize, pFormation);
 
-    // ── Alpha: scattered particles visible in IDLE (~30% visible) ──
+    // ── Alpha: IDLE 加亮约 60%，更像发光星点 ──
     float idleVisible = step(0.70, fract(sY * 0.618));
-    float idleAlpha = (0.15 + fract(sZ * 2.71) * 0.20) * idleVisible;
+    float idleAlpha = (0.20 + fract(sZ * 2.71) * 0.32) * idleVisible;
     float formedAlpha = aAlpha * (0.55 + uBreathe * 0.45);
-    float alpha = mix(idleAlpha, formedAlpha, uFormation) * uGuideAlpha;
+    float alpha = mix(idleAlpha, formedAlpha, pFormation) * uGuideAlpha;
 
     vAlpha = alpha;
     vColorVar = aColorVar;
@@ -666,6 +669,17 @@ spineGeo.setAttribute('aStraightOff', new THREE.BufferAttribute(gpuStraightOff, 
 spineGeo.setAttribute('aZPos',        new THREE.BufferAttribute(gpuZPos, 1));
 spineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(gpuParamT, 1));
 spineGeo.setAttribute('aPhase',       new THREE.BufferAttribute(gpuPhase, 1));
+
+// ── 凝聚动画：每粒子分到 8 组中的一组，每组有自己的"起跑延迟"──
+// 不同组在不同时间启动 → 画面分多波涌入，避免匀速感
+const N_FORM_CLUSTERS = 8;
+const gpuFormStart = new Float32Array(N_SPINE);
+for (let i = 0; i < N_SPINE; i++) {
+  // 组号 0~7，对应延迟 0, 0.05, 0.10, ..., 0.35（uFormation 进度的 35%）
+  const cluster = Math.floor(Math.random() * N_FORM_CLUSTERS);
+  gpuFormStart[i] = (cluster / N_FORM_CLUSTERS) * 0.40;
+}
+spineGeo.setAttribute('aFormStart', new THREE.BufferAttribute(gpuFormStart, 1));
 
 const spineMat = new THREE.ShaderMaterial({
   vertexShader: spineVertexShader, fragmentShader: spineFragmentShader,
