@@ -236,7 +236,8 @@ const spineVertexShader = /* glsl */`
   attribute float aAlpha;
   attribute float aPhase;
   attribute float aColorVar;
-  attribute float aFormStart;  // 0~0.4 每粒子起跑延迟（uFormation 进度），8 组分波
+  attribute float aFormStart;  // 每粒子起跑延迟（8 个时间波次 + ±0.02 微抖）
+  attribute float aFormPower;  // ease 曲线幂数（同波次共享）
   uniform float uBlend;
   uniform float uBreatheExpand;
   uniform float uBreathe;
@@ -246,6 +247,7 @@ const spineVertexShader = /* glsl */`
   varying float vAlpha;
   varying float vColorVar;
   varying float vParamT;
+  varying float vIdleness;     // 1.0 = IDLE, 0.0 = formed（fragment shader 用来加 IDLE 发光）
   void main() {
     // ── Formed position (normal spine) ──
     float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
@@ -266,29 +268,33 @@ const spineVertexShader = /* glsl */`
     scatterPos.y += cos(uTime * driftSpd * 0.75 + sY * 4.0) * 0.42;
     scatterPos.x += sin(uTime * 0.05 + sZ * 2.0) * 0.22;
 
-    // ── 每粒子的"个人化"凝聚进度：分组延迟 + ease-out 曲线 ──
-    // 不同组在 uFormation 不同节点开始动，造成多波涌入的张力
+    // ── 每粒子的"个人化"凝聚进度：8 波次延迟 + 每波独立 ease 曲线 ──
     float localT = clamp((uFormation - aFormStart) / max(0.001, 1.0 - aFormStart), 0.0, 1.0);
-    float pFormation = 1.0 - pow(1.0 - localT, 2.5);  // ease-out
+    float pFormation = 1.0 - pow(1.0 - localT, aFormPower);
 
     // ── Blend between scatter and formed ──
     vec3 pos = mix(scatterPos, formedPos, pFormation);
 
-    // ── Size: IDLE 粒子放大约 50% 让待机界面有"发光星点"感 ──
+    // ── Size: IDLE 大小 + 极少粒子额外放大（约 7%） ──
     float sizeRand = fract(sX * 3.14);
-    float idleSize = 0.025 + sizeRand * sizeRand * 0.13;
+    float megaBoost = 1.0 + step(0.93, sizeRand) * 1.5;  // sizeRand > 0.93 时 size ×2.5
+    float idleSize = (0.025 + sizeRand * sizeRand * 0.13) * megaBoost;
     float formedSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
     float size = mix(idleSize, formedSize, pFormation);
 
-    // ── Alpha: IDLE 加亮约 60%，更像发光星点 ──
+    // ── Alpha: IDLE 加亮，飞行期所有粒子可见（克服 IDLE 30% 阈值显路径） ──
     float idleVisible = step(0.70, fract(sY * 0.618));
-    float idleAlpha = (0.20 + fract(sZ * 2.71) * 0.32) * idleVisible;
+    // 飞行期 (pFormation 0.05~0.85) 强制可见
+    float flightVisible = smoothstep(0.05, 0.20, pFormation) * (1.0 - smoothstep(0.85, 1.0, pFormation));
+    float effectiveVisible = max(idleVisible, flightVisible);
+    float idleAlpha = (0.20 + fract(sZ * 2.71) * 0.32) * effectiveVisible;
     float formedAlpha = aAlpha * (0.55 + uBreathe * 0.45);
     float alpha = mix(idleAlpha, formedAlpha, pFormation) * uGuideAlpha;
 
     vAlpha = alpha;
     vColorVar = aColorVar;
     vParamT = aParamT;
+    vIdleness = 1.0 - pFormation;
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_PointSize = size * (300.0 / -mv.z);
     gl_Position = projectionMatrix * mv;
@@ -306,6 +312,7 @@ const spineFragmentShader = /* glsl */`
   varying float vAlpha;
   varying float vColorVar;
   varying float vParamT;
+  varying float vIdleness;          // 1.0 = IDLE, 0.0 = formed
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
@@ -318,23 +325,19 @@ const spineFragmentShader = /* glsl */`
       c = mix(uColor, uAccent2, clamp((-vColorVar - 0.5) * 2.0, 0.0, 1.0));
     }
     c = clamp(c, 0.0, 0.88);
-    // 段 1 知病: 凸起一侧（胸椎）→ 暖白光晕；凹陷一侧（腰椎）→ 暗化
-    // 胸椎峰值 @ t ≈ 0.33 (T7)，腰椎峰值 @ t ≈ 0.75 (L3)
     if (uSegmentHighlight > 0.0) {
-      // 胸椎区域：t 从 0.12 升起，0.33 峰值，0.52 落下
       float thorZone = smoothstep(0.12, 0.28, vParamT)
                      * (1.0 - smoothstep(0.38, 0.52, vParamT));
-      // 腰椎区域：t 从 0.58 升起，0.75 峰值，0.95 落下
       float lumbZone = smoothstep(0.58, 0.72, vParamT)
                      * (1.0 - smoothstep(0.82, 0.95, vParamT));
-      // 凸起侧（胸椎）：温暖光晕（淡暖白）
       vec3 warmthCol = vec3(0.95, 0.85, 0.65);
       c = mix(c, warmthCol * 1.4, thorZone * uSegmentHighlight * 0.7);
-      // 凹陷侧（腰椎）：暗化（变暗 65%，保留色相）
       c = mix(c, c * 0.35, lumbZone * uSegmentHighlight * 0.7);
     }
+    // IDLE 状态 halo 加倍 → 像发光星点；formed 状态 halo 正常
+    float haloAmount = 0.12 + vIdleness * 0.50;
     float core  = exp(-d * d * 24.0);
-    float halo  = exp(-d * d * 10.0) * 0.12;
+    float halo  = exp(-d * d * 10.0) * haloAmount;
     float alpha = (core + halo) * vAlpha * uAlphaBoost;
     gl_FragColor = vec4(c, alpha);
   }
@@ -670,16 +673,24 @@ spineGeo.setAttribute('aZPos',        new THREE.BufferAttribute(gpuZPos, 1));
 spineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(gpuParamT, 1));
 spineGeo.setAttribute('aPhase',       new THREE.BufferAttribute(gpuPhase, 1));
 
-// ── 凝聚动画：每粒子分到 8 组中的一组，每组有自己的"起跑延迟"──
-// 不同组在不同时间启动 → 画面分多波涌入，避免匀速感
-const N_FORM_CLUSTERS = 8;
+// ── 凝聚动画：8 个时间波次（IDLE 位置仍均匀散布全屏，时机分波）──
+// 每波 ~3500 粒子同时启动，依次涌入，眼睛能看清每一波的飞行
+const N_FORM_WAVES = 8;
+const waveStarts = [];
+const wavePowers = [];
+for (let w = 0; w < N_FORM_WAVES; w++) {
+  waveStarts.push(w * 0.10);                 // 0, 0.10, 0.20, ..., 0.70
+  wavePowers.push(1.5 + Math.random() * 2.5);// ease 曲线幂数 1.5~4.0 每波不同
+}
 const gpuFormStart = new Float32Array(N_SPINE);
+const gpuFormPower = new Float32Array(N_SPINE);
 for (let i = 0; i < N_SPINE; i++) {
-  // 组号 0~7，对应延迟 0, 0.05, 0.10, ..., 0.35（uFormation 进度的 35%）
-  const cluster = Math.floor(Math.random() * N_FORM_CLUSTERS);
-  gpuFormStart[i] = (cluster / N_FORM_CLUSTERS) * 0.40;
+  const wave = Math.floor(Math.random() * N_FORM_WAVES);
+  gpuFormStart[i] = waveStarts[wave] + (Math.random() - 0.5) * 0.04; // ±0.02 微抖
+  gpuFormPower[i] = wavePowers[wave];
 }
 spineGeo.setAttribute('aFormStart', new THREE.BufferAttribute(gpuFormStart, 1));
+spineGeo.setAttribute('aFormPower', new THREE.BufferAttribute(gpuFormPower, 1));
 
 const spineMat = new THREE.ShaderMaterial({
   vertexShader: spineVertexShader, fragmentShader: spineFragmentShader,

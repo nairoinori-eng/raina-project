@@ -9,20 +9,22 @@
  *   分组的行用 GROUP_ENDS 控制整体淡出时间
  */
 
-// 各分组的统一淡出时间
-const GROUP_ENDS = { A: 32, B: 46, D: 82 };
+// 各分组的统一淡出时间（A 在"陆地"句结束时整体淡出，让 anchor 句单独显示；A2 装"我们便如此共生"）
+const GROUP_ENDS = { A: 20.5, A2: 32, B: 46, D: 82 };
 
 // ── 文字时间表 ──
 const TEXT_SCHEDULE = [
-  // ─── 段 1 · 知病 (4-32s) - 堆叠 group A ───
+  // ─── 段 1 · 知病 (4-20.5s) - 堆叠 group A ───
   { text: '十五岁那年，我的脊柱向我宣告了它的偏离。',          start: 4,    group: 'A' },
   { text: '统计说，每一百人中，我们这样的会有两个。',          start: 8.5,  group: 'A' },
-  { text: '胸椎右凸 28 度，腰椎左凸 18 度——数字标定了弯折的弧度。', start: 12.5, group: 'A' },
+  { text: '胸椎右凸 <span class="hl-warm">28</span> 度，腰椎左凸 <span class="hl-warm">18</span> 度——', start: 12.5, group: 'A' },
+  { text: '数字标定了弯折的弧度。',                          start: 14.5, group: 'A' },
   { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 17.5, group: 'A' },
-  // 锚定到脊柱 3D 点（独立显示，不进 group A 堆叠）
+  // 锚定到脊柱 3D 点（独立显示，不进堆叠）
   { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 20.5, end: 25.5, anchor: 'thoracic', side: 'right' },
   { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 25.5, end: 30, anchor: 'lumbar', side: 'left' },
-  { text: '我们便如此共生。',                                start: 30,   group: 'A' },
+  // 段 1 收尾：单独 group A2（"我们便如此共生"独立显示，不挤在前段堆叠里）
+  { text: '我们便如此共生。',                                start: 30,   group: 'A2' },
 
   // ─── 段 2a/b · 学法引入 (32-46s) - 堆叠 group B ───
   { text: '但呼吸，是身体里仍能调动的事。',                    start: 32,   group: 'B' },
@@ -63,6 +65,7 @@ export class IntroOverlays {
     this.$idle.innerHTML = `
       <h1 class="intro-title">脊时呼吸</h1>
       <p class="intro-title-en">Breathe With Your Spine</p>
+      <p class="intro-tagline">用呼吸，重塑一根脊柱</p>
       <p class="intro-hint">按下空格键开始体验</p>
     `;
     document.body.appendChild(this.$idle);

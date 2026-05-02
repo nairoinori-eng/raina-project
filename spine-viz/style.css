@@ -193,6 +193,13 @@ body {
   color: rgba(200, 190, 240, 0.45);
   font-family: 'Georgia', 'Times New Roman', serif;
 }
+.intro-tagline {
+  margin-top: 1.5rem;
+  font-size: clamp(0.85rem, 1.25vw, 1.1rem);
+  font-weight: 300;
+  letter-spacing: 0.18em;
+  color: rgba(220, 210, 245, 0.55);
+}
 .intro-hint {
   margin-top: 1.8rem; font-size: 0.9rem; font-weight: 300;
   color: rgba(180, 170, 220, 0.35); letter-spacing: 0.1em;
@@ -245,6 +252,8 @@ body {
 /* 高亮数据颜色 */
 .hl-o { color: #ff6840; font-weight: 500; letter-spacing: 0.05em; }
 .hl-c { color: #20e0c0; font-weight: 500; letter-spacing: 0.05em; }
+/* 段 1 数字高亮：淡暖金，比正文略显眼但不破坏文学感 */
+.hl-warm { color: #e8c878; font-weight: 400; }
 
 /* ── 倒数字幕（居中单独显示）── */
 #intro-countdown {
