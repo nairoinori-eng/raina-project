@@ -17,9 +17,9 @@ const TEXT_SCHEDULE = [
   // ─── 段 1 · 知病 (5-22.5s) - 堆叠 group A ───
   { text: '十五岁那年，我的脊柱向我宣告了它的偏离。',          start: 5,    group: 'A' },
   { text: '统计说，每一百人中，我们这样的会有两个。',          start: 9.5,  group: 'A' },
-  // 数字"标签"锚定到脊柱凸起点 + 科技风指引线（先后出现，不同时）
-  { text: '胸椎右凸 <span class="hl-warm">28</span> 度', start: 13.5, end: 18,   anchor: 'thoracic', side: 'right', leader: true },
-  { text: '腰椎左凸 <span class="hl-warm">18</span> 度', start: 15.5, end: 18,   anchor: 'lumbar',   side: 'left',  leader: true },
+  // 数字"标签"锚定到脊柱凸起点 + 科技风指引线（先后出现，留到"陆地"句结束 22.5s 一起淡出）
+  { text: '胸椎右凸 <span class="hl-warm">28</span> 度', start: 13.5, end: 22.5, anchor: 'thoracic', side: 'right', leader: true },
+  { text: '腰椎左凸 <span class="hl-warm">18</span> 度', start: 15.5, end: 22.5, anchor: 'lumbar',   side: 'left',  leader: true },
   { text: '数字标定了弯折的弧度。',                          start: 17.5, group: 'A' },
   { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 19.5, group: 'A' },
   // 22.5s group A 整体淡出
@@ -195,9 +195,12 @@ export class IntroOverlays {
       const { p, start, groupEnd } = line;
       if (t >= start && t < groupEnd) {
         p.classList.add('vis');
-        if (line.anchor) this._positionAnchored(line);
+        // 三维锚定：仅在首帧投影一次，之后保持位置（避免脊柱旋转时文字抖动）
+        if (line.anchor && !line._lockedPos) this._positionAnchored(line);
       } else {
         p.classList.remove('vis');
+        // 隐藏后清除锁定位置，下次显示时按当前帧重新投影
+        if (line._lockedPos) line._lockedPos = null;
       }
     }
 
@@ -220,13 +223,13 @@ export class IntroOverlays {
     }
   }
 
-  // ── 三维锚定字幕：把 3D 点投影到屏幕，贴着骨骼 ──
+  // ── 三维锚定字幕：投影 3D 点到屏幕，首帧锁定后保持位置不抖动 ──
   _positionAnchored(line) {
     if (!this._camera || !this._spineGroup || !this._anchors) return;
     const anchor3D = this._anchors[line.anchor];
     if (!anchor3D) return;
 
-    // 1. 本地 → 世界（跟随 spineGroup 的旋转/位移）
+    // 1. 本地 → 世界（包含 spineGroup 当前旋转/位移）
     const world = anchor3D.clone();
     this._spineGroup.localToWorld(world);
     // 2. 世界 → NDC（-1..1）
@@ -235,19 +238,24 @@ export class IntroOverlays {
     const sx = (world.x * 0.5 + 0.5) * window.innerWidth;
     const sy = (-world.y * 0.5 + 0.5) * window.innerHeight;
 
-    // 4. 根据 side 计算偏移。右侧：锚点右 +40px；左侧：文字右缘在锚点左 -40px
+    // 4. 根据 side 计算偏移
     const GAP = 40;
     const p = line.p;
+    let leftPx;
     if (line.side === 'right') {
-      p.style.left = `${sx + GAP}px`;
+      leftPx = sx + GAP;
     } else {
-      // 先测量文字宽度（offsetWidth 在 vis 状态下有效）
       const w = p.offsetWidth || 300;
-      p.style.left = `${sx - GAP - w}px`;
+      leftPx = sx - GAP - w;
     }
-    // 垂直方向：让文字中线对齐锚点 y
     const h = p.offsetHeight || 24;
-    p.style.top = `${sy - h * 0.5}px`;
+    const topPx = sy - h * 0.5;
+
+    p.style.left = `${leftPx}px`;
+    p.style.top  = `${topPx}px`;
+
+    // 锁定位置（_updateText 后续帧不再调用此函数）
+    line._lockedPos = { left: leftPx, top: topPx };
   }
 
   // ── 人体剪影：批次 1 暂时隐藏（批次 2 重新设计或移除）──

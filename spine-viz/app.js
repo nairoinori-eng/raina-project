@@ -236,8 +236,9 @@ const spineVertexShader = /* glsl */`
   attribute float aAlpha;
   attribute float aPhase;
   attribute float aColorVar;
-  attribute float aFormStart;  // 每粒子起跑延迟（8 个时间波次 + ±0.02 微抖）
-  attribute float aFormPower;  // ease 曲线幂数（同波次共享）
+  attribute float aFormStart;  // 每粒子起跑延迟（5 个时间波次 + ±0.02 微抖）
+  attribute float aFormPower;  // ease 曲线幂数 per-particle 1.5~4.0
+  attribute float aTrailFlag;  // 0=普通粒子；1=拖尾粒子（飞行中放大+加 halo）
   uniform float uBlend;
   uniform float uBreatheExpand;
   uniform float uBreathe;
@@ -248,6 +249,7 @@ const spineVertexShader = /* glsl */`
   varying float vColorVar;
   varying float vParamT;
   varying float vIdleness;     // 1.0 = IDLE, 0.0 = formed（fragment shader 用来加 IDLE 发光）
+  varying float vTrailBoost;   // 飞行期拖尾粒子的强度，给 fragment shader 加 halo
   void main() {
     // ── Formed position (normal spine) ──
     float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
@@ -282,6 +284,12 @@ const spineVertexShader = /* glsl */`
     float formedSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
     float size = mix(idleSize, formedSize, pFormation);
 
+    // ── 拖尾粒子：飞行期 (pFormation 0.05~0.95) 放大 + 加 halo（fragment shader 用 vTrailBoost）──
+    float flightActive = smoothstep(0.05, 0.20, pFormation) * (1.0 - smoothstep(0.80, 0.95, pFormation));
+    float trailBoostHere = aTrailFlag * flightActive;
+    size *= 1.0 + trailBoostHere * 1.6;
+    vTrailBoost = trailBoostHere;
+
     // ── Alpha: IDLE 减少发光点数量（30% → 20%），飞行期强制可见 ──
     float idleVisible = step(0.80, fract(sY * 0.618));
     float flightVisible = smoothstep(0.05, 0.20, pFormation) * (1.0 - smoothstep(0.85, 1.0, pFormation));
@@ -312,6 +320,7 @@ const spineFragmentShader = /* glsl */`
   varying float vColorVar;
   varying float vParamT;
   varying float vIdleness;          // 1.0 = IDLE, 0.0 = formed
+  varying float vTrailBoost;        // 拖尾粒子飞行期加 halo
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
@@ -331,12 +340,12 @@ const spineFragmentShader = /* glsl */`
                      * (1.0 - smoothstep(0.82, 0.95, vParamT));
       vec3 warmthCol = vec3(0.95, 0.85, 0.65);
       c = mix(c, warmthCol * 1.4, thorZone * uSegmentHighlight * 0.7);
-      // 凹陷侧（腰椎）：冷紫阴影（lerp 至冷暗色更可见，不只是单纯变暗）
-      vec3 shadowCol = vec3(0.32, 0.28, 0.50);
-      c = mix(c, shadowCol, lumbZone * uSegmentHighlight * 0.65);
+      // 凹陷侧（腰椎）：深冷紫阴影（强 lerp + 暗化）
+      vec3 shadowCol = vec3(0.20, 0.16, 0.42);
+      c = mix(c, shadowCol, lumbZone * uSegmentHighlight * 0.85);
     }
-    // IDLE 状态 halo 略增 → 微微发光不过曝；formed 状态 halo 正常
-    float haloAmount = 0.12 + vIdleness * 0.22;
+    // IDLE 微发光 + 拖尾粒子飞行期更强 halo
+    float haloAmount = 0.12 + vIdleness * 0.22 + vTrailBoost * 0.65;
     float core  = exp(-d * d * 24.0);
     float halo  = exp(-d * d * 10.0) * haloAmount;
     float alpha = (core + halo) * vAlpha * uAlphaBoost;
@@ -690,6 +699,13 @@ for (let i = 0; i < N_SPINE; i++) {
 }
 spineGeo.setAttribute('aFormStart', new THREE.BufferAttribute(gpuFormStart, 1));
 spineGeo.setAttribute('aFormPower', new THREE.BufferAttribute(gpuFormPower, 1));
+
+// ── 拖尾光：随机选 6% 粒子在飞行中放大 + 加强 halo（视觉拖尾感）──
+const gpuTrailFlag = new Float32Array(N_SPINE);
+for (let i = 0; i < N_SPINE; i++) {
+  gpuTrailFlag[i] = (Math.random() < 0.06) ? 1.0 : 0.0;
+}
+spineGeo.setAttribute('aTrailFlag', new THREE.BufferAttribute(gpuTrailFlag, 1));
 
 const spineMat = new THREE.ShaderMaterial({
   vertexShader: spineVertexShader, fragmentShader: spineFragmentShader,
