@@ -275,16 +275,15 @@ const spineVertexShader = /* glsl */`
     // ── Blend between scatter and formed ──
     vec3 pos = mix(scatterPos, formedPos, pFormation);
 
-    // ── Size: IDLE 大小 + 极少粒子额外放大（约 7%） ──
+    // ── Size: IDLE 大小 + 极少粒子额外放大（约 4%，幅度收敛） ──
     float sizeRand = fract(sX * 3.14);
-    float megaBoost = 1.0 + step(0.93, sizeRand) * 1.5;  // sizeRand > 0.93 时 size ×2.5
+    float megaBoost = 1.0 + step(0.96, sizeRand) * 0.7;  // sizeRand > 0.96 时 size ×1.7
     float idleSize = (0.025 + sizeRand * sizeRand * 0.13) * megaBoost;
     float formedSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
     float size = mix(idleSize, formedSize, pFormation);
 
-    // ── Alpha: IDLE 加亮，飞行期所有粒子可见（克服 IDLE 30% 阈值显路径） ──
-    float idleVisible = step(0.70, fract(sY * 0.618));
-    // 飞行期 (pFormation 0.05~0.85) 强制可见
+    // ── Alpha: IDLE 减少发光点数量（30% → 20%），飞行期强制可见 ──
+    float idleVisible = step(0.80, fract(sY * 0.618));
     float flightVisible = smoothstep(0.05, 0.20, pFormation) * (1.0 - smoothstep(0.85, 1.0, pFormation));
     float effectiveVisible = max(idleVisible, flightVisible);
     float idleAlpha = (0.20 + fract(sZ * 2.71) * 0.32) * effectiveVisible;
@@ -334,8 +333,8 @@ const spineFragmentShader = /* glsl */`
       c = mix(c, warmthCol * 1.4, thorZone * uSegmentHighlight * 0.7);
       c = mix(c, c * 0.35, lumbZone * uSegmentHighlight * 0.7);
     }
-    // IDLE 状态 halo 加倍 → 像发光星点；formed 状态 halo 正常
-    float haloAmount = 0.12 + vIdleness * 0.50;
+    // IDLE 状态 halo 略增 → 微微发光不过曝；formed 状态 halo 正常
+    float haloAmount = 0.12 + vIdleness * 0.22;
     float core  = exp(-d * d * 24.0);
     float halo  = exp(-d * d * 10.0) * haloAmount;
     float alpha = (core + halo) * vAlpha * uAlphaBoost;
@@ -673,21 +672,19 @@ spineGeo.setAttribute('aZPos',        new THREE.BufferAttribute(gpuZPos, 1));
 spineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(gpuParamT, 1));
 spineGeo.setAttribute('aPhase',       new THREE.BufferAttribute(gpuPhase, 1));
 
-// ── 凝聚动画：8 个时间波次（IDLE 位置仍均匀散布全屏，时机分波）──
-// 每波 ~3500 粒子同时启动，依次涌入，眼睛能看清每一波的飞行
-const N_FORM_WAVES = 8;
+// ── 凝聚动画：5 个时间波次，间隔加大让每波更分明 ──
+// 每波 ~7000 粒子同时启动；波内每粒子 ease 曲线独立（速度不完全一致）
+const N_FORM_WAVES = 5;
 const waveStarts = [];
-const wavePowers = [];
 for (let w = 0; w < N_FORM_WAVES; w++) {
-  waveStarts.push(w * 0.10);                 // 0, 0.10, 0.20, ..., 0.70
-  wavePowers.push(1.5 + Math.random() * 2.5);// ease 曲线幂数 1.5~4.0 每波不同
+  waveStarts.push(w * 0.15);                 // 0, 0.15, 0.30, 0.45, 0.60（间隔 0.15）
 }
 const gpuFormStart = new Float32Array(N_SPINE);
 const gpuFormPower = new Float32Array(N_SPINE);
 for (let i = 0; i < N_SPINE; i++) {
   const wave = Math.floor(Math.random() * N_FORM_WAVES);
   gpuFormStart[i] = waveStarts[wave] + (Math.random() - 0.5) * 0.04; // ±0.02 微抖
-  gpuFormPower[i] = wavePowers[wave];
+  gpuFormPower[i] = 1.5 + Math.random() * 2.5;                       // ease 曲线 per-particle 独立 1.5~4.0
 }
 spineGeo.setAttribute('aFormStart', new THREE.BufferAttribute(gpuFormStart, 1));
 spineGeo.setAttribute('aFormPower', new THREE.BufferAttribute(gpuFormPower, 1));
