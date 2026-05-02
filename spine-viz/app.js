@@ -2887,6 +2887,8 @@ let guideStartTime = 0;       // 引导开始的绝对时间(秒)
 let guideElapsed   = 0;       // 引导已经过的秒数
 let guideSpeed     = 3.0;     // 引导速度倍率（默认 3x 快进）
 let guideManualProgress = -1; // 手动进度（-1 = 自动）
+let guidePaused    = false;   // 暂停标志：true 时 guideElapsed 冻结
+let guidePausedAt  = 0;       // 暂停时冻结的 elapsed 值
 
 // 把胸椎/腰椎峰值 3D 点传给 overlays 用于屏幕投影
 const THORACIC_PEAK_WORLD = SPINE_CURVED[4].clone();   // 最右凸
@@ -3045,8 +3047,10 @@ function updateIdle(t) {
 // ── GUIDE 更新（82s 认知引导时间线 v2）─────────────────────────
 // 段 1 知病 (4-32s) → 段 2a/b 学法引入 (32-46s) → 段 2c 节拍器 (46-74s) → 段 3 入静 (74-82s)
 function updateGuide(t) {
-  // 手动进度优先，否则用速度倍率
-  if (guideManualProgress >= 0) {
+  // 暂停优先：冻结 elapsed
+  if (guidePaused) {
+    guideElapsed = guidePausedAt;
+  } else if (guideManualProgress >= 0) {
     guideElapsed = guideManualProgress;
   } else {
     guideElapsed = (performance.now() / 1000 - guideStartTime) * guideSpeed;
@@ -3495,7 +3499,29 @@ document.getElementById('btn-skip').addEventListener('click', () => {
   enterExperience();
   console.log('[raina] 跳过引导，直接进入体验');
 });
-document.getElementById('btn-reset').addEventListener('click', () => resetToIdle());
+
+// ── 暂停 / 继续 ──
+function togglePause() {
+  const btn = document.getElementById('btn-pause');
+  if (guidePaused) {
+    // 恢复：把 guideStartTime 调到刚好让 elapsed 从冻结点继续
+    guideStartTime = performance.now() / 1000 - guidePausedAt / guideSpeed;
+    guidePaused = false;
+    if (btn) btn.textContent = '⏸ 暂停动画';
+  } else {
+    guidePausedAt = guideElapsed;
+    guidePaused = true;
+    if (btn) btn.textContent = '▶ 继续';
+  }
+}
+document.getElementById('btn-pause').addEventListener('click', togglePause);
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  guidePaused = false;
+  const btn = document.getElementById('btn-pause');
+  if (btn) btn.textContent = '⏸ 暂停动画';
+  resetToIdle();
+});
 
 // ── 引导进度/速度控制 ──
 const guideProgressSlider = document.getElementById('guide-progress-slider');
@@ -3706,6 +3732,7 @@ canvas.addEventListener('click', (e) => {
 
 document.addEventListener('keydown', (e) => {
   if (e.code === 'Space') { e.preventDefault(); startGuide(); }
+  if (e.key === 'p' || e.key === 'P') togglePause();
   if (e.key === 'r' || e.key === 'R') { if (!branchEditMode) resetToIdle(); }
   if (e.key === 'd' || e.key === 'D') debugPanel.classList.toggle('hidden');
   if (e.key === 'f' || e.key === 'F') {
