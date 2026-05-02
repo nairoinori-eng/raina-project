@@ -284,10 +284,10 @@ const spineVertexShader = /* glsl */`
     float formedSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06);
     float size = mix(idleSize, formedSize, pFormation);
 
-    // ── 拖尾粒子：飞行期 (pFormation 0.05~0.95) 放大 + 加 halo（fragment shader 用 vTrailBoost）──
+    // ── 拖尾头粒子：飞行期 size 微放大（避免过曝）──
     float flightActive = smoothstep(0.05, 0.20, pFormation) * (1.0 - smoothstep(0.80, 0.95, pFormation));
     float trailBoostHere = aTrailFlag * flightActive;
-    size *= 1.0 + trailBoostHere * 1.6;
+    size *= 1.0 + trailBoostHere * 0.6;
     vTrailBoost = trailBoostHere;
 
     // ── Alpha: IDLE 减少发光点数量（30% → 20%），飞行期强制可见 ──
@@ -345,8 +345,8 @@ const spineFragmentShader = /* glsl */`
       vec3 coolCol = vec3(0.50, 0.72, 0.98);
       c = mix(c, coolCol * 1.3, lumbZone * uSegmentHighlight * 0.7);
     }
-    // IDLE 微发光 + 拖尾粒子飞行期更强 halo
-    float haloAmount = 0.12 + vIdleness * 0.22 + vTrailBoost * 0.65;
+    // IDLE 微发光 + 拖尾头粒子飞行期略加 halo（温和，不过曝）
+    float haloAmount = 0.12 + vIdleness * 0.18 + vTrailBoost * 0.20;
     float core  = exp(-d * d * 24.0);
     float halo  = exp(-d * d * 10.0) * haloAmount;
     float alpha = (core + halo) * vAlpha * uAlphaBoost;
@@ -701,11 +701,11 @@ for (let i = 0; i < N_SPINE; i++) {
 spineGeo.setAttribute('aFormStart', new THREE.BufferAttribute(gpuFormStart, 1));
 spineGeo.setAttribute('aFormPower', new THREE.BufferAttribute(gpuFormPower, 1));
 
-// ── 拖尾光：选 ~5% 粒子作为拖尾粒子（头粒子由 spine 渲染 + 4 尾巴 sample 跟在身后）──
+// ── 拖尾光：仅选 1% 粒子作为拖尾（少量 + 短尾，避免过曝和性能下降）──
 const gpuTrailFlag = new Float32Array(N_SPINE);
 const trailIndicesArr = [];
 for (let i = 0; i < N_SPINE; i++) {
-  if (Math.random() < 0.05) {
+  if (Math.random() < 0.01) {
     gpuTrailFlag[i] = 1.0;
     trailIndicesArr.push(i);
   }
@@ -739,7 +739,7 @@ spineGroup.add(spinePoints);
 // ── 拖尾尾巴粒子系统（真实运动轨迹）──
 // 每个拖尾粒子额外渲染 4 个尾巴样本，每个样本的 uFormation 时间向前回溯
 // → 飞行期看到一串光跟在拖尾粒子身后
-const N_TAIL_SAMPLES = 4;
+const N_TAIL_SAMPLES = 2;
 const N_TRAIL_TOTAL = trailIndicesArr.length * N_TAIL_SAMPLES;
 
 const trailGeo = new THREE.BufferGeometry();
@@ -849,14 +849,14 @@ const trailMat = new THREE.ShaderMaterial({
       // 可见性由 head 的 pFormation 决定：head 还在飞时尾巴显示，head 到位即灭
       float headInFlight = smoothstep(0.05, 0.15, headPF) * (1.0 - smoothstep(0.85, 0.99, headPF));
 
-      // 尾巴越后越淡（aTailIdx 1~4）
-      float tailFalloff = 1.0 - aTailIdx * 0.16;
-      vAlpha = headInFlight * tailFalloff * uGuideAlpha;
+      // 尾巴越后越淡（aTailIdx 1~2）
+      float tailFalloff = 1.0 - aTailIdx * 0.30;
+      vAlpha = headInFlight * tailFalloff * uGuideAlpha * 0.5;
       vTailIdx = aTailIdx;
 
       vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-      // 尾巴尺寸：在脊柱粒子基础上放大约 2.5×（让人眼能看见）
-      float pSize = aSize * 2.5 * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06) * (1.3 - aTailIdx * 0.16);
+      // 尾巴尺寸：脊柱粒子基础 ×1.4，温和不刺眼
+      float pSize = aSize * 1.4 * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06) * (1.1 - aTailIdx * 0.20);
       gl_PointSize = pSize * (300.0 / -mv.z);
       gl_Position = projectionMatrix * mv;
     }
@@ -868,11 +868,10 @@ const trailMat = new THREE.ShaderMaterial({
     void main() {
       float d = length(gl_PointCoord - vec2(0.5));
       if (d > 0.5) discard;
-      // 尾巴粒子用更强的 halo（让眼睛能看到拖尾感）
-      float core = exp(-d * d * 22.0);
-      float halo = exp(-d * d * 7.0) * 0.85;
-      float glow = exp(-d * d * 3.0) * 0.30;
-      gl_FragColor = vec4(uTrailColor, (core + halo + glow) * vAlpha);
+      // 单层 halo，温和不过曝
+      float core = exp(-d * d * 24.0);
+      float halo = exp(-d * d * 10.0) * 0.30;
+      gl_FragColor = vec4(uTrailColor, (core + halo) * vAlpha);
     }
   `,
   uniforms: {
@@ -881,7 +880,7 @@ const trailMat = new THREE.ShaderMaterial({
     uTime:          { value: 0.0 },
     uFormation:     { value: 0.0 },
     uGuideAlpha:    { value: 0.0 },
-    uTrailColor:    { value: new THREE.Color(0xfff0c8) },  // 更亮的暖白
+    uTrailColor:    { value: new THREE.Color(0xead4a8) },  // 暖白偏淡
   },
   transparent: true,
   blending: THREE.AdditiveBlending,
