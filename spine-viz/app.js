@@ -701,13 +701,11 @@ for (let i = 0; i < N_SPINE; i++) {
 spineGeo.setAttribute('aFormStart', new THREE.BufferAttribute(gpuFormStart, 1));
 spineGeo.setAttribute('aFormPower', new THREE.BufferAttribute(gpuFormPower, 1));
 
-// ── 拖尾光：选 ~3% 粒子作为拖尾粒子（头粒子 + 4 个时间偏移的尾巴 = 真实运动轨迹）──
-// 头粒子由 spine 渲染（自带 aTrailFlag 标记 → 飞行期 size + halo 加强）
-// 尾巴由独立的 trailGeo / trailPoints 渲染（位置回溯到稍早的 uFormation 时刻）
+// ── 拖尾光：选 ~5% 粒子作为拖尾粒子（头粒子由 spine 渲染 + 4 尾巴 sample 跟在身后）──
 const gpuTrailFlag = new Float32Array(N_SPINE);
 const trailIndicesArr = [];
 for (let i = 0; i < N_SPINE; i++) {
-  if (Math.random() < 0.03) {
+  if (Math.random() < 0.05) {
     gpuTrailFlag[i] = 1.0;
     trailIndicesArr.push(i);
   }
@@ -837,23 +835,28 @@ const trailMat = new THREE.ShaderMaterial({
       scatterPos.y += cos(uTime * driftSpd * 0.75 + sY * 4.0) * 0.42;
       scatterPos.x += sin(uTime * 0.05 + sZ * 2.0) * 0.22;
 
-      // 尾巴时间回溯：每段尾向前推 0.05 单位 uFormation
-      float effFormation = max(0.0, uFormation - aTailIdx * 0.05);
-      float localT = clamp((effFormation - aFormStart) / max(0.001, 1.0 - aFormStart), 0.0, 1.0);
-      float pFormation = 1.0 - pow(1.0 - localT, aFormPower);
+      // 计算 head 自己的 pFormation（不带 tail offset）→ 用来判断"head 是否还在飞"
+      float headLocalT = clamp((uFormation - aFormStart) / max(0.001, 1.0 - aFormStart), 0.0, 1.0);
+      float headPF = 1.0 - pow(1.0 - headLocalT, aFormPower);
 
-      vec3 pos = mix(scatterPos, formedPos, pFormation);
+      // 尾巴时间回溯：每段尾向前推 0.04 单位 uFormation（位置稍早）
+      float effFormation = max(0.0, uFormation - aTailIdx * 0.04);
+      float tailLocalT = clamp((effFormation - aFormStart) / max(0.001, 1.0 - aFormStart), 0.0, 1.0);
+      float tailPF = 1.0 - pow(1.0 - tailLocalT, aFormPower);
 
-      // 仅在飞行期可见（pFormation 严格在 0~1 之间）
-      float flightActive = step(0.02, pFormation) * (1.0 - step(0.99, pFormation));
+      vec3 pos = mix(scatterPos, formedPos, tailPF);
 
-      // 尾巴越后越小越淡
-      float tailFalloff = 1.0 - aTailIdx * 0.18;  // 0.82, 0.64, 0.46, 0.28
-      vAlpha = flightActive * tailFalloff * 0.7 * uGuideAlpha;
+      // 可见性由 head 的 pFormation 决定：head 还在飞时尾巴显示，head 到位即灭
+      float headInFlight = smoothstep(0.05, 0.15, headPF) * (1.0 - smoothstep(0.85, 0.99, headPF));
+
+      // 尾巴越后越淡（aTailIdx 1~4）
+      float tailFalloff = 1.0 - aTailIdx * 0.16;
+      vAlpha = headInFlight * tailFalloff * uGuideAlpha;
       vTailIdx = aTailIdx;
 
       vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-      float pSize = aSize * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06) * (0.85 - aTailIdx * 0.10);
+      // 尾巴尺寸：在脊柱粒子基础上放大约 2.5×（让人眼能看见）
+      float pSize = aSize * 2.5 * (1.0 + sin(uTime * 1.57 + aPhase) * 0.06) * (1.3 - aTailIdx * 0.16);
       gl_PointSize = pSize * (300.0 / -mv.z);
       gl_Position = projectionMatrix * mv;
     }
@@ -865,9 +868,11 @@ const trailMat = new THREE.ShaderMaterial({
     void main() {
       float d = length(gl_PointCoord - vec2(0.5));
       if (d > 0.5) discard;
+      // 尾巴粒子用更强的 halo（让眼睛能看到拖尾感）
       float core = exp(-d * d * 22.0);
-      float halo = exp(-d * d * 8.0) * 0.55;
-      gl_FragColor = vec4(uTrailColor, (core + halo) * vAlpha);
+      float halo = exp(-d * d * 7.0) * 0.85;
+      float glow = exp(-d * d * 3.0) * 0.30;
+      gl_FragColor = vec4(uTrailColor, (core + halo + glow) * vAlpha);
     }
   `,
   uniforms: {
@@ -876,7 +881,7 @@ const trailMat = new THREE.ShaderMaterial({
     uTime:          { value: 0.0 },
     uFormation:     { value: 0.0 },
     uGuideAlpha:    { value: 0.0 },
-    uTrailColor:    { value: new THREE.Color(0xfae8c0) },  // 淡暖白
+    uTrailColor:    { value: new THREE.Color(0xfff0c8) },  // 更亮的暖白
   },
   transparent: true,
   blending: THREE.AdditiveBlending,
