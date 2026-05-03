@@ -767,12 +767,18 @@ ribGeo.setAttribute('aPerpJit',  new THREE.BufferAttribute(rbPerpJit, 1));
 ribGeo.setAttribute('aZJit',     new THREE.BufferAttribute(rbZJit, 1));
 ribGeo.setAttribute('aColorVar', new THREE.BufferAttribute(rbColorVar, 1));
 
-// 椎体 XY 锚点
+// 椎体 XY 锚点 + 每根肋骨对应椎体的外径（动态计算，不硬编码）
 const ribVertebraXY = new Float32Array(N_RIBS_PER_SIDE * 2);
+const ribVertOuter  = new Float32Array(N_RIBS_PER_SIDE);  // 椎体最宽处的横向偏移
 for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
-  const pt = curveCurved.getPoint(ribTs[i]);
+  const t = ribTs[i];
+  const pt = curveCurved.getPoint(t);
   ribVertebraXY[i * 2]     = pt.x;
   ribVertebraXY[i * 2 + 1] = pt.y;
+  // 椎体外径：t 0~1 映射到 vi 0~12，调用 vertSizeAt 拿真实椎体宽度
+  // ×1.05 微微外溢（让肋骨起点贴在椎体最外缘的发光区，无缝衔接）
+  const vi = t * 12;
+  ribVertOuter[i] = VERT_OUTER_BASE * vertSizeAt(vi) * 1.05;
 }
 
 const ribMat = new THREE.ShaderMaterial({
@@ -784,6 +790,7 @@ const ribMat = new THREE.ShaderMaterial({
     attribute float aZJit;
     attribute float aColorVar;
     uniform vec2  uRibVertebra[${N_RIBS_PER_SIDE}];
+    uniform float uVertOuter[${N_RIBS_PER_SIDE}];   // 每根肋骨对应椎体的外径
     uniform float uActive;
     varying float vAlpha;
     varying float vColorVar;
@@ -791,6 +798,7 @@ const ribMat = new THREE.ShaderMaterial({
     void main() {
       int idx = int(aRibIdx);
       vec2 vert = uRibVertebra[idx];
+      float vOuter = uVertOuter[idx];
 
       // 不对称横向延展（侧弯关键，长度足够看出骨头）：
       //   右侧凸 → 肋骨被推得更外更舒展（lateral 1.70~2.05）
@@ -799,8 +807,8 @@ const ribMat = new THREE.ShaderMaterial({
         ? (1.70 + aRibIdx * 0.060)
         : (1.05 + aRibIdx * 0.040);
 
-      // 起点：椎骨最外缘（不是中心曲线，对应椎体椭圆 VERT_OUTER ≈ 0.20）
-      vec2 vertEdge = vec2(vert.x + aSide * 0.22, vert.y);
+      // 起点：椎体最外缘（用 vertOuter，不是硬编码常量）
+      vec2 vertEdge = vec2(vert.x + aSide * vOuter, vert.y);
 
       // 弧形路径（贝塞尔，像 ) 和 (）：上抬→外延→下落
       vec2 start = vertEdge;
@@ -835,15 +843,16 @@ const ribMat = new THREE.ShaderMaterial({
     }
   `,
   fragmentShader: /* glsl */`
+    uniform vec3 uColor;
+    uniform vec3 uHighlight;
     varying float vAlpha;
     varying float vColorVar;
     varying float vPathT;
     void main() {
       float d = length(gl_PointCoord - vec2(0.5));
       if (d > 0.5) discard;
-      // 统一骨头色（暖白偏奶油），微亮度变化让纹理有有机感
-      vec3 baseCol = vec3(0.86, 0.78, 0.62);
-      baseCol *= 0.78 + vColorVar * 0.32;
+      // 跟脊柱椎体同色（COLOR_DARK 深紫 ↔ HL_DARK 亮紫），按 vColorVar 调
+      vec3 baseCol = mix(uColor, uHighlight, vColorVar * 0.55);
       // 沿路径 alpha 衰减：脊柱端亮，外延端淡（不硬切）
       float pathFade = pow(1.0 - vPathT, 1.3);
       float core = exp(-d * d * 24.0);
@@ -855,6 +864,9 @@ const ribMat = new THREE.ShaderMaterial({
     uActive:       { value: 0 },
     uRibVertebra:  { value: Array.from({length: N_RIBS_PER_SIDE}, (_, i) =>
                        new THREE.Vector2(ribVertebraXY[i*2], ribVertebraXY[i*2+1])) },
+    uVertOuter:    { value: Array.from(ribVertOuter) },
+    uColor:        { value: COLOR_DARK.clone() },
+    uHighlight:    { value: HL_DARK.clone() },
   },
   transparent: true,
   blending: THREE.AdditiveBlending,
