@@ -799,13 +799,16 @@ const ribMat = new THREE.ShaderMaterial({
         ? (1.70 + aRibIdx * 0.060)
         : (1.05 + aRibIdx * 0.040);
 
+      // 起点：椎骨最外缘（不是中心曲线，对应椎体椭圆 VERT_OUTER ≈ 0.20）
+      vec2 vertEdge = vec2(vert.x + aSide * 0.22, vert.y);
+
       // 弧形路径（贝塞尔，像 ) 和 (）：上抬→外延→下落
-      vec2 start = vec2(vert.x, vert.y);
+      vec2 start = vertEdge;
       // 凹侧弧度更陡（archUp/Down 更大）
       float archUp   = (aSide > 0.0) ? 0.20 : 0.26;
       float archDown = (aSide > 0.0) ? 0.22 : 0.30;
-      vec2 ctrl  = vec2(vert.x + lateral * 0.55 * aSide, vert.y + archUp);
-      vec2 endPt = vec2(vert.x + lateral * aSide,        vert.y - archDown);
+      vec2 ctrl  = vec2(vertEdge.x + lateral * 0.55 * aSide, vert.y + archUp);
+      vec2 endPt = vec2(vertEdge.x + lateral * aSide,        vert.y - archDown);
       vec2 ab = mix(start, ctrl, aPathT);
       vec2 bc = mix(ctrl, endPt, aPathT);
       vec2 pos2D = mix(ab, bc, aPathT);
