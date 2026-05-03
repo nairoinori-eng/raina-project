@@ -716,6 +716,159 @@ const spinePoints = new THREE.Points(spineGeo, spineMat);
 spinePoints.frustumCulled = false;
 spineGroup.add(spinePoints);
 
+// ============================================================
+// 7b. 肋骨粒子（仅段 1 后段 22.5-31.5s 显示，配合"穹窿/峡谷"文字）
+// ============================================================
+// 12 对肋骨从胸椎延展，右侧"穹窿"撑开宽，左侧"峡谷"压缩窄
+// 每根肋骨在不同 Z 层 → 立体笼感；颜色按 Z 调亮度（前亮后暗）
+const N_RIBS_PER_SIDE = 12;
+const N_RIB_PARTICLES = 400;  // 每根肋骨粒子数（厚度 + 立体感）
+const N_RIB_TOTAL = N_RIBS_PER_SIDE * 2 * N_RIB_PARTICLES;
+
+const ribGeo = new THREE.BufferGeometry();
+const rbPos       = new Float32Array(N_RIB_TOTAL * 3);  // 占位，shader 重计算
+const rbRibIdx    = new Float32Array(N_RIB_TOTAL);      // 0~11 第几根肋骨
+const rbSide      = new Float32Array(N_RIB_TOTAL);      // -1=左, +1=右
+const rbPathT     = new Float32Array(N_RIB_TOTAL);      // 0~1 沿肋骨路径
+const rbPerpJit   = new Float32Array(N_RIB_TOTAL);      // -1~+1 垂直抖动（厚度）
+const rbZJit      = new Float32Array(N_RIB_TOTAL);      // -1~+1 Z 抖动
+const rbColorVar  = new Float32Array(N_RIB_TOTAL);      // 0~1 色阶变化
+
+// 12 根肋骨在胸椎的 t 参数（curveCurved 上）：t 0.06~0.50 覆盖 T1-T12
+const ribTs   = new Array(N_RIBS_PER_SIDE);
+const ribZs   = new Array(N_RIBS_PER_SIDE * 2);  // 每根肋骨独立 Z（左/右各算一根）
+for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
+  ribTs[i] = 0.06 + (i / (N_RIBS_PER_SIDE - 1)) * 0.46;
+}
+// 每根肋骨独立 Z（-0.5 ~ +0.5），形成笼状立体感
+for (let i = 0; i < N_RIBS_PER_SIDE * 2; i++) {
+  ribZs[i] = (Math.random() - 0.5) * 0.95;
+}
+
+// 写入粒子属性
+let _rIdx = 0;
+for (let side = -1; side <= 1; side += 2) {
+  for (let r = 0; r < N_RIBS_PER_SIDE; r++) {
+    const ribZSlot = (side === -1 ? r : N_RIBS_PER_SIDE + r);
+    for (let p = 0; p < N_RIB_PARTICLES; p++) {
+      rbRibIdx[_rIdx]   = r;
+      rbSide[_rIdx]     = side;
+      rbPathT[_rIdx]    = p / (N_RIB_PARTICLES - 1);
+      rbPerpJit[_rIdx]  = (Math.random() - 0.5) * 2.0;
+      rbZJit[_rIdx]     = (Math.random() - 0.5) * 2.0;
+      rbColorVar[_rIdx] = Math.random();
+      _rIdx++;
+    }
+  }
+}
+
+ribGeo.setAttribute('position',  new THREE.BufferAttribute(rbPos, 3));
+ribGeo.setAttribute('aRibIdx',   new THREE.BufferAttribute(rbRibIdx, 1));
+ribGeo.setAttribute('aSide',     new THREE.BufferAttribute(rbSide, 1));
+ribGeo.setAttribute('aPathT',    new THREE.BufferAttribute(rbPathT, 1));
+ribGeo.setAttribute('aPerpJit',  new THREE.BufferAttribute(rbPerpJit, 1));
+ribGeo.setAttribute('aZJit',     new THREE.BufferAttribute(rbZJit, 1));
+ribGeo.setAttribute('aColorVar', new THREE.BufferAttribute(rbColorVar, 1));
+
+// 把 12 根肋骨的椎体位置和 Z 值传给 shader（uniform 数组）
+const ribVertebraXY = new Float32Array(N_RIBS_PER_SIDE * 2);  // x,y for each rib
+for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
+  const pt = curveCurved.getPoint(ribTs[i]);
+  ribVertebraXY[i * 2]     = pt.x;
+  ribVertebraXY[i * 2 + 1] = pt.y;
+}
+
+const ribMat = new THREE.ShaderMaterial({
+  vertexShader: /* glsl */`
+    attribute float aRibIdx;
+    attribute float aSide;
+    attribute float aPathT;
+    attribute float aPerpJit;
+    attribute float aZJit;
+    attribute float aColorVar;
+    uniform vec2  uRibVertebra[${N_RIBS_PER_SIDE}];   // 椎体 XY 锚点
+    uniform float uRibZ[${N_RIBS_PER_SIDE * 2}];      // 每根肋骨独立 Z（左 0~11, 右 12~23）
+    uniform float uActive;
+    varying float vAlpha;
+    varying float vZ;
+    varying float vColorVar;
+    void main() {
+      int idx = int(aRibIdx);
+      vec2 vert = uRibVertebra[idx];
+      // 不对称的横向延展：右肋宽，左肋窄
+      float lateral = (aSide > 0.0) ? (1.10 + aRibIdx * 0.018) : (0.55 + aRibIdx * 0.010);
+      // 左肋还有"垂直压缩"感（垂直间距 ×0.85）
+      float vertCompress = (aSide < 0.0) ? 0.92 : 1.0;
+      float vertY = vert.y * vertCompress;
+
+      // Bezier 弧路径（2D）：起点椎体 → 中点上抬 → 终点外延略上
+      vec2 start = vec2(vert.x, vertY);
+      vec2 endPt = vec2(vert.x + lateral * aSide, vertY + 0.04 - aRibIdx * 0.005);
+      vec2 ctrl  = vec2(vert.x + lateral * 0.5 * aSide, vertY + 0.10 + aRibIdx * 0.003);
+      vec2 ab = mix(start, ctrl, aPathT);
+      vec2 bc = mix(ctrl, endPt, aPathT);
+      vec2 pos2D = mix(ab, bc, aPathT);
+
+      // 路径切线（用于垂直方向 jitter）
+      vec2 da = ctrl - start;
+      vec2 db = endPt - ctrl;
+      vec2 tangent = normalize(mix(da, db, aPathT));
+      vec2 perp = vec2(-tangent.y, tangent.x);
+
+      // 厚度（垂直 jitter）
+      pos2D += perp * aPerpJit * 0.045;
+
+      // Z 深度：每根肋骨独立 Z + 粒子内微抖
+      int zIdx = (aSide < 0.0) ? idx : (idx + ${N_RIBS_PER_SIDE});
+      float ribZ = uRibZ[zIdx];
+      float z = ribZ + aZJit * 0.05;
+      vZ = z;
+      vColorVar = aColorVar;
+
+      // 飞行 / 显示控制：仅 uActive > 0 时显示
+      vAlpha = uActive;
+
+      vec4 mv = modelViewMatrix * vec4(pos2D, z, 1.0);
+      gl_PointSize = 0.038 * (300.0 / -mv.z);
+      gl_Position = projectionMatrix * mv;
+    }
+  `,
+  fragmentShader: /* glsl */`
+    uniform vec3 uColorRight;
+    uniform vec3 uColorLeft;
+    varying float vAlpha;
+    varying float vZ;
+    varying float vColorVar;
+    void main() {
+      float d = length(gl_PointCoord - vec2(0.5));
+      if (d > 0.5) discard;
+      // Z>0 在前（亮 + 偏暖），Z<0 在后（暗 + 偏冷）
+      float zNorm = clamp(vZ * 2.0 + 0.5, 0.0, 1.0);  // 0(后) ~ 1(前)
+      vec3 baseCol = mix(vec3(0.40, 0.34, 0.55), vec3(0.85, 0.78, 0.62), zNorm);
+      // 微色阶变化（per particle 不同明度）
+      baseCol *= 0.85 + vColorVar * 0.30;
+      float core = exp(-d * d * 24.0);
+      float halo = exp(-d * d * 10.0) * 0.20;
+      gl_FragColor = vec4(baseCol, (core + halo) * vAlpha * (0.45 + zNorm * 0.55));
+    }
+  `,
+  uniforms: {
+    uActive:       { value: 0 },
+    uRibVertebra:  { value: Array.from({length: N_RIBS_PER_SIDE}, (_, i) =>
+                       new THREE.Vector2(ribVertebraXY[i*2], ribVertebraXY[i*2+1])) },
+    uRibZ:         { value: ribZs.slice() },
+    uColorRight:   { value: new THREE.Color(0xc8a878) },
+    uColorLeft:    { value: new THREE.Color(0x8a90c0) },
+  },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+});
+
+const ribPoints = new THREE.Points(ribGeo, ribMat);
+ribPoints.frustumCulled = false;
+spineGroup.add(ribPoints);
+
 // ── 正常直脊柱对比线（虚线，教学段使用）──
 const comparisonPoints = [];
 for (let i = 0; i <= 80; i++) {
@@ -2917,13 +3070,18 @@ let guidePausedAt  = 0;       // 暂停时冻结的 elapsed 值
 // 把胸椎/腰椎峰值 3D 点传给 overlays 用于屏幕投影
 const THORACIC_PEAK_WORLD = SPINE_CURVED[4].clone();   // 最右凸
 const LUMBAR_PEAK_WORLD   = SPINE_CURVED[9].clone();   // 最左凸
+// 肋骨视觉中心点（"峡谷"在胸椎左侧的肋骨压缩区，跟"穹窿"对称）
+const THORACIC_RIB_RIGHT  = new THREE.Vector3(THORACIC_PEAK_WORLD.x + 0.50, THORACIC_PEAK_WORLD.y, 0);
+const THORACIC_RIB_LEFT   = new THREE.Vector3(THORACIC_PEAK_WORLD.x - 0.45, THORACIC_PEAK_WORLD.y, 0);
 
 const overlays = new IntroOverlays({
   camera,
   spineGroup,
   anchors: {
-    thoracic: THORACIC_PEAK_WORLD,
-    lumbar:   LUMBAR_PEAK_WORLD,
+    thoracic:    THORACIC_PEAK_WORLD,
+    lumbar:      LUMBAR_PEAK_WORLD,
+    ribRight:    THORACIC_RIB_RIGHT,
+    ribLeft:     THORACIC_RIB_LEFT,
   },
 });
 
@@ -2954,6 +3112,7 @@ function enterExperience() {
   comparisonMat.opacity = 0;
   flowMat.uniforms.uActive.value = 0;
   pacerMat.uniforms.uActive.value = 0;
+  ribMat.uniforms.uActive.value = 0;
   updateDebugUI();
   console.log('[raina] 呼吸体验阶段开始');
 }
@@ -2970,6 +3129,7 @@ function resetToIdle() {
   diffusePoints.visible = false;       // IDLE 隐藏弥散流（避免脊柱中轴线闪烁）
   flowMat.uniforms.uActive.value = 0;
   pacerMat.uniforms.uActive.value = 0;
+  ribMat.uniforms.uActive.value = 0;
 
   // 重置藤蔓
   for (let v = 0; v < N_VINES; v++) {
@@ -3107,6 +3267,13 @@ function updateGuide(t) {
   else if (guideElapsed >= 48 && guideElapsed < 72) pacerActive = 1.0;
   else if (guideElapsed >= 72 && guideElapsed < 74) pacerActive = 1 - (guideElapsed - 72) / 2;
   pacerMat.uniforms.uActive.value = pacerActive;
+
+  // 肋骨粒子（22.5-31.5s 段 1 后段，跟"穹窿/峡谷"文字同步）
+  let ribActive = 0;
+  if (guideElapsed >= 22.5 && guideElapsed < 23.5) ribActive = (guideElapsed - 22.5);
+  else if (guideElapsed >= 23.5 && guideElapsed < 30) ribActive = 1.0;
+  else if (guideElapsed >= 30 && guideElapsed < 31.5) ribActive = 1 - (guideElapsed - 30) / 1.5;
+  ribMat.uniforms.uActive.value = ribActive;
 
   // 脊柱旋转：全程保持轻摆动（移除"病理段冻结"，新脚本无此概念）
   if (!branchEditMode) {

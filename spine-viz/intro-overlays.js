@@ -23,8 +23,8 @@ const TEXT_SCHEDULE = [
   { text: '数字标定了弯折的弧度。',                          start: 17.5, group: 'A' },
   { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 19.5, group: 'A' },
   // 22.5s group A 整体淡出
-  { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 22.5, end: 27.5, anchor: 'thoracic', side: 'right' },
-  { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 27.5, end: 31.5, anchor: 'lumbar',   side: 'left' },
+  { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 22.5, end: 27.5, anchor: 'ribRight', side: 'right' },
+  { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 27.5, end: 31.5, anchor: 'ribLeft',  side: 'left'  },
   { text: '我们便如此共生。',                                start: 31.5, group: 'A2' },
 
   // ─── 段 2a/b · 学法引入 (33-47s) - 堆叠 group B ───
