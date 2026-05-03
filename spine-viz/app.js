@@ -719,13 +719,12 @@ spineGroup.add(spinePoints);
 // ============================================================
 // 7b. 肋骨粒子（仅段 1 后段 22.5-31.5s 显示，配合"穹窿/峡谷"文字）
 // ============================================================
-// 9 对肋骨从胸椎椎骨水平点对称发出（一根向左 ( 一根向右 )）
-// 路径：贝塞尔弧（先向上、再向外、再向下落），像括号 ) 和 (
-// 不对称：右侧脊柱凸侧外延更宽更舒展；左侧凹侧更短更陡
-// 沿弧粒子集中在脊柱端（密+亮），向外端渐稀渐淡（不硬切）
-// 每根肋骨独立 Z 形成立体笼感
-const N_RIBS_PER_SIDE = 9;
-const N_RIB_PARTICLES = 400;
+// 7 对肋骨从胸椎 7 个椎骨最突出处对称发出
+// 全部在同一深度（Z≈0），不做前后笼感（视觉清晰，统一是骨头颜色）
+// 每根 600 粒子，弧形像 ( 和 )，长度足够看出"骨头形"
+// 不对称：右侧凸侧肋骨被推得更外更舒展，左侧凹侧更短更陡
+const N_RIBS_PER_SIDE = 7;
+const N_RIB_PARTICLES = 600;
 const N_RIB_TOTAL = N_RIBS_PER_SIDE * 2 * N_RIB_PARTICLES;
 
 const ribGeo = new THREE.BufferGeometry();
@@ -737,14 +736,10 @@ const rbPerpJit   = new Float32Array(N_RIB_TOTAL);
 const rbZJit      = new Float32Array(N_RIB_TOTAL);
 const rbColorVar  = new Float32Array(N_RIB_TOTAL);
 
-// 9 根肋骨在胸椎的 t 参数：t 0.05~0.50 覆盖 T1-T12，留椎骨间隙
+// 7 根肋骨在胸椎 t 参数：0.06~0.50 均匀分布（覆盖 T1-T12 主体）
 const ribTs = new Array(N_RIBS_PER_SIDE);
-const ribZs = new Array(N_RIBS_PER_SIDE * 2);  // 左 0~8 + 右 9~17
 for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
-  ribTs[i] = 0.05 + (i / (N_RIBS_PER_SIDE - 1)) * 0.46;
-}
-for (let i = 0; i < N_RIBS_PER_SIDE * 2; i++) {
-  ribZs[i] = (Math.random() - 0.5) * 1.10;
+  ribTs[i] = 0.06 + (i / (N_RIBS_PER_SIDE - 1)) * 0.44;
 }
 
 let _rIdx = 0;
@@ -753,7 +748,7 @@ for (let side = -1; side <= 1; side += 2) {
     for (let p = 0; p < N_RIB_PARTICLES; p++) {
       rbRibIdx[_rIdx]   = r;
       rbSide[_rIdx]     = side;
-      // 粒子分布偏向脊柱端（u² 分布让 0 附近更密）
+      // u² 分布让粒子偏向脊柱端密集
       const u = Math.random();
       rbPathT[_rIdx]    = u * u;
       rbPerpJit[_rIdx]  = (Math.random() - 0.5) * 2.0;
@@ -772,7 +767,7 @@ ribGeo.setAttribute('aPerpJit',  new THREE.BufferAttribute(rbPerpJit, 1));
 ribGeo.setAttribute('aZJit',     new THREE.BufferAttribute(rbZJit, 1));
 ribGeo.setAttribute('aColorVar', new THREE.BufferAttribute(rbColorVar, 1));
 
-// 椎体 XY 锚点（每根肋骨从这个点出发）
+// 椎体 XY 锚点
 const ribVertebraXY = new Float32Array(N_RIBS_PER_SIDE * 2);
 for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
   const pt = curveCurved.getPoint(ribTs[i]);
@@ -789,86 +784,74 @@ const ribMat = new THREE.ShaderMaterial({
     attribute float aZJit;
     attribute float aColorVar;
     uniform vec2  uRibVertebra[${N_RIBS_PER_SIDE}];
-    uniform float uRibZ[${N_RIBS_PER_SIDE * 2}];
     uniform float uActive;
     varying float vAlpha;
-    varying float vZ;
     varying float vColorVar;
     varying float vPathT;
     void main() {
       int idx = int(aRibIdx);
       vec2 vert = uRibVertebra[idx];
 
-      // 不对称横向延展（侧弯关键）：
-      //   右侧脊柱凸 → 肋骨被推得更外（lateral 1.20~1.55）
-      //   左侧脊柱凹 → 肋骨更挤更短（lateral 0.85~1.05）
+      // 不对称横向延展（侧弯关键，长度足够看出骨头）：
+      //   右侧凸 → 肋骨被推得更外更舒展（lateral 1.70~2.05）
+      //   左侧凹 → 肋骨更挤更短（lateral 1.05~1.30）
       float lateral = (aSide > 0.0)
-        ? (1.20 + aRibIdx * 0.040)
-        : (0.85 + aRibIdx * 0.025);
+        ? (1.70 + aRibIdx * 0.060)
+        : (1.05 + aRibIdx * 0.040);
 
-      // 弧形路径（像 ( 和 )）：
-      //   起点 椎骨水平点
-      //   控制点 上抬 + 中段外延（产生上凸的弧）
-      //   终点 外延末端 + 略向下（包胸感）
+      // 弧形路径（贝塞尔，像 ) 和 (）：上抬→外延→下落
       vec2 start = vec2(vert.x, vert.y);
-      // 凹侧 (left) 弧度更陡：控制点上抬更多 + 末端下沉更多
-      float archUp     = (aSide > 0.0) ? 0.18 : 0.22;
-      float archDown   = (aSide > 0.0) ? 0.20 : 0.26;
+      // 凹侧弧度更陡（archUp/Down 更大）
+      float archUp   = (aSide > 0.0) ? 0.20 : 0.26;
+      float archDown = (aSide > 0.0) ? 0.22 : 0.30;
       vec2 ctrl  = vec2(vert.x + lateral * 0.55 * aSide, vert.y + archUp);
       vec2 endPt = vec2(vert.x + lateral * aSide,        vert.y - archDown);
       vec2 ab = mix(start, ctrl, aPathT);
       vec2 bc = mix(ctrl, endPt, aPathT);
       vec2 pos2D = mix(ab, bc, aPathT);
 
-      // 路径切线（法向方向上加厚度抖动）
+      // 路径切线 → 法向加厚度抖动
       vec2 da = ctrl - start;
       vec2 db = endPt - ctrl;
       vec2 tangent = normalize(mix(da, db, aPathT));
       vec2 perp = vec2(-tangent.y, tangent.x);
-      // 弧近脊柱端粒子更紧凑，远端散开（perp jitter 随 aPathT 增大）
-      float perpAmp = 0.020 + aPathT * 0.045;
+      // 近脊柱端粒子紧凑，远端略散（保持骨头线条感）
+      float perpAmp = 0.018 + aPathT * 0.040;
       pos2D += perp * aPerpJit * perpAmp;
 
-      // Z 深度：每根肋骨独立 Z + 粒子内微抖
-      int zIdx = (aSide < 0.0) ? idx : (idx + ${N_RIBS_PER_SIDE});
-      float ribZ = uRibZ[zIdx];
-      float z = ribZ + aZJit * 0.06;
-      vZ = z;
+      // Z 统一在 0（不做前后笼感），只有粒子内微抖
+      float z = aZJit * 0.04;
+
       vColorVar = aColorVar;
       vPathT = aPathT;
-
       vAlpha = uActive;
 
       vec4 mv = modelViewMatrix * vec4(pos2D, z, 1.0);
-      gl_PointSize = 0.038 * (300.0 / -mv.z);
+      gl_PointSize = 0.040 * (300.0 / -mv.z);
       gl_Position = projectionMatrix * mv;
     }
   `,
   fragmentShader: /* glsl */`
     varying float vAlpha;
-    varying float vZ;
     varying float vColorVar;
     varying float vPathT;
     void main() {
       float d = length(gl_PointCoord - vec2(0.5));
       if (d > 0.5) discard;
-      // Z>0 前景：亮 + 偏暖；Z<0 后景：暗 + 偏冷紫
-      float zNorm = clamp(vZ * 2.0 + 0.5, 0.0, 1.0);
-      vec3 baseCol = mix(vec3(0.38, 0.32, 0.52), vec3(0.88, 0.80, 0.62), zNorm);
-      baseCol *= 0.85 + vColorVar * 0.30;
+      // 统一骨头色（暖白偏奶油），微亮度变化让纹理有有机感
+      vec3 baseCol = vec3(0.86, 0.78, 0.62);
+      baseCol *= 0.78 + vColorVar * 0.32;
       // 沿路径 alpha 衰减：脊柱端亮，外延端淡（不硬切）
-      float pathFade = pow(1.0 - vPathT, 1.4);
+      float pathFade = pow(1.0 - vPathT, 1.3);
       float core = exp(-d * d * 24.0);
       float halo = exp(-d * d * 10.0) * 0.22;
-      float zAlphaBoost = 0.40 + zNorm * 0.60;
-      gl_FragColor = vec4(baseCol, (core + halo) * vAlpha * pathFade * zAlphaBoost);
+      gl_FragColor = vec4(baseCol, (core + halo) * vAlpha * pathFade);
     }
   `,
   uniforms: {
     uActive:       { value: 0 },
     uRibVertebra:  { value: Array.from({length: N_RIBS_PER_SIDE}, (_, i) =>
                        new THREE.Vector2(ribVertebraXY[i*2], ribVertebraXY[i*2+1])) },
-    uRibZ:         { value: ribZs.slice() },
   },
   transparent: true,
   blending: THREE.AdditiveBlending,
