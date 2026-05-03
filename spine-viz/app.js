@@ -719,41 +719,43 @@ spineGroup.add(spinePoints);
 // ============================================================
 // 7b. 肋骨粒子（仅段 1 后段 22.5-31.5s 显示，配合"穹窿/峡谷"文字）
 // ============================================================
-// 12 对肋骨从胸椎延展，右侧"穹窿"撑开宽，左侧"峡谷"压缩窄
-// 每根肋骨在不同 Z 层 → 立体笼感；颜色按 Z 调亮度（前亮后暗）
-const N_RIBS_PER_SIDE = 12;
-const N_RIB_PARTICLES = 400;  // 每根肋骨粒子数（厚度 + 立体感）
+// 9 对肋骨从胸椎椎骨水平点对称发出（一根向左 ( 一根向右 )）
+// 路径：贝塞尔弧（先向上、再向外、再向下落），像括号 ) 和 (
+// 不对称：右侧脊柱凸侧外延更宽更舒展；左侧凹侧更短更陡
+// 沿弧粒子集中在脊柱端（密+亮），向外端渐稀渐淡（不硬切）
+// 每根肋骨独立 Z 形成立体笼感
+const N_RIBS_PER_SIDE = 9;
+const N_RIB_PARTICLES = 400;
 const N_RIB_TOTAL = N_RIBS_PER_SIDE * 2 * N_RIB_PARTICLES;
 
 const ribGeo = new THREE.BufferGeometry();
-const rbPos       = new Float32Array(N_RIB_TOTAL * 3);  // 占位，shader 重计算
-const rbRibIdx    = new Float32Array(N_RIB_TOTAL);      // 0~11 第几根肋骨
-const rbSide      = new Float32Array(N_RIB_TOTAL);      // -1=左, +1=右
-const rbPathT     = new Float32Array(N_RIB_TOTAL);      // 0~1 沿肋骨路径
-const rbPerpJit   = new Float32Array(N_RIB_TOTAL);      // -1~+1 垂直抖动（厚度）
-const rbZJit      = new Float32Array(N_RIB_TOTAL);      // -1~+1 Z 抖动
-const rbColorVar  = new Float32Array(N_RIB_TOTAL);      // 0~1 色阶变化
+const rbPos       = new Float32Array(N_RIB_TOTAL * 3);
+const rbRibIdx    = new Float32Array(N_RIB_TOTAL);
+const rbSide      = new Float32Array(N_RIB_TOTAL);
+const rbPathT     = new Float32Array(N_RIB_TOTAL);
+const rbPerpJit   = new Float32Array(N_RIB_TOTAL);
+const rbZJit      = new Float32Array(N_RIB_TOTAL);
+const rbColorVar  = new Float32Array(N_RIB_TOTAL);
 
-// 12 根肋骨在胸椎的 t 参数（curveCurved 上）：t 0.06~0.50 覆盖 T1-T12
-const ribTs   = new Array(N_RIBS_PER_SIDE);
-const ribZs   = new Array(N_RIBS_PER_SIDE * 2);  // 每根肋骨独立 Z（左/右各算一根）
+// 9 根肋骨在胸椎的 t 参数：t 0.05~0.50 覆盖 T1-T12，留椎骨间隙
+const ribTs = new Array(N_RIBS_PER_SIDE);
+const ribZs = new Array(N_RIBS_PER_SIDE * 2);  // 左 0~8 + 右 9~17
 for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
-  ribTs[i] = 0.06 + (i / (N_RIBS_PER_SIDE - 1)) * 0.46;
+  ribTs[i] = 0.05 + (i / (N_RIBS_PER_SIDE - 1)) * 0.46;
 }
-// 每根肋骨独立 Z（-0.5 ~ +0.5），形成笼状立体感
 for (let i = 0; i < N_RIBS_PER_SIDE * 2; i++) {
-  ribZs[i] = (Math.random() - 0.5) * 0.95;
+  ribZs[i] = (Math.random() - 0.5) * 1.10;
 }
 
-// 写入粒子属性
 let _rIdx = 0;
 for (let side = -1; side <= 1; side += 2) {
   for (let r = 0; r < N_RIBS_PER_SIDE; r++) {
-    const ribZSlot = (side === -1 ? r : N_RIBS_PER_SIDE + r);
     for (let p = 0; p < N_RIB_PARTICLES; p++) {
       rbRibIdx[_rIdx]   = r;
       rbSide[_rIdx]     = side;
-      rbPathT[_rIdx]    = p / (N_RIB_PARTICLES - 1);
+      // 粒子分布偏向脊柱端（u² 分布让 0 附近更密）
+      const u = Math.random();
+      rbPathT[_rIdx]    = u * u;
       rbPerpJit[_rIdx]  = (Math.random() - 0.5) * 2.0;
       rbZJit[_rIdx]     = (Math.random() - 0.5) * 2.0;
       rbColorVar[_rIdx] = Math.random();
@@ -770,8 +772,8 @@ ribGeo.setAttribute('aPerpJit',  new THREE.BufferAttribute(rbPerpJit, 1));
 ribGeo.setAttribute('aZJit',     new THREE.BufferAttribute(rbZJit, 1));
 ribGeo.setAttribute('aColorVar', new THREE.BufferAttribute(rbColorVar, 1));
 
-// 把 12 根肋骨的椎体位置和 Z 值传给 shader（uniform 数组）
-const ribVertebraXY = new Float32Array(N_RIBS_PER_SIDE * 2);  // x,y for each rib
+// 椎体 XY 锚点（每根肋骨从这个点出发）
+const ribVertebraXY = new Float32Array(N_RIBS_PER_SIDE * 2);
 for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
   const pt = curveCurved.getPoint(ribTs[i]);
   ribVertebraXY[i * 2]     = pt.x;
@@ -786,46 +788,55 @@ const ribMat = new THREE.ShaderMaterial({
     attribute float aPerpJit;
     attribute float aZJit;
     attribute float aColorVar;
-    uniform vec2  uRibVertebra[${N_RIBS_PER_SIDE}];   // 椎体 XY 锚点
-    uniform float uRibZ[${N_RIBS_PER_SIDE * 2}];      // 每根肋骨独立 Z（左 0~11, 右 12~23）
+    uniform vec2  uRibVertebra[${N_RIBS_PER_SIDE}];
+    uniform float uRibZ[${N_RIBS_PER_SIDE * 2}];
     uniform float uActive;
     varying float vAlpha;
     varying float vZ;
     varying float vColorVar;
+    varying float vPathT;
     void main() {
       int idx = int(aRibIdx);
       vec2 vert = uRibVertebra[idx];
-      // 不对称的横向延展：右肋宽，左肋窄
-      float lateral = (aSide > 0.0) ? (1.10 + aRibIdx * 0.018) : (0.55 + aRibIdx * 0.010);
-      // 左肋还有"垂直压缩"感（垂直间距 ×0.85）
-      float vertCompress = (aSide < 0.0) ? 0.92 : 1.0;
-      float vertY = vert.y * vertCompress;
 
-      // Bezier 弧路径（2D）：起点椎体 → 中点上抬 → 终点外延略上
-      vec2 start = vec2(vert.x, vertY);
-      vec2 endPt = vec2(vert.x + lateral * aSide, vertY + 0.04 - aRibIdx * 0.005);
-      vec2 ctrl  = vec2(vert.x + lateral * 0.5 * aSide, vertY + 0.10 + aRibIdx * 0.003);
+      // 不对称横向延展（侧弯关键）：
+      //   右侧脊柱凸 → 肋骨被推得更外（lateral 1.20~1.55）
+      //   左侧脊柱凹 → 肋骨更挤更短（lateral 0.85~1.05）
+      float lateral = (aSide > 0.0)
+        ? (1.20 + aRibIdx * 0.040)
+        : (0.85 + aRibIdx * 0.025);
+
+      // 弧形路径（像 ( 和 )）：
+      //   起点 椎骨水平点
+      //   控制点 上抬 + 中段外延（产生上凸的弧）
+      //   终点 外延末端 + 略向下（包胸感）
+      vec2 start = vec2(vert.x, vert.y);
+      // 凹侧 (left) 弧度更陡：控制点上抬更多 + 末端下沉更多
+      float archUp     = (aSide > 0.0) ? 0.18 : 0.22;
+      float archDown   = (aSide > 0.0) ? 0.20 : 0.26;
+      vec2 ctrl  = vec2(vert.x + lateral * 0.55 * aSide, vert.y + archUp);
+      vec2 endPt = vec2(vert.x + lateral * aSide,        vert.y - archDown);
       vec2 ab = mix(start, ctrl, aPathT);
       vec2 bc = mix(ctrl, endPt, aPathT);
       vec2 pos2D = mix(ab, bc, aPathT);
 
-      // 路径切线（用于垂直方向 jitter）
+      // 路径切线（法向方向上加厚度抖动）
       vec2 da = ctrl - start;
       vec2 db = endPt - ctrl;
       vec2 tangent = normalize(mix(da, db, aPathT));
       vec2 perp = vec2(-tangent.y, tangent.x);
-
-      // 厚度（垂直 jitter）
-      pos2D += perp * aPerpJit * 0.045;
+      // 弧近脊柱端粒子更紧凑，远端散开（perp jitter 随 aPathT 增大）
+      float perpAmp = 0.020 + aPathT * 0.045;
+      pos2D += perp * aPerpJit * perpAmp;
 
       // Z 深度：每根肋骨独立 Z + 粒子内微抖
       int zIdx = (aSide < 0.0) ? idx : (idx + ${N_RIBS_PER_SIDE});
       float ribZ = uRibZ[zIdx];
-      float z = ribZ + aZJit * 0.05;
+      float z = ribZ + aZJit * 0.06;
       vZ = z;
       vColorVar = aColorVar;
+      vPathT = aPathT;
 
-      // 飞行 / 显示控制：仅 uActive > 0 时显示
       vAlpha = uActive;
 
       vec4 mv = modelViewMatrix * vec4(pos2D, z, 1.0);
@@ -834,22 +845,23 @@ const ribMat = new THREE.ShaderMaterial({
     }
   `,
   fragmentShader: /* glsl */`
-    uniform vec3 uColorRight;
-    uniform vec3 uColorLeft;
     varying float vAlpha;
     varying float vZ;
     varying float vColorVar;
+    varying float vPathT;
     void main() {
       float d = length(gl_PointCoord - vec2(0.5));
       if (d > 0.5) discard;
-      // Z>0 在前（亮 + 偏暖），Z<0 在后（暗 + 偏冷）
-      float zNorm = clamp(vZ * 2.0 + 0.5, 0.0, 1.0);  // 0(后) ~ 1(前)
-      vec3 baseCol = mix(vec3(0.40, 0.34, 0.55), vec3(0.85, 0.78, 0.62), zNorm);
-      // 微色阶变化（per particle 不同明度）
+      // Z>0 前景：亮 + 偏暖；Z<0 后景：暗 + 偏冷紫
+      float zNorm = clamp(vZ * 2.0 + 0.5, 0.0, 1.0);
+      vec3 baseCol = mix(vec3(0.38, 0.32, 0.52), vec3(0.88, 0.80, 0.62), zNorm);
       baseCol *= 0.85 + vColorVar * 0.30;
+      // 沿路径 alpha 衰减：脊柱端亮，外延端淡（不硬切）
+      float pathFade = pow(1.0 - vPathT, 1.4);
       float core = exp(-d * d * 24.0);
-      float halo = exp(-d * d * 10.0) * 0.20;
-      gl_FragColor = vec4(baseCol, (core + halo) * vAlpha * (0.45 + zNorm * 0.55));
+      float halo = exp(-d * d * 10.0) * 0.22;
+      float zAlphaBoost = 0.40 + zNorm * 0.60;
+      gl_FragColor = vec4(baseCol, (core + halo) * vAlpha * pathFade * zAlphaBoost);
     }
   `,
   uniforms: {
@@ -857,8 +869,6 @@ const ribMat = new THREE.ShaderMaterial({
     uRibVertebra:  { value: Array.from({length: N_RIBS_PER_SIDE}, (_, i) =>
                        new THREE.Vector2(ribVertebraXY[i*2], ribVertebraXY[i*2+1])) },
     uRibZ:         { value: ribZs.slice() },
-    uColorRight:   { value: new THREE.Color(0xc8a878) },
-    uColorLeft:    { value: new THREE.Color(0x8a90c0) },
   },
   transparent: true,
   blending: THREE.AdditiveBlending,
