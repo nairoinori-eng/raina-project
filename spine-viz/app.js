@@ -162,7 +162,7 @@ function remapDwellAsym(t, holdA, holdB) {
 // ============================================================
 
 const canvas = document.getElementById('spine-canvas');
-const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
 renderer.setPixelRatio(3.0);  // 锁定高清模式（uAlphaBoost 在 composer 初始化后一并设置）
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -2822,9 +2822,9 @@ composer.addPass(new RenderPass(scene, camera));
   ambMat    .uniforms.uAlphaBoost.value = lockedBoost;
 }
 
-// Bloom 用 0.75x 分辨率渲染（兼顾性能与清晰度）
+// Bloom 用 0.35x 分辨率渲染（模糊不需要高分辨率，pixel ratio 4.0 下省大量填充率）
 const bloomPass = new UnrealBloomPass(
-  new THREE.Vector2(Math.floor(window.innerWidth * 0.75), Math.floor(window.innerHeight * 0.75)),
+  new THREE.Vector2(Math.floor(window.innerWidth * 0.35), Math.floor(window.innerHeight * 0.35)),
   0.35,  // strength
   0.3,   // radius
   0.35   // threshold
@@ -3983,7 +3983,7 @@ window.addEventListener('resize', () => {
   camera.updateProjectionMatrix();
   renderer.setSize(w, h);
   composer.setSize(w, h);
-  bloomPass.resolution.set(Math.floor(w / 2), Math.floor(h / 2));
+  bloomPass.resolution.set(Math.floor(w * 0.35), Math.floor(h * 0.35));
 });
 
 animate();
