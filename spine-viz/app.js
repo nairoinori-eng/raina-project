@@ -3274,8 +3274,8 @@ class BreathAudio {
   constructor() {
     this.inhale = new Audio('audio/inhale.mp3');
     this.exhale = new Audio('audio/exhale.mp3');
-    this.inhale.volume = 0.45;
-    this.exhale.volume = 0.45;
+    this.inhale.volume = 0.85;
+    this.exhale.volume = 0.85;
     this.inhale.preload = 'auto';
     this.exhale.preload = 'auto';
     this.lastInhaleCycle = -1;
