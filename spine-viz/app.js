@@ -725,7 +725,7 @@ spineGroup.add(spinePoints);
 // 全部在同一深度（Z≈0），不做前后笼感（视觉清晰，统一是骨头颜色）
 // 每根 600 粒子，弧形像 ( 和 )，长度足够看出"骨头形"
 // 不对称：右侧凸侧肋骨被推得更外更舒展，左侧凹侧更短更陡
-const N_RIBS_PER_SIDE = 7;
+const N_RIBS_PER_SIDE = 6;
 const N_RIB_PARTICLES = 600;
 const N_RIB_TOTAL = N_RIBS_PER_SIDE * 2 * N_RIB_PARTICLES;
 
@@ -738,11 +738,11 @@ const rbPerpJit   = new Float32Array(N_RIB_TOTAL);
 const rbZJit      = new Float32Array(N_RIB_TOTAL);
 const rbColorVar  = new Float32Array(N_RIB_TOTAL);
 
-// 7 根肋骨锚定到椎丸中心（vi = 0~6 = C7, T1, T3, T5, T7, T9, T11，全在右凸侧）
-// 不能用 vi 7 (L1)，L1 是左凸侧，跟前 6 根右凸位置不连续会"跳脱"
+// 6 根肋骨锚定到 6 个胸椎椎丸（vi 1~6 = T1, T3, T5, T7, T9, T11）
+// 解剖严格：肋骨只长在胸椎，不长在颈椎(C7)和腰椎(L1)
 const ribTs = new Array(N_RIBS_PER_SIDE);
 for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
-  ribTs[i] = i / 12;
+  ribTs[i] = (i + 1) / 12;
 }
 
 let _rIdx = 0;
@@ -775,7 +775,7 @@ ribGeo.setAttribute('aColorVar', new THREE.BufferAttribute(rbColorVar, 1));
 const ribVertebraXY = new Float32Array(N_RIBS_PER_SIDE * 2);
 const ribVertOuter  = new Float32Array(N_RIBS_PER_SIDE);
 for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
-  const vi = i;  // 椎丸 0~6（C7, T1, T3, T5, T7, T9, T11）
+  const vi = i + 1;  // 椎丸 1~6（T1, T3, T5, T7, T9, T11 — 严格胸椎）
   const pt = SPINE_CURVED[vi];
   ribVertebraXY[i * 2]     = pt.x;
   ribVertebraXY[i * 2 + 1] = pt.y;
@@ -815,7 +815,7 @@ const ribMat = new THREE.ShaderMaterial({
       //   凸侧：最上肋骨高弧水平延伸，最下扁平陡斜下，扇形巨大
       //   凹侧：所有肋骨倾角几乎相同，平行聚拢
       vec2 start = vertEdge;
-      float idxNorm = aRibIdx / 6.0;  // 0=最上, 1=最下
+      float idxNorm = aRibIdx / 5.0;  // 0=最上, 1=最下（6 根肋骨）
       float archUp = (aSide > 0.0)
         ? mix(0.40, 0.05, idxNorm)   // 凸侧跨度 0.35（最上高弧，最下扁平）
         : mix(0.28, 0.24, idxNorm);  // 凹侧跨度 0.04（几乎相同）
