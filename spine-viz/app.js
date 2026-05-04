@@ -738,10 +738,11 @@ const rbPerpJit   = new Float32Array(N_RIB_TOTAL);
 const rbZJit      = new Float32Array(N_RIB_TOTAL);
 const rbColorVar  = new Float32Array(N_RIB_TOTAL);
 
-// 7 根肋骨锚定到椎丸中心（vi = 1~7，13 个椎丸分布在 t = vi/12）
+// 7 根肋骨锚定到椎丸中心（vi = 0~6 = C7, T1, T3, T5, T7, T9, T11，全在右凸侧）
+// 不能用 vi 7 (L1)，L1 是左凸侧，跟前 6 根右凸位置不连续会"跳脱"
 const ribTs = new Array(N_RIBS_PER_SIDE);
 for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
-  ribTs[i] = (i + 1) / 12;  // 椎丸 1~7 中心，对应胸椎主要段（避开颈椎顶端）
+  ribTs[i] = i / 12;
 }
 
 let _rIdx = 0;
@@ -774,11 +775,10 @@ ribGeo.setAttribute('aColorVar', new THREE.BufferAttribute(rbColorVar, 1));
 const ribVertebraXY = new Float32Array(N_RIBS_PER_SIDE * 2);
 const ribVertOuter  = new Float32Array(N_RIBS_PER_SIDE);
 for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
-  const vi = i + 1;  // 椎丸 1~7（T1, T3, T5, T7, T9, T11, L1 — 胸椎主体段）
+  const vi = i;  // 椎丸 0~6（C7, T1, T3, T5, T7, T9, T11）
   const pt = SPINE_CURVED[vi];
   ribVertebraXY[i * 2]     = pt.x;
   ribVertebraXY[i * 2 + 1] = pt.y;
-  // ×1.05 微微外溢（让肋骨起点贴在椎体最外缘）
   ribVertOuter[i] = VERT_OUTER_BASE * vertSizeAt(vi) * 1.05;
 }
 
@@ -811,17 +811,17 @@ const ribMat = new THREE.ShaderMaterial({
       // 起点：椎体最外缘（用 vertOuter，不是硬编码常量）
       vec2 vertEdge = vec2(vert.x + aSide * vOuter, vert.y);
 
-      // 弧形路径（贝塞尔）+ 扇形展开：7 根肋骨在远端 Y 跨度
-      //   凸侧（侧弯撑开）：最上肋骨水平延伸，最下斜下沉，扇形大开
-      //   凹侧（侧弯压缩）：所有肋骨倾角接近，远端聚拢
+      // 弧形路径（贝塞尔）+ 扇形展开：7 根肋骨在远端 Y 跨度（凸大凹紧 8:1）
+      //   凸侧：最上肋骨高弧水平延伸，最下扁平陡斜下，扇形巨大
+      //   凹侧：所有肋骨倾角几乎相同，平行聚拢
       vec2 start = vertEdge;
       float idxNorm = aRibIdx / 6.0;  // 0=最上, 1=最下
       float archUp = (aSide > 0.0)
-        ? mix(0.30, 0.10, idxNorm)   // 凸侧最上抬 0.30，最下抬 0.10（跨度 0.20）
-        : mix(0.28, 0.22, idxNorm);  // 凹侧 archUp 差异小
+        ? mix(0.40, 0.05, idxNorm)   // 凸侧跨度 0.35（最上高弧，最下扁平）
+        : mix(0.28, 0.24, idxNorm);  // 凹侧跨度 0.04（几乎相同）
       float archDown = (aSide > 0.0)
-        ? (0.10 + idxNorm * 0.60)    // 凸侧 0.10~0.70（跨度 0.60，扇形大开）
-        : (0.22 + idxNorm * 0.18);   // 凹侧 0.22~0.40（跨度 0.18，聚拢）
+        ? (0.05 + idxNorm * 0.80)    // 凸侧 0.05~0.85（跨度 0.80）
+        : (0.25 + idxNorm * 0.10);   // 凹侧 0.25~0.35（跨度 0.10）
       vec2 ctrl  = vec2(vertEdge.x + lateral * 0.55 * aSide, vert.y + archUp);
       vec2 endPt = vec2(vertEdge.x + lateral * aSide,        vert.y - archDown);
       vec2 ab = mix(start, ctrl, aPathT);
