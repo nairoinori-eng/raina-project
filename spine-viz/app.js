@@ -3266,90 +3266,38 @@ function updateCamera(t) {
 }
 
 // ============================================================
-// 呼吸音效合成（Web Audio 实时合成，叠加在现有 BGM 之上）
+// 呼吸音效（loop 播放 audio/breath-loop.MP3，每 8s 一周期：7s 播放 + 1s 静音）
 // ============================================================
 
 class BreathAudio {
   constructor() {
-    this.ctx = null;
-    this.master = null;
-    this.lastState = null;
+    this.audio = new Audio('audio/breath-loop.MP3');
+    this.audio.volume = 0.45;       // 跟 BGM 平衡
+    this.audio.preload = 'auto';
+    this.lastCycleIdx = -1;
   }
 
-  ensureCtx() {
-    if (this.ctx) return;
-    const Ctx = window.AudioContext || window.webkitAudioContext;
-    this.ctx = new Ctx();
-    this.master = this.ctx.createGain();
-    this.master.gain.value = 0.0;  // 静音（等用户提供呼吸音文件后改成 loop 模式）
-    this.master.connect(this.ctx.destination);
-    if (this.ctx.state === 'suspended') this.ctx.resume();
-  }
-
-  createNoise(duration) {
-    const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * duration, this.ctx.sampleRate);
-    const data = buffer.getChannelData(0);
-    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
-    const src = this.ctx.createBufferSource();
-    src.buffer = buffer;
-    return src;
-  }
-
-  playInhale() {
-    this.ensureCtx();
-    const now = this.ctx.currentTime;
-    const noise = this.createNoise(2.5);
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(280, now);
-    filter.frequency.linearRampToValueAtTime(1500, now + 1.6);  // 频率上升 = 吸气感
-    filter.Q.value = 1.4;
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.55, now + 0.5);
-    gain.gain.linearRampToValueAtTime(0.45, now + 1.5);
-    gain.gain.linearRampToValueAtTime(0.0, now + 2.2);
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.master);
-    noise.start(now);
-    noise.stop(now + 2.3);
-  }
-
-  playExhale() {
-    this.ensureCtx();
-    const now = this.ctx.currentTime;
-    const noise = this.createNoise(2.5);
-    const filter = this.ctx.createBiquadFilter();
-    filter.type = 'bandpass';
-    filter.frequency.setValueAtTime(1100, now);
-    filter.frequency.linearRampToValueAtTime(380, now + 1.7);   // 频率下降 = 呼气感
-    filter.Q.value = 1.2;
-    const gain = this.ctx.createGain();
-    gain.gain.setValueAtTime(0, now);
-    gain.gain.linearRampToValueAtTime(0.65, now + 0.4);
-    gain.gain.linearRampToValueAtTime(0.45, now + 1.4);
-    gain.gain.linearRampToValueAtTime(0.0, now + 2.2);
-    noise.connect(filter);
-    filter.connect(gain);
-    gain.connect(this.master);
-    noise.start(now);
-    noise.stop(now + 2.3);
+  play() {
+    try {
+      this.audio.currentTime = 0;
+      const p = this.audio.play();
+      if (p) p.catch(e => console.warn('[breath] play failed:', e.message));
+    } catch (e) {
+      console.warn('[breath] play error:', e.message);
+    }
   }
 
   update(t, active) {
-    if (!active) { this.lastState = null; return; }
-    const phase = (t % 8) / 8;
-    let state;
-    if (phase < 0.25)      state = 'inhale';
-    else if (phase < 0.50) state = 'hold-in';
-    else if (phase < 0.75) state = 'exhale';
-    else                   state = 'hold-out';
-
-    if (state !== this.lastState) {
-      if (state === 'inhale')      this.playInhale();
-      else if (state === 'exhale') this.playExhale();
-      this.lastState = state;
+    if (!active) {
+      this.lastCycleIdx = -1;
+      return;
+    }
+    // 每 8s 触发一次播放（音频自然 7s 后结束 + 1s 静音 = 8s 循环）
+    // 在 t = 0, 8, 16, 24... 这些边界触发，跟 breatheCurve(t) 同步
+    const cycleIdx = Math.floor(t / 8);
+    if (cycleIdx !== this.lastCycleIdx) {
+      this.play();
+      this.lastCycleIdx = cycleIdx;
     }
   }
 }
