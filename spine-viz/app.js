@@ -3238,11 +3238,11 @@ function updateCamera(t) {
     breathStrength = Math.min(1, (t - experienceStartTime) / 2);
   }
   const br = breatheCurve(t);
-  const breathR = br * breathStrength * 0.5;  // 0.22 → 0.5 推拉更明显（吸气推近 0.5 单位）
+  const breathR = br * breathStrength * 0.3;  // 推拉幅度（保证脊柱不溢出屏幕）
 
-  // 3) 维度 1：线性平移（GUIDE 跳过，IDLE/EXPERIENCE 才漂移）
+  // 3) 维度 1：线性平移（仅 IDLE 漂移，GUIDE/EXPERIENCE 镜头静止）
   let offX = 0, offY = 0, offZ = 0;
-  if (currentMode !== 'GUIDE') {
+  if (currentMode === 'IDLE') {
     const offset = getOrbitOffset(t);
     offX = offset.offsetX;
     offY = offset.offsetY;
@@ -3281,7 +3281,7 @@ class BreathAudio {
     const Ctx = window.AudioContext || window.webkitAudioContext;
     this.ctx = new Ctx();
     this.master = this.ctx.createGain();
-    this.master.gain.value = 0.45;  // 跟 BGM 平衡
+    this.master.gain.value = 0.0;  // 静音（等用户提供呼吸音文件后改成 loop 模式）
     this.master.connect(this.ctx.destination);
     if (this.ctx.state === 'suspended') this.ctx.resume();
   }
