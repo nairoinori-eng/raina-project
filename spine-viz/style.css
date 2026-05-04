@@ -332,6 +332,32 @@ body {
   letter-spacing: 0.05em;
 }
 
+/* ── EXPERIENCE 呼吸提示文字（位置跟 #intro-text 一致，独立显隐） ── */
+#breath-overlay {
+  position: fixed;
+  top: 35%;
+  left: 7%;
+  width: 38vw;
+  max-width: 600px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 1s ease;
+  z-index: 20;
+}
+#breath-overlay.active {
+  opacity: 0.85;
+}
+#breath-label {
+  font-size: clamp(1.0rem, 1.6vw, 1.4rem);
+  font-weight: 300;
+  letter-spacing: 0.5em;
+  text-indent: 0.5em;
+  color: rgba(220, 215, 245, 0.95);
+  text-shadow: 0 0 20px rgba(120, 80, 200, 0.45), 0 0 8px rgba(40, 20, 80, 0.6);
+  margin: 0;
+  transition: opacity 300ms ease;
+}
+
 /* ── 人体剪影 ── */
 #intro-body {
   position: fixed; top: 50%; left: 50%;
