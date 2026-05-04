@@ -355,7 +355,8 @@ body {
   color: rgba(220, 215, 245, 0.95);
   text-shadow: 0 0 20px rgba(120, 80, 200, 0.45), 0 0 8px rgba(40, 20, 80, 0.6);
   margin: 0;
-  transition: opacity 300ms ease;
+  opacity: 1;
+  transition: opacity 350ms ease;
 }
 
 /* ── 人体剪影 ── */

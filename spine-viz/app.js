@@ -3083,7 +3083,7 @@ const breathRingMat = new THREE.ShaderMaterial({
   uniforms: {
     uScale:   { value: 1.0 },
     uColor:   { value: new THREE.Color(0xb89dd8) },
-    uOpacity: { value: 0.25 },
+    uOpacity: { value: 0.5 },
   },
   vertexShader: `
     attribute float aRingT;
@@ -3333,6 +3333,7 @@ function updateCamera(t) {
 const breathOverlayEl = document.getElementById('breath-overlay');
 const breathLabelEl   = document.getElementById('breath-label');
 let lastBreathLabel = '';
+let breathLabelFading = false;
 
 function updateBreathOverlay(t) {
   const isExp = currentMode === 'EXPERIENCE';
@@ -3356,17 +3357,21 @@ function updateBreathOverlay(t) {
   // 圆环颜色跟 smoothBlend 联动（DARK 紫 ↔ GOLD 金）
   breathRingMat.uniforms.uColor.value.lerpColors(COLOR_DARK, COLOR_GOLD, smoothBlend);
 
-  // 文字：阶段名 + 节拍计数（每秒切换：吸气 1 → 吸气 2 → 屏息 1 → 屏息 2 → ...）
+  // 文字：每 2 秒切一次阶段名（吸气 → 屏息 → 呼气 → 放松），切换时 fade out → 换字 → fade in
   const phaseSec = t % 8;
-  let phaseName, phaseStart;
-  if (phaseSec < 2)      { phaseName = '吸气'; phaseStart = 0; }
-  else if (phaseSec < 4) { phaseName = '屏息'; phaseStart = 2; }
-  else if (phaseSec < 6) { phaseName = '呼气'; phaseStart = 4; }
-  else                   { phaseName = '放松'; phaseStart = 6; }
-  const count = Math.floor(phaseSec - phaseStart) + 1;  // 1 或 2
-  const label = `${phaseName} ${count}`;
-  if (label !== lastBreathLabel) {
-    breathLabelEl.textContent = label;
+  let label;
+  if (phaseSec < 2)      label = '吸气';
+  else if (phaseSec < 4) label = '屏息';
+  else if (phaseSec < 6) label = '呼气';
+  else                   label = '放松';
+  if (label !== lastBreathLabel && !breathLabelFading) {
+    breathLabelFading = true;
+    breathLabelEl.style.opacity = '0';
+    setTimeout(() => {
+      breathLabelEl.textContent = label;
+      breathLabelEl.style.opacity = '1';
+      breathLabelFading = false;
+    }, 350);
     lastBreathLabel = label;
   }
 }
