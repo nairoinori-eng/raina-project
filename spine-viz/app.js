@@ -165,7 +165,9 @@ const canvas = document.getElementById('spine-canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
 renderer.setPixelRatio(3.0);  // 锁定高清模式（uAlphaBoost 在 composer 初始化后一并设置）
 renderer.setSize(window.innerWidth, window.innerHeight);
-// 不用色调映射（ACES会把暗色压太狠），用shader clamp防过曝即可
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.0;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x05050d);
@@ -2820,12 +2822,12 @@ composer.addPass(new RenderPass(scene, camera));
   ambMat    .uniforms.uAlphaBoost.value = lockedBoost;
 }
 
-// Bloom 用半分辨率渲染（性能关键优化）
+// Bloom 用 0.75x 分辨率渲染（兼顾性能与清晰度）
 const bloomPass = new UnrealBloomPass(
-  new THREE.Vector2(Math.floor(window.innerWidth / 2), Math.floor(window.innerHeight / 2)),
-  0.15,  // strength
-  0.15,  // radius
-  0.45   // threshold
+  new THREE.Vector2(Math.floor(window.innerWidth * 0.75), Math.floor(window.innerHeight * 0.75)),
+  0.35,  // strength
+  0.3,   // radius
+  0.35   // threshold
 );
 composer.addPass(bloomPass);
 
@@ -3681,7 +3683,7 @@ pixelRatioSlider.addEventListener('input', () => {
 // 边缘物理泛光（bloom strength 0.0~2.0，覆盖animate里的breath调制）
 const bloomSlider = document.getElementById('bloom-slider');
 const bloomVal = document.getElementById('bloom-val');
-let userBloomStrength = 0.12;
+let userBloomStrength = 0.32;
 bloomSlider.addEventListener('input', () => {
   userBloomStrength = bloomSlider.value / 100;
   bloomVal.textContent = userBloomStrength.toFixed(2);
