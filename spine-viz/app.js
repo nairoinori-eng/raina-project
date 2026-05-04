@@ -738,10 +738,10 @@ const rbPerpJit   = new Float32Array(N_RIB_TOTAL);
 const rbZJit      = new Float32Array(N_RIB_TOTAL);
 const rbColorVar  = new Float32Array(N_RIB_TOTAL);
 
-// 7 根肋骨在胸椎 t 参数：0.06~0.50 均匀分布（覆盖 T1-T12 主体）
+// 7 根肋骨锚定到椎丸中心（vi = 1~7，13 个椎丸分布在 t = vi/12）
 const ribTs = new Array(N_RIBS_PER_SIDE);
 for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
-  ribTs[i] = 0.06 + (i / (N_RIBS_PER_SIDE - 1)) * 0.44;
+  ribTs[i] = (i + 1) / 12;  // 椎丸 1~7 中心，对应胸椎主要段（避开颈椎顶端）
 }
 
 let _rIdx = 0;
@@ -802,12 +802,12 @@ const ribMat = new THREE.ShaderMaterial({
       vec2 vert = uRibVertebra[idx];
       float vOuter = uVertOuter[idx];
 
-      // 不对称横向延展（侧弯关键，长度足够看出骨头）：
-      //   右侧凸 → 肋骨被推得更外更舒展（lateral 1.70~2.05）
-      //   左侧凹 → 肋骨更挤更短（lateral 1.05~1.30）
+      // 不对称横向延展（侧弯关键，加长版本，更明显的骨骼感）：
+      //   右侧凸 → 肋骨被推得更外更舒展（lateral 2.20~2.55）
+      //   左侧凹 → 肋骨更挤更短（lateral 1.30~1.54）
       float lateral = (aSide > 0.0)
-        ? (1.70 + aRibIdx * 0.060)
-        : (1.05 + aRibIdx * 0.040);
+        ? (2.20 + aRibIdx * 0.060)
+        : (1.30 + aRibIdx * 0.040);
 
       // 起点：椎体最外缘（用 vertOuter，不是硬编码常量）
       vec2 vertEdge = vec2(vert.x + aSide * vOuter, vert.y);
@@ -840,7 +840,7 @@ const ribMat = new THREE.ShaderMaterial({
       vAlpha = uActive;
 
       vec4 mv = modelViewMatrix * vec4(pos2D, z, 1.0);
-      gl_PointSize = 0.040 * (300.0 / -mv.z);
+      gl_PointSize = 0.060 * (300.0 / -mv.z);
       gl_Position = projectionMatrix * mv;
     }
   `,
