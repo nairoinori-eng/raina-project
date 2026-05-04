@@ -3060,8 +3060,8 @@ pacerPoints.position.set(0, 0, 1.5);
 scene.add(pacerPoints);
 
 
-// ─── 呼吸圆环（EXPERIENCE 阶段，脊柱后方大型粒子环带）──
-const N_BREATH_RING = 600;
+// ─── 呼吸圆环（EXPERIENCE 阶段，脊柱后方大型粒子环带，固定不跟脊柱转）──
+const N_BREATH_RING = 1500;
 const brPositions = new Float32Array(N_BREATH_RING * 3);
 const brRingT     = new Float32Array(N_BREATH_RING);  // 径向位置 0=内 1=外
 
@@ -3094,7 +3094,7 @@ const breathRingMat = new THREE.ShaderMaterial({
       vec3 pos = position * uScale;
       vec4 mv = modelViewMatrix * vec4(pos, 1.0);
       gl_Position = projectionMatrix * mv;
-      gl_PointSize = 14.0 * (1.0 - aRingT * 0.5);  // 内大外小
+      gl_PointSize = 5.0 * (1.0 - aRingT * 0.4);  // 内大外小（小粒子高密度更柔和）
     }
   `,
   fragmentShader: `
@@ -3117,7 +3117,7 @@ const breathRingMat = new THREE.ShaderMaterial({
 const breathRing = new THREE.Points(breathRingGeo, breathRingMat);
 breathRing.frustumCulled = false;
 breathRing.visible = false;  // 默认隐藏，updateParticleVisibility 切换
-spineGroup.add(breathRing);
+scene.add(breathRing);  // 加到 scene 而非 spineGroup（不跟脊柱旋转，固定后景）
 
 
 // ============================================================
@@ -3356,12 +3356,15 @@ function updateBreathOverlay(t) {
   // 圆环颜色跟 smoothBlend 联动（DARK 紫 ↔ GOLD 金）
   breathRingMat.uniforms.uColor.value.lerpColors(COLOR_DARK, COLOR_GOLD, smoothBlend);
 
-  // 文字（4 个阶段切换）
-  let label;
-  if (phase < 0.25)      label = '吸气';
-  else if (phase < 0.5)  label = '屏息';
-  else if (phase < 0.75) label = '呼气';
-  else                   label = '放松';
+  // 文字：阶段名 + 节拍计数（每秒切换：吸气 1 → 吸气 2 → 屏息 1 → 屏息 2 → ...）
+  const phaseSec = t % 8;
+  let phaseName, phaseStart;
+  if (phaseSec < 2)      { phaseName = '吸气'; phaseStart = 0; }
+  else if (phaseSec < 4) { phaseName = '屏息'; phaseStart = 2; }
+  else if (phaseSec < 6) { phaseName = '呼气'; phaseStart = 4; }
+  else                   { phaseName = '放松'; phaseStart = 6; }
+  const count = Math.floor(phaseSec - phaseStart) + 1;  // 1 或 2
+  const label = `${phaseName} ${count}`;
   if (label !== lastBreathLabel) {
     breathLabelEl.textContent = label;
     lastBreathLabel = label;
