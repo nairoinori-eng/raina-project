@@ -3266,38 +3266,69 @@ function updateCamera(t) {
 }
 
 // ============================================================
-// 呼吸音效（loop 播放 audio/breath-loop.MP3，每 8s 一周期：7s 播放 + 1s 静音）
+// 呼吸音效（吸气 / 呼气两个独立文件，跟 breatheCurve 8s 周期严格对齐）
+// 时间表：t=0 吸气(3s) → t=3 静音(1s) → t=4 呼气(3s) → t=7 静音(1s) → t=8 下一轮
 // ============================================================
 
 class BreathAudio {
   constructor() {
-    this.audio = new Audio('audio/breath-loop.MP3');
-    this.audio.volume = 0.45;       // 跟 BGM 平衡
-    this.audio.preload = 'auto';
-    this.lastCycleIdx = -1;
+    this.inhale = new Audio('audio/inhale.mp3');
+    this.exhale = new Audio('audio/exhale.mp3');
+    this.inhale.volume = 0.45;
+    this.exhale.volume = 0.45;
+    this.inhale.preload = 'auto';
+    this.exhale.preload = 'auto';
+    this.lastInhaleCycle = -1;
+    this.lastExhaleCycle = -1;
   }
 
-  play() {
+  playInhale() {
     try {
-      this.audio.currentTime = 0;
-      const p = this.audio.play();
-      if (p) p.catch(e => console.warn('[breath] play failed:', e.message));
+      this.inhale.currentTime = 0;
+      const p = this.inhale.play();
+      if (p) p.catch(e => console.warn('[breath] inhale failed:', e.message));
     } catch (e) {
-      console.warn('[breath] play error:', e.message);
+      console.warn('[breath] inhale error:', e.message);
+    }
+  }
+
+  playExhale() {
+    try {
+      this.exhale.currentTime = 0;
+      const p = this.exhale.play();
+      if (p) p.catch(e => console.warn('[breath] exhale failed:', e.message));
+    } catch (e) {
+      console.warn('[breath] exhale error:', e.message);
     }
   }
 
   update(t, active) {
     if (!active) {
-      this.lastCycleIdx = -1;
+      this.lastInhaleCycle = -1;
+      this.lastExhaleCycle = -1;
       return;
     }
-    // 每 8s 触发一次播放（音频自然 7s 后结束 + 1s 静音 = 8s 循环）
-    // 在 t = 0, 8, 16, 24... 这些边界触发，跟 breatheCurve(t) 同步
-    const cycleIdx = Math.floor(t / 8);
-    if (cycleIdx !== this.lastCycleIdx) {
-      this.play();
-      this.lastCycleIdx = cycleIdx;
+
+    const inhaleCycle = Math.floor(t / 8);          // 吸气触发：t=0/8/16/...
+    const exhaleCycle = Math.floor((t - 4) / 8);    // 呼气触发：t=4/12/20/...
+
+    if (this.lastInhaleCycle === -1) {
+      // 第一次激活：根据当前 phase 立即播一个，避免要等到下个边界
+      const phase = t % 8;
+      if (phase < 4) this.playInhale();
+      else           this.playExhale();
+      this.lastInhaleCycle = inhaleCycle;
+      this.lastExhaleCycle = exhaleCycle;
+      return;
+    }
+
+    if (inhaleCycle !== this.lastInhaleCycle) {
+      this.playInhale();
+      this.lastInhaleCycle = inhaleCycle;
+    }
+    if (exhaleCycle !== this.lastExhaleCycle) {
+      this.playExhale();
+      this.lastExhaleCycle = exhaleCycle;
     }
   }
 }
