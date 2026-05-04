@@ -19,9 +19,13 @@
     <!-- 文字内容由 app.js 动态写入 -->
   </div>
 
-  <!-- ②a EXPERIENCE 呼吸提示（吸气/屏息/呼气/放松） -->
+  <!-- ②a EXPERIENCE 呼吸提示（吸气 1 2 / 屏息 1 2 / 呼气 1 2 / 放松 1 2） -->
   <div id="breath-overlay">
-    <p id="breath-label"></p>
+    <p id="breath-label">
+      <span id="breath-phase"></span>
+      <span id="breath-c1">1</span>
+      <span id="breath-c2">2</span>
+    </p>
   </div>
 
   <!-- ③ 调试面板（开发时用，正式展览前用 D 键隐藏或直接删掉这段） -->

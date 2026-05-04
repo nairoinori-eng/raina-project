@@ -332,31 +332,43 @@ body {
   letter-spacing: 0.05em;
 }
 
-/* ── EXPERIENCE 呼吸提示文字（位置跟 #intro-text 一致，独立显隐） ── */
+/* ── EXPERIENCE 呼吸提示（屏幕底部居中：「吸气 1 2」「屏息 1 2」...） ── */
 #breath-overlay {
   position: fixed;
-  top: 35%;
-  left: 7%;
-  width: 38vw;
-  max-width: 600px;
+  bottom: 100px;
+  left: 50%;
+  transform: translateX(-50%);
   pointer-events: none;
   opacity: 0;
   transition: opacity 1s ease;
   z-index: 20;
 }
 #breath-overlay.active {
-  opacity: 0.85;
+  opacity: 0.9;
 }
 #breath-label {
   font-size: clamp(1.0rem, 1.6vw, 1.4rem);
   font-weight: 300;
-  letter-spacing: 0.5em;
-  text-indent: 0.5em;
+  letter-spacing: 0.4em;
   color: rgba(220, 215, 245, 0.95);
   text-shadow: 0 0 20px rgba(120, 80, 200, 0.45), 0 0 8px rgba(40, 20, 80, 0.6);
   margin: 0;
-  opacity: 1;
+  display: flex;
+  gap: 0.6em;
+  align-items: baseline;
+}
+#breath-phase {
   transition: opacity 350ms ease;
+}
+#breath-c1, #breath-c2 {
+  opacity: 0;
+  transition: opacity 400ms ease;
+  font-weight: 200;
+  font-size: 0.9em;
+  color: rgba(200, 195, 230, 0.75);
+}
+#breath-c1.show, #breath-c2.show {
+  opacity: 1;
 }
 
 /* ── 人体剪影 ── */

@@ -3060,66 +3060,6 @@ pacerPoints.position.set(0, 0, 1.5);
 scene.add(pacerPoints);
 
 
-// ─── 呼吸圆环（EXPERIENCE 阶段，脊柱后方大型粒子环带，固定不跟脊柱转）──
-const N_BREATH_RING = 1500;
-const brPositions = new Float32Array(N_BREATH_RING * 3);
-const brRingT     = new Float32Array(N_BREATH_RING);  // 径向位置 0=内 1=外
-
-for (let i = 0; i < N_BREATH_RING; i++) {
-  const angle = Math.random() * Math.PI * 2;
-  const ringT = Math.random();
-  const r = 2.8 + ringT * 1.4;  // 半径 2.8~4.2 的圆环带（带宽 1.4）
-  brPositions[i * 3]     = Math.cos(angle) * r;
-  brPositions[i * 3 + 1] = Math.sin(angle) * r;
-  brPositions[i * 3 + 2] = -2.0;  // 脊柱后方 2 单位
-  brRingT[i] = ringT;
-}
-
-const breathRingGeo = new THREE.BufferGeometry();
-breathRingGeo.setAttribute('position', new THREE.BufferAttribute(brPositions, 3));
-breathRingGeo.setAttribute('aRingT',   new THREE.BufferAttribute(brRingT, 1));
-
-const breathRingMat = new THREE.ShaderMaterial({
-  uniforms: {
-    uScale:   { value: 1.0 },
-    uColor:   { value: new THREE.Color(0xb89dd8) },
-    uOpacity: { value: 0.5 },
-  },
-  vertexShader: `
-    attribute float aRingT;
-    varying float vRingT;
-    uniform float uScale;
-    void main() {
-      vRingT = aRingT;
-      vec3 pos = position * uScale;
-      vec4 mv = modelViewMatrix * vec4(pos, 1.0);
-      gl_Position = projectionMatrix * mv;
-      gl_PointSize = 5.0 * (1.0 - aRingT * 0.4);  // 内大外小（小粒子高密度更柔和）
-    }
-  `,
-  fragmentShader: `
-    varying float vRingT;
-    uniform vec3 uColor;
-    uniform float uOpacity;
-    void main() {
-      float d = distance(gl_PointCoord, vec2(0.5));
-      if (d > 0.5) discard;
-      // 圆形 alpha + 径向衰减（外侧更透明，内侧更亮）
-      float alpha = (1.0 - d * 2.0) * uOpacity * (1.0 - vRingT * 0.6);
-      gl_FragColor = vec4(uColor, alpha);
-    }
-  `,
-  transparent: true,
-  depthWrite:  false,
-  blending:    THREE.AdditiveBlending,
-});
-
-const breathRing = new THREE.Points(breathRingGeo, breathRingMat);
-breathRing.frustumCulled = false;
-breathRing.visible = false;  // 默认隐藏，updateParticleVisibility 切换
-scene.add(breathRing);  // 加到 scene 而非 spineGroup（不跟脊柱旋转，固定后景）
-
-
 // ============================================================
 // 11. 状态 / blend 控制 + 引导动画状态
 // ============================================================
@@ -3276,11 +3216,10 @@ function updateParticleVisibility() {
   const isExp   = currentMode === 'EXPERIENCE';
   const e = guideElapsed;
 
-  // 只 EXPERIENCE 显示（藤蔓/花/花粉/呼吸圆环，blend 高时生长）
+  // 只 EXPERIENCE 显示（藤蔓/花/花粉，blend 高时生长）
   vinePoints.visible   = isExp;
   flowerPoints.visible = isExp;
   pollenPoints.visible = isExp;
-  breathRing.visible   = isExp;
 
   // GUIDE 时间窗口才显示（边界扩 0.5s 留 alpha 淡入淡出 buffer）
   ribPoints.visible   = isGuide && e >= 22.0 && e <= 32.0;
@@ -3331,48 +3270,46 @@ function updateCamera(t) {
 // ============================================================
 
 const breathOverlayEl = document.getElementById('breath-overlay');
-const breathLabelEl   = document.getElementById('breath-label');
-let lastBreathLabel = '';
-let breathLabelFading = false;
+const breathPhaseEl   = document.getElementById('breath-phase');
+const breathC1El      = document.getElementById('breath-c1');
+const breathC2El      = document.getElementById('breath-c2');
+let lastPhaseName = '';
+let phaseFading = false;
 
 function updateBreathOverlay(t) {
   const isExp = currentMode === 'EXPERIENCE';
 
-  // 文字 overlay 整体显隐（fade 1s）
   if (isExp) breathOverlayEl.classList.add('active');
   else       breathOverlayEl.classList.remove('active');
 
   if (!isExp) return;
 
-  const phase = (t % 8) / 8;
-
-  // 圆环缩放：吸气扩张 1.0→1.2，屏息保持 1.2，呼气收缩 1.2→1.0，放松保持 1.0
-  let scale;
-  if (phase < 0.25)      scale = 1.0 + (phase / 0.25) * 0.2;
-  else if (phase < 0.5)  scale = 1.2;
-  else if (phase < 0.75) scale = 1.2 - ((phase - 0.5) / 0.25) * 0.2;
-  else                   scale = 1.0;
-  breathRingMat.uniforms.uScale.value = scale;
-
-  // 圆环颜色跟 smoothBlend 联动（DARK 紫 ↔ GOLD 金）
-  breathRingMat.uniforms.uColor.value.lerpColors(COLOR_DARK, COLOR_GOLD, smoothBlend);
-
-  // 文字：每 2 秒切一次阶段名（吸气 → 屏息 → 呼气 → 放松），切换时 fade out → 换字 → fade in
   const phaseSec = t % 8;
-  let label;
-  if (phaseSec < 2)      label = '吸气';
-  else if (phaseSec < 4) label = '屏息';
-  else if (phaseSec < 6) label = '呼气';
-  else                   label = '放松';
-  if (label !== lastBreathLabel && !breathLabelFading) {
-    breathLabelFading = true;
-    breathLabelEl.style.opacity = '0';
+  let phaseName;
+  if (phaseSec < 2)      phaseName = '吸气';
+  else if (phaseSec < 4) phaseName = '屏息';
+  else if (phaseSec < 6) phaseName = '呼气';
+  else                   phaseName = '放松';
+
+  // 阶段名：每 2 秒切一次，fade out 350ms → 换 → fade in
+  if (phaseName !== lastPhaseName && !phaseFading) {
+    phaseFading = true;
+    breathPhaseEl.style.opacity = '0';
+    breathC1El.classList.remove('show');
+    breathC2El.classList.remove('show');
     setTimeout(() => {
-      breathLabelEl.textContent = label;
-      breathLabelEl.style.opacity = '1';
-      breathLabelFading = false;
+      breathPhaseEl.textContent = phaseName;
+      breathPhaseEl.style.opacity = '1';
+      phaseFading = false;
     }, 350);
-    lastBreathLabel = label;
+    lastPhaseName = phaseName;
+  }
+
+  // 数字 1 / 2：每秒相继 fade in（subSec = 阶段内秒数 0~2）
+  const subSec = phaseSec % 2;
+  if (!phaseFading) {
+    if (subSec >= 0.4) breathC1El.classList.add('show');
+    if (subSec >= 1.4) breathC2El.classList.add('show');
   }
 }
 
