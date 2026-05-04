@@ -163,7 +163,7 @@ function remapDwellAsym(t, holdA, holdB) {
 
 const canvas = document.getElementById('spine-canvas');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
-renderer.setPixelRatio(3.0);  // 锁定高清模式（uAlphaBoost 在 composer 初始化后一并设置）
+renderer.setPixelRatio(4.0);  // 锁定高清模式（uAlphaBoost 在 composer 初始化后一并设置）
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.0;
@@ -2809,12 +2809,12 @@ scene.add(new THREE.Points(ambGeo, ambMat));
 // ============================================================
 
 const composer = new EffectComposer(renderer);
-composer.setPixelRatio(3.0);  // 锁定高清模式
+composer.setPixelRatio(4.0);  // 锁定高清模式
 composer.addPass(new RenderPass(scene, camera));
 
-// 锁定高清模式下的 alpha 补偿：boost = pow(3.0/1.5, 2) = 4.0
+// 锁定高清模式下的 alpha 补偿：boost = pow(4.0/1.5, 2) ≈ 7.11
 {
-  const lockedBoost = Math.pow(3.0 / 1.5, 2.0);
+  const lockedBoost = Math.pow(4.0 / 1.5, 2.0);
   spineMat  .uniforms.uAlphaBoost.value = lockedBoost;
   diffuseMat.uniforms.uAlphaBoost.value = lockedBoost;
   vineMat   .uniforms.uAlphaBoost.value = lockedBoost;
@@ -2831,9 +2831,9 @@ const bloomPass = new UnrealBloomPass(
 );
 composer.addPass(bloomPass);
 
-// 锁定高清模式下的 alpha 补偿：boost = pow(3.0/1.5, 2) = 4.0
+// 锁定高清模式下的 alpha 补偿：boost = pow(4.0/1.5, 2) ≈ 7.11
 {
-  const lockedBoost = Math.pow(3.0 / 1.5, 2.0);
+  const lockedBoost = Math.pow(4.0 / 1.5, 2.0);
   spineMat  .uniforms.uAlphaBoost.value = lockedBoost;
   diffuseMat.uniforms.uAlphaBoost.value = lockedBoost;
   vineMat   .uniforms.uAlphaBoost.value = lockedBoost;
@@ -3664,7 +3664,7 @@ blendSlider.addEventListener('input', () => {
 // 高清粒子精度（pixel ratio 1.0~4.0）
 const pixelRatioSlider = document.getElementById('pixel-ratio-slider');
 const pixelRatioVal = document.getElementById('pixel-ratio-val');
-let userPixelRatio = 3.0;
+let userPixelRatio = 4.0;
 pixelRatioSlider.addEventListener('input', () => {
   userPixelRatio = pixelRatioSlider.value / 10;
   pixelRatioVal.textContent = userPixelRatio.toFixed(1);
