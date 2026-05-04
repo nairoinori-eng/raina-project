@@ -3190,11 +3190,11 @@ if (debugParticles) debugParticles.textContent = totalParticleCount.toLocaleStri
 // ============================================================
 
 function getOrbitOffset(t) {
-  // 维度 1：线性平移（不绕轨道。球面+lookAt(0,0,0) 锁主体居中 = 看不出动；改成平移让主体在画面中相对滑动）
+  // 维度 1：线性平移（IDLE/EXPERIENCE 用，GUIDE 跳过；幅度小，保证脊柱完整可见）
   return {
-    offsetX: Math.sin(t * 2 * Math.PI / 18) * 0.6,   // ±0.6 单位 / 18s（约屏幕宽 12%）
-    offsetY: Math.sin(t * 2 * Math.PI / 30) * 0.35,  // ±0.35 单位 / 30s（约屏幕高 7%）
-    offsetZ: Math.sin(t * 2 * Math.PI / 45) * 0.4,   // ±0.4 单位 / 45s 推拉
+    offsetX: Math.sin(t * 2 * Math.PI / 18) * 0.15,  // ±0.15 单位（约屏幕宽 3%）
+    offsetY: Math.sin(t * 2 * Math.PI / 30) * 0.10,  // ±0.10 单位（约屏幕高 2%）
+    offsetZ: Math.sin(t * 2 * Math.PI / 45) * 0.4,   // ±0.4 单位 / 45s 推拉（前后呼吸 baseline）
   };
 }
 
@@ -3238,16 +3238,22 @@ function updateCamera(t) {
     breathStrength = Math.min(1, (t - experienceStartTime) / 2);
   }
   const br = breatheCurve(t);
-  const breathR = br * breathStrength * 0.22;
+  const breathR = br * breathStrength * 0.5;  // 0.22 → 0.5 推拉更明显（吸气推近 0.5 单位）
 
-  // 3) 维度 1：线性平移（让画面看得见整体滑动）
-  const offset = getOrbitOffset(t);
+  // 3) 维度 1：线性平移（GUIDE 跳过，IDLE/EXPERIENCE 才漂移）
+  let offX = 0, offY = 0, offZ = 0;
+  if (currentMode !== 'GUIDE') {
+    const offset = getOrbitOffset(t);
+    offX = offset.offsetX;
+    offY = offset.offsetY;
+    offZ = offset.offsetZ;
+  }
 
-  // 4) 平移叠加：相机平移 + 视线方向跟随（不锁主体居中，让主体在画面中相对滑动）
-  camera.position.x = offset.offsetX;
-  camera.position.y = offset.offsetY;
-  camera.position.z = baseR + offset.offsetZ - breathR;  // breathR 减去：吸气时 camera 推近
-  camera.lookAt(offset.offsetX, offset.offsetY, 0);
+  // 4) 平移叠加：相机平移 + 视线方向跟随（不锁主体居中）
+  camera.position.x = offX;
+  camera.position.y = offY;
+  camera.position.z = baseR + offZ - breathR;
+  camera.lookAt(offX, offY, 0);
 
   // 5) 维度 3：FOV 耦合（仅 EXPERIENCE 才调 updateProjectionMatrix，IDLE/GUIDE 省开销）
   if (currentMode === 'EXPERIENCE' && breathStrength > 0) {
@@ -3258,6 +3264,97 @@ function updateCamera(t) {
     camera.updateProjectionMatrix();
   }
 }
+
+// ============================================================
+// 呼吸音效合成（Web Audio 实时合成，叠加在现有 BGM 之上）
+// ============================================================
+
+class BreathAudio {
+  constructor() {
+    this.ctx = null;
+    this.master = null;
+    this.lastState = null;
+  }
+
+  ensureCtx() {
+    if (this.ctx) return;
+    const Ctx = window.AudioContext || window.webkitAudioContext;
+    this.ctx = new Ctx();
+    this.master = this.ctx.createGain();
+    this.master.gain.value = 0.45;  // 跟 BGM 平衡
+    this.master.connect(this.ctx.destination);
+    if (this.ctx.state === 'suspended') this.ctx.resume();
+  }
+
+  createNoise(duration) {
+    const buffer = this.ctx.createBuffer(1, this.ctx.sampleRate * duration, this.ctx.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    const src = this.ctx.createBufferSource();
+    src.buffer = buffer;
+    return src;
+  }
+
+  playInhale() {
+    this.ensureCtx();
+    const now = this.ctx.currentTime;
+    const noise = this.createNoise(2.5);
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(280, now);
+    filter.frequency.linearRampToValueAtTime(1500, now + 1.6);  // 频率上升 = 吸气感
+    filter.Q.value = 1.4;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.55, now + 0.5);
+    gain.gain.linearRampToValueAtTime(0.45, now + 1.5);
+    gain.gain.linearRampToValueAtTime(0.0, now + 2.2);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.master);
+    noise.start(now);
+    noise.stop(now + 2.3);
+  }
+
+  playExhale() {
+    this.ensureCtx();
+    const now = this.ctx.currentTime;
+    const noise = this.createNoise(2.5);
+    const filter = this.ctx.createBiquadFilter();
+    filter.type = 'bandpass';
+    filter.frequency.setValueAtTime(1100, now);
+    filter.frequency.linearRampToValueAtTime(380, now + 1.7);   // 频率下降 = 呼气感
+    filter.Q.value = 1.2;
+    const gain = this.ctx.createGain();
+    gain.gain.setValueAtTime(0, now);
+    gain.gain.linearRampToValueAtTime(0.65, now + 0.4);
+    gain.gain.linearRampToValueAtTime(0.45, now + 1.4);
+    gain.gain.linearRampToValueAtTime(0.0, now + 2.2);
+    noise.connect(filter);
+    filter.connect(gain);
+    gain.connect(this.master);
+    noise.start(now);
+    noise.stop(now + 2.3);
+  }
+
+  update(t, active) {
+    if (!active) { this.lastState = null; return; }
+    const phase = (t % 8) / 8;
+    let state;
+    if (phase < 0.25)      state = 'inhale';
+    else if (phase < 0.50) state = 'hold-in';
+    else if (phase < 0.75) state = 'exhale';
+    else                   state = 'hold-out';
+
+    if (state !== this.lastState) {
+      if (state === 'inhale')      this.playInhale();
+      else if (state === 'exhale') this.playExhale();
+      this.lastState = state;
+    }
+  }
+}
+
+const breathAudio = new BreathAudio();
 
 function animate() {
   requestAnimationFrame(animate);
@@ -3289,6 +3386,12 @@ function animate() {
 
   updateParticleVisibility();
   updateCamera(time);
+
+  // 呼吸音效（GUIDE 段 2c 节拍器期间 + EXPERIENCE 全程）
+  let breathAudioActive = false;
+  if (currentMode === 'EXPERIENCE') breathAudioActive = true;
+  else if (currentMode === 'GUIDE' && guideElapsed >= 47.5 && guideElapsed <= 73) breathAudioActive = true;
+  breathAudio.update(time, breathAudioActive);
 
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
   composer.render();
