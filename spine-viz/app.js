@@ -3064,6 +3064,7 @@ scene.add(pacerPoints);
 // ============================================================
 
 let currentMode   = 'IDLE';   // IDLE → GUIDE → EXPERIENCE
+let experienceStartTime = 0;  // EXPERIENCE 进入时刻（用于呼吸耦合渐入）
 let targetBlend   = 0.0;
 let smoothBlend   = 0.0;
 let blendVelocity = 0.0;
@@ -3111,6 +3112,7 @@ function startGuide() {
 
 function enterExperience() {
   currentMode = 'EXPERIENCE';
+  experienceStartTime = time;
   overlays.clearAll();
   // 确保 formation = 1, guideAlpha = 1
   spineMat.uniforms.uFormation.value  = 1.0;
@@ -3187,11 +3189,11 @@ if (debugParticles) debugParticles.textContent = totalParticleCount.toLocaleStri
 // ============================================================
 
 function getOrbitOffset(t) {
-  // 维度 1：基础轨道漂移（极慢，三轴互质频率不重复构图）
+  // 维度 1：基础轨道漂移（明显可见，三轴互质频率不重复构图）
   return {
-    yaw:   Math.sin(t * 2 * Math.PI / 25) * (2.0 * Math.PI / 180),  // ±2° / 25s
-    pitch: Math.sin(t * 2 * Math.PI / 40) * (1.5 * Math.PI / 180),  // ±1.5° / 40s
-    zoom:  Math.sin(t * 2 * Math.PI / 55) * 0.15,                   // ±0.15 / 55s
+    yaw:   Math.sin(t * 2 * Math.PI / 18) * (5.0 * Math.PI / 180),  // ±5° / 18s
+    pitch: Math.sin(t * 2 * Math.PI / 30) * (3.0 * Math.PI / 180),  // ±3° / 30s
+    zoom:  Math.sin(t * 2 * Math.PI / 45) * 0.4,                    // ±0.4 / 45s
   };
 }
 
@@ -3207,16 +3209,35 @@ function getGuideBaseZ(elapsed) {
   return 5.0;
 }
 
+function updateParticleVisibility() {
+  // 性能优化：按阶段切换粒子可见性，省 fragment shader 开销
+  const isGuide = currentMode === 'GUIDE';
+  const isExp   = currentMode === 'EXPERIENCE';
+  const e = guideElapsed;
+
+  // 只 EXPERIENCE 显示（藤蔓/花/花粉，blend 高时生长）
+  vinePoints.visible   = isExp;
+  flowerPoints.visible = isExp;
+  pollenPoints.visible = isExp;
+
+  // GUIDE 时间窗口才显示（边界扩 0.5s 留 alpha 淡入淡出 buffer）
+  ribPoints.visible   = isGuide && e >= 22.0 && e <= 32.0;
+  pacerPoints.visible = isGuide && e >= 46.5 && e <= 74.5;
+  flowPoints.visible  = isGuide && e >= 36.5 && e <= 45.5;
+}
+
 function updateCamera(t) {
   // 1) baseline 距离（按状态）
   let baseR = 5.0;
   if (currentMode === 'GUIDE') baseR = getGuideBaseZ(guideElapsed);
 
-  // 2) 维度 3：呼吸耦合（仅 EXPERIENCE，跟 smoothBlend 缩放）
+  // 2) 维度 3：呼吸耦合（EXPERIENCE 进入即满，前 2 秒渐入避免突兀）
   let breathStrength = 0;
-  if (currentMode === 'EXPERIENCE') breathStrength = smoothBlend;
+  if (currentMode === 'EXPERIENCE') {
+    breathStrength = Math.min(1, (t - experienceStartTime) / 2);
+  }
   const br = breatheCurve(t);
-  const breathR = br * breathStrength * 0.12;
+  const breathR = br * breathStrength * 0.22;
 
   // 3) 维度 1：轨道漂移
   const orbit = getOrbitOffset(t);
@@ -3228,9 +3249,14 @@ function updateCamera(t) {
   camera.position.y = Math.sin(orbit.pitch) * r;
   camera.lookAt(0, 0, 0);
 
-  // 5) 维度 3：FOV 耦合（吸气 FOV 缩小 = 聚焦感）
-  camera.fov = 60 - br * breathStrength * 0.5;
-  camera.updateProjectionMatrix();
+  // 5) 维度 3：FOV 耦合（仅 EXPERIENCE 才调 updateProjectionMatrix，IDLE/GUIDE 省开销）
+  if (currentMode === 'EXPERIENCE' && breathStrength > 0) {
+    camera.fov = 60 - br * breathStrength * 1.2;
+    camera.updateProjectionMatrix();
+  } else if (camera.fov !== 60) {
+    camera.fov = 60;
+    camera.updateProjectionMatrix();
+  }
 }
 
 function animate() {
@@ -3261,6 +3287,7 @@ function animate() {
   }
   ambGeo.attributes.position.needsUpdate = true;
 
+  updateParticleVisibility();
   updateCamera(time);
 
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
