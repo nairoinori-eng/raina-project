@@ -11,9 +11,12 @@
   <!-- ① Three.js 渲染画布（全屏，最底层） -->
   <canvas id="spine-canvas"></canvas>
 
+  <!-- BGM 音频（loop 循环，preload 提前加载，默认暂停） -->
+  <audio id="bgm" src="audio/bgm.mp3" loop preload="auto"></audio>
+
   <!-- ② HTML 叠加层：用来显示引导文字、状态提示等 -->
   <div id="overlay">
-    <!-- 文字内容由 main.js 动态写入 -->
+    <!-- 文字内容由 app.js 动态写入 -->
   </div>
 
   <!-- ③ 调试面板（开发时用，正式展览前用 D 键隐藏或直接删掉这段） -->
@@ -44,8 +47,13 @@
       <label for="blend-slider">拖动模拟呼吸（硬件到货前用这个）：</label>
       <input type="range" id="blend-slider" min="0" max="100" value="0" />
       <p class="debug-hint">← 左边 = 脊柱弯曲（蓝紫）　右边 = 脊柱变直（暖金）</p>
-      <label for="threshold-slider">体验阈值 (<span id="threshold-val">1010</span>)：</label>
-      <input type="range" id="threshold-slider" min="50" max="1200" step="10" value="1010" />
+    </div>
+
+    <div class="debug-section">
+      <label for="guide-progress-slider">引导进度 (<span id="guide-progress-val">0</span>s / 86s)：</label>
+      <input type="range" id="guide-progress-slider" min="0" max="86" value="0" step="0.5" />
+      <label for="guide-speed-slider">引导速度 (<span id="guide-speed-val">3.0</span>x)：</label>
+      <input type="range" id="guide-speed-slider" min="10" max="100" value="30" />
     </div>
 
     <div class="debug-section">
@@ -55,11 +63,13 @@
       <input type="range" id="bloom-slider" min="0" max="200" value="12" />
       <label for="exposure-slider">电影级曝光率 (<span id="exposure-val">1.00</span>)：</label>
       <input type="range" id="exposure-slider" min="20" max="300" value="100" />
+      <label for="bgm-volume-slider">BGM 音量 (<span id="bgm-volume-val">50</span>%)：</label>
+      <input type="range" id="bgm-volume-slider" min="0" max="100" value="50" />
     </div>
 
     <div class="debug-section">
       <button id="btn-start">▶ 按钮：开始体验</button>
-      <button id="btn-skip-guide">⏭ 跳过认知引导</button>
+      <button id="btn-skip">⏩ 跳过引导</button>
       <button id="btn-reset">↺ 按钮：重置</button>
     </div>
 
@@ -68,6 +78,22 @@
 
   <!-- ④ Vignette 暗角（CSS 径向遮罩，边缘渐暗） -->
   <div id="vignette"></div>
+
+  <!-- ⑤ BGM 控制按钮（右下角，扬声器+三角=暂停态，扬声器+声波=播放态） -->
+  <button id="bgm-toggle" type="button" aria-label="播放/暂停背景音乐">
+    <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true">
+      <!-- 扬声器主体 -->
+      <path d="M4 9 H8 L13 5 V19 L8 15 H4 Z" fill="currentColor"/>
+      <!-- 暂停态：小播放三角 -->
+      <path class="bgm-icon-paused" d="M15 9 L19 12 L15 15 Z" fill="currentColor"/>
+      <!-- 播放态：三道声波 -->
+      <g class="bgm-icon-playing" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round">
+        <path class="bgm-wave bgm-wave-1" d="M15 9 Q17 12 15 15"/>
+        <path class="bgm-wave bgm-wave-2" d="M17 7 Q20 12 17 17"/>
+        <path class="bgm-wave bgm-wave-3" d="M19 5 Q22.5 12 19 19"/>
+      </g>
+    </svg>
+  </button>
 
   <!-- Three.js 主程序（Vite 会处理模块导入） -->
   <script type="module" src="/app.js"></script>
