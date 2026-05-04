@@ -3375,11 +3375,11 @@ function updateGuide(t) {
   spineMat.uniforms.uTime.value = t;
   vineMat.uniforms.uTime.value  = t;
 
-  // 剧情：0~5s 凝聚到直立（保持紫色，跟 IDLE 一致），5~8s 同步文案"十五岁那年..."缓慢变弯，8s 起保持弯曲
+  // 剧情：0~7s 凝聚到直立（5s "十五岁那年"独显 2s），7s "我的脊柱..."出现 + 开始变弯，9.5s 弯完赶在"统计说"前
   let guideBlend;
-  if (guideElapsed < 5)       guideBlend = 1.0;                            // 0~5s 直立（凝聚 + 稳定）
-  else if (guideElapsed < 8)  guideBlend = 1.0 - (guideElapsed - 5) / 3;   // 5~8s 直→弯（3 秒，跟文案同步）
-  else                        guideBlend = 0.0;                            // 8s 起保持弯曲
+  if (guideElapsed < 7)        guideBlend = 1.0;                              // 0~7s 直立（凝聚 + "十五岁那年"独显期）
+  else if (guideElapsed < 9.5) guideBlend = 1.0 - (guideElapsed - 7) / 2.5;   // 7~9.5s 直→弯（2.5s，跟"我的脊柱..."同步）
+  else                         guideBlend = 0.0;                              // 9.5s 起保持弯曲
 
   spineMat.uniforms.uBlend.value = guideBlend;
 

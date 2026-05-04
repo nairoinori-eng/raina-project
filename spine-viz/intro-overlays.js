@@ -15,7 +15,8 @@ const GROUP_ENDS = { A: 22.5, A2: 33, B: 47, D: 83 };
 // ── 文字时间表 ──
 const TEXT_SCHEDULE = [
   // ─── 段 1 · 知病 (5-22.5s) - 堆叠 group A ───
-  { text: '十五岁那年，我的脊柱向我宣告了它的偏离。',          start: 5,    group: 'A' },
+  { text: '十五岁那年，',                                  start: 5,    group: 'A' },
+  { text: '我的脊柱向我宣告了它的偏离。',                    start: 7,    group: 'A' },
   { text: '统计说，每一百人中，我们这样的会有两个。',          start: 9.5,  group: 'A' },
   // 数字"标签"锚定到脊柱凸起点 + 科技风指引线（先后出现，留到"陆地"句结束 22.5s 一起淡出）
   { text: '胸椎右凸 <span class="hl-warm">28</span> 度', start: 13.5, end: 22.5, anchor: 'thoracic', side: 'right', leader: true },
