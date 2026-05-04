@@ -3375,18 +3375,34 @@ function updateGuide(t) {
   spineMat.uniforms.uTime.value = t;
   vineMat.uniforms.uTime.value  = t;
 
-  // blend 在引导期间保持 0
-  spineMat.uniforms.uBlend.value = 0.0;
+  // 剧情：0~5s 直立金色（健康完整态），5~9s 同步文案"十五岁那年..."缓慢变弯，9s 起保持蓝紫弯曲
+  let guideBlend;
+  if (guideElapsed < 5)       guideBlend = 1.0;                            // 0~5s 直立金色（凝聚 + 稳定）
+  else if (guideElapsed < 9)  guideBlend = 1.0 - (guideElapsed - 5) / 4;   // 5~9s 直→弯（4 秒，跟文案同步）
+  else                        guideBlend = 0.0;                            // 9s 起保持弯曲
 
-  // 颜色：固定在暗蓝紫（blend=0 的颜色）
-  spineMat.uniforms.uColor.value.copy(COLOR_DARK);
-  spineMat.uniforms.uHighlight.value.copy(HL_DARK);
-  spineMat.uniforms.uAccent1.value.copy(AC1_DARK);
-  spineMat.uniforms.uAccent2.value.copy(AC2_DARK);
-  diffuseMat.uniforms.uColor.value.copy(COLOR_DARK);
-  diffuseMat.uniforms.uHighlight.value.copy(HL_DARK);
-  diffuseMat.uniforms.uAccent1.value.copy(AC1_DARK);
-  diffuseMat.uniforms.uAccent2.value.copy(AC2_DARK);
+  spineMat.uniforms.uBlend.value = guideBlend;
+
+  // 颜色：变化期 lerp（金 ↔ 蓝紫），稳定期直接 copy（省 GC 压力）
+  if (guideElapsed < 9.1) {
+    spineMat.uniforms.uColor.value.copy(getBlendColor(guideBlend));
+    spineMat.uniforms.uHighlight.value.copy(getHighlightColor(guideBlend));
+    spineMat.uniforms.uAccent1.value.copy(getAccent1Color(guideBlend));
+    spineMat.uniforms.uAccent2.value.copy(getAccent2Color(guideBlend));
+    diffuseMat.uniforms.uColor.value.copy(getBlendColor(guideBlend));
+    diffuseMat.uniforms.uHighlight.value.copy(getHighlightColor(guideBlend));
+    diffuseMat.uniforms.uAccent1.value.copy(getAccent1Color(guideBlend));
+    diffuseMat.uniforms.uAccent2.value.copy(getAccent2Color(guideBlend));
+  } else {
+    spineMat.uniforms.uColor.value.copy(COLOR_DARK);
+    spineMat.uniforms.uHighlight.value.copy(HL_DARK);
+    spineMat.uniforms.uAccent1.value.copy(AC1_DARK);
+    spineMat.uniforms.uAccent2.value.copy(AC2_DARK);
+    diffuseMat.uniforms.uColor.value.copy(COLOR_DARK);
+    diffuseMat.uniforms.uHighlight.value.copy(HL_DARK);
+    diffuseMat.uniforms.uAccent1.value.copy(AC1_DARK);
+    diffuseMat.uniforms.uAccent2.value.copy(AC2_DARK);
+  }
 
   // 藤蔓/叶子/弥散流在 GUIDE 期间隐藏（避免脊柱中轴线闪烁）
   vineMat.uniforms.uFormation.value = 0.0;
