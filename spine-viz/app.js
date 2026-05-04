@@ -769,17 +769,16 @@ ribGeo.setAttribute('aPerpJit',  new THREE.BufferAttribute(rbPerpJit, 1));
 ribGeo.setAttribute('aZJit',     new THREE.BufferAttribute(rbZJit, 1));
 ribGeo.setAttribute('aColorVar', new THREE.BufferAttribute(rbColorVar, 1));
 
-// 椎体 XY 锚点 + 每根肋骨对应椎体的外径（动态计算，不硬编码）
+// 椎体 XY 锚点 + 每根肋骨对应椎体的外径
+// 直接从 SPINE_CURVED 数组取椎丸中心（curve.getPoint 的 centripetal 参数化不保证 t=i/12 落在椎丸上）
 const ribVertebraXY = new Float32Array(N_RIBS_PER_SIDE * 2);
-const ribVertOuter  = new Float32Array(N_RIBS_PER_SIDE);  // 椎体最宽处的横向偏移
+const ribVertOuter  = new Float32Array(N_RIBS_PER_SIDE);
 for (let i = 0; i < N_RIBS_PER_SIDE; i++) {
-  const t = ribTs[i];
-  const pt = curveCurved.getPoint(t);
+  const vi = i + 1;  // 椎丸 1~7（T1, T3, T5, T7, T9, T11, L1 — 胸椎主体段）
+  const pt = SPINE_CURVED[vi];
   ribVertebraXY[i * 2]     = pt.x;
   ribVertebraXY[i * 2 + 1] = pt.y;
-  // 椎体外径：t 0~1 映射到 vi 0~12，调用 vertSizeAt 拿真实椎体宽度
-  // ×1.05 微微外溢（让肋骨起点贴在椎体最外缘的发光区，无缝衔接）
-  const vi = t * 12;
+  // ×1.05 微微外溢（让肋骨起点贴在椎体最外缘）
   ribVertOuter[i] = VERT_OUTER_BASE * vertSizeAt(vi) * 1.05;
 }
 
