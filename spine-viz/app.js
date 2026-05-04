@@ -811,11 +811,17 @@ const ribMat = new THREE.ShaderMaterial({
       // 起点：椎体最外缘（用 vertOuter，不是硬编码常量）
       vec2 vertEdge = vec2(vert.x + aSide * vOuter, vert.y);
 
-      // 弧形路径（贝塞尔，像 ) 和 (）：上抬→外延→下落
+      // 弧形路径（贝塞尔）+ 扇形展开：7 根肋骨在远端 Y 跨度
+      //   凸侧（侧弯撑开）：最上肋骨水平延伸，最下斜下沉，扇形大开
+      //   凹侧（侧弯压缩）：所有肋骨倾角接近，远端聚拢
       vec2 start = vertEdge;
-      // 凹侧弧度更陡（archUp/Down 更大）
-      float archUp   = (aSide > 0.0) ? 0.20 : 0.26;
-      float archDown = (aSide > 0.0) ? 0.22 : 0.30;
+      float idxNorm = aRibIdx / 6.0;  // 0=最上, 1=最下
+      float archUp = (aSide > 0.0)
+        ? mix(0.30, 0.10, idxNorm)   // 凸侧最上抬 0.30，最下抬 0.10（跨度 0.20）
+        : mix(0.28, 0.22, idxNorm);  // 凹侧 archUp 差异小
+      float archDown = (aSide > 0.0)
+        ? (0.10 + idxNorm * 0.60)    // 凸侧 0.10~0.70（跨度 0.60，扇形大开）
+        : (0.22 + idxNorm * 0.18);   // 凹侧 0.22~0.40（跨度 0.18，聚拢）
       vec2 ctrl  = vec2(vertEdge.x + lateral * 0.55 * aSide, vert.y + archUp);
       vec2 endPt = vec2(vertEdge.x + lateral * aSide,        vert.y - archDown);
       vec2 ab = mix(start, ctrl, aPathT);
@@ -827,8 +833,8 @@ const ribMat = new THREE.ShaderMaterial({
       vec2 db = endPt - ctrl;
       vec2 tangent = normalize(mix(da, db, aPathT));
       vec2 perp = vec2(-tangent.y, tangent.x);
-      // 近脊柱端粒子紧凑，远端略散（保持骨头线条感）
-      float perpAmp = 0.018 + aPathT * 0.040;
+      // 近脊柱端粒子紧凑，远端略散（保持骨头线条感，加大让肋骨更厚）
+      float perpAmp = 0.025 + aPathT * 0.060;
       pos2D += perp * aPerpJit * perpAmp;
 
       // Z 统一在 0（不做前后笼感），只有粒子内微抖
@@ -839,7 +845,7 @@ const ribMat = new THREE.ShaderMaterial({
       vAlpha = uActive;
 
       vec4 mv = modelViewMatrix * vec4(pos2D, z, 1.0);
-      gl_PointSize = 0.060 * (300.0 / -mv.z);
+      gl_PointSize = 0.085 * (300.0 / -mv.z);
       gl_Position = projectionMatrix * mv;
     }
   `,
