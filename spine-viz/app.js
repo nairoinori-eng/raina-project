@@ -3182,6 +3182,57 @@ const debugParticles = document.getElementById('debug-particles');
 const totalParticleCount = N_SPINE + N_DFULL + N_AMB + N_VINE_TOTAL + N_LEAF_TOTAL + N_FLOWER_TOTAL;
 if (debugParticles) debugParticles.textContent = totalParticleCount.toLocaleString();
 
+// ============================================================
+// 统一镜头控制器（M3：维度 1 漂移 + 维度 2 段切换 + 维度 3 呼吸耦合）
+// ============================================================
+
+function getOrbitOffset(t) {
+  // 维度 1：基础轨道漂移（极慢，三轴互质频率不重复构图）
+  return {
+    yaw:   Math.sin(t * 2 * Math.PI / 25) * (2.0 * Math.PI / 180),  // ±2° / 25s
+    pitch: Math.sin(t * 2 * Math.PI / 40) * (1.5 * Math.PI / 180),  // ±1.5° / 40s
+    zoom:  Math.sin(t * 2 * Math.PI / 55) * 0.15,                   // ±0.15 / 55s
+  };
+}
+
+function getGuideBaseZ(elapsed) {
+  // 维度 2：GUIDE 段切换缓推/缓拉（终点 5.0 衔接 EXPERIENCE）
+  if (elapsed < 5)  return THREE.MathUtils.lerp(6.0, 5.0, elapsed / 5);          // 段 0 凝聚：缓推近
+  if (elapsed < 33) return 5.0;                                                  // 段 1 知病：稳住
+  if (elapsed < 35) return THREE.MathUtils.lerp(5.0, 5.5, (elapsed - 33) / 2);   // 段 2a/b：稍拉远
+  if (elapsed < 47) return 5.5;
+  if (elapsed < 49) return THREE.MathUtils.lerp(5.5, 4.8, (elapsed - 47) / 2);   // 段 2c：推近脊柱
+  if (elapsed < 75) return 4.8;
+  if (elapsed < 78) return THREE.MathUtils.lerp(4.8, 5.0, (elapsed - 75) / 3);   // 段 3：缓拉远
+  return 5.0;
+}
+
+function updateCamera(t) {
+  // 1) baseline 距离（按状态）
+  let baseR = 5.0;
+  if (currentMode === 'GUIDE') baseR = getGuideBaseZ(guideElapsed);
+
+  // 2) 维度 3：呼吸耦合（仅 EXPERIENCE，跟 smoothBlend 缩放）
+  let breathStrength = 0;
+  if (currentMode === 'EXPERIENCE') breathStrength = smoothBlend;
+  const br = breatheCurve(t);
+  const breathR = br * breathStrength * 0.12;
+
+  // 3) 维度 1：轨道漂移
+  const orbit = getOrbitOffset(t);
+
+  // 4) 球面叠加：以 (0,0,0) 为中心
+  const r = baseR + breathR + orbit.zoom;
+  camera.position.x = Math.sin(orbit.yaw) * r;
+  camera.position.z = Math.cos(orbit.yaw) * r;
+  camera.position.y = Math.sin(orbit.pitch) * r;
+  camera.lookAt(0, 0, 0);
+
+  // 5) 维度 3：FOV 耦合（吸气 FOV 缩小 = 聚焦感）
+  camera.fov = 60 - br * breathStrength * 0.5;
+  camera.updateProjectionMatrix();
+}
+
 function animate() {
   requestAnimationFrame(animate);
   time += 0.016;
@@ -3209,6 +3260,8 @@ function animate() {
     ap[i*3+1] = ambBase[i*3+1] + Math.sin(time * ambOrbitSpd[i] * 0.7 + ambOrbitPh[i]) * ambOrbitR[i];
   }
   ambGeo.attributes.position.needsUpdate = true;
+
+  updateCamera(time);
 
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
   composer.render();
@@ -3416,9 +3469,7 @@ function updateExperience(t) {
 
   if (!branchEditMode) spineGroup.rotation.y = Math.sin(t * 0.52) * 0.35;
 
-  // 呼吸镜头感：相机随呼吸微微前后移动
-  const camBreathZ = 5.0 + breathe * smoothBlend * 0.12; // blend高时吸气靠近
-  camera.position.z = camBreathZ;
+  // 呼吸镜头感由统一 updateCamera() 接管（M3 镜头控制器）
 
   // Layer A + B
   spineMat.uniforms.uFormation.value        = 1.0;
