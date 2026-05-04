@@ -332,19 +332,18 @@ body {
   letter-spacing: 0.05em;
 }
 
-/* ── EXPERIENCE 呼吸提示（屏幕底部居中：「吸气 1 2」「屏息 1 2」...） ── */
+/* ── EXPERIENCE 呼吸提示（左侧字幕处：「吸气 1 2」「屏息 1 2」...） ── */
 #breath-overlay {
   position: fixed;
-  bottom: 100px;
-  left: 50%;
-  transform: translateX(-50%);
+  top: 35%;
+  left: 7%;
   pointer-events: none;
   opacity: 0;
   transition: opacity 1s ease;
   z-index: 20;
 }
 #breath-overlay.active {
-  opacity: 0.9;
+  opacity: 0.65;
 }
 #breath-label {
   font-size: clamp(1.0rem, 1.6vw, 1.4rem);
