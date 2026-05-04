@@ -166,7 +166,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPrefer
 renderer.setPixelRatio(4.0);  // 锁定高清模式（uAlphaBoost 在 composer 初始化后一并设置）
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.0;
+renderer.toneMappingExposure = 1.3;
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 
 const scene = new THREE.Scene();
@@ -896,6 +896,7 @@ const comparisonLine = new THREE.Line(comparisonGeo, comparisonMat);
 // 放在脊柱中线（x=0），代表"如果没弯曲应该在哪里"
 comparisonLine.position.z = -0.1;
 spineGroup.add(comparisonLine);
+comparisonLine.visible = false;  // 凝聚阶段已展示直立形态，不再需要对比线
 
 
 // ============================================================
@@ -3189,11 +3190,11 @@ if (debugParticles) debugParticles.textContent = totalParticleCount.toLocaleStri
 // ============================================================
 
 function getOrbitOffset(t) {
-  // 维度 1：基础轨道漂移（明显可见，三轴互质频率不重复构图）
+  // 维度 1：线性平移（不绕轨道。球面+lookAt(0,0,0) 锁主体居中 = 看不出动；改成平移让主体在画面中相对滑动）
   return {
-    yaw:   Math.sin(t * 2 * Math.PI / 18) * (5.0 * Math.PI / 180),  // ±5° / 18s
-    pitch: Math.sin(t * 2 * Math.PI / 30) * (3.0 * Math.PI / 180),  // ±3° / 30s
-    zoom:  Math.sin(t * 2 * Math.PI / 45) * 0.4,                    // ±0.4 / 45s
+    offsetX: Math.sin(t * 2 * Math.PI / 18) * 0.6,   // ±0.6 单位 / 18s（约屏幕宽 12%）
+    offsetY: Math.sin(t * 2 * Math.PI / 30) * 0.35,  // ±0.35 单位 / 30s（约屏幕高 7%）
+    offsetZ: Math.sin(t * 2 * Math.PI / 45) * 0.4,   // ±0.4 单位 / 45s 推拉
   };
 }
 
@@ -3239,15 +3240,14 @@ function updateCamera(t) {
   const br = breatheCurve(t);
   const breathR = br * breathStrength * 0.22;
 
-  // 3) 维度 1：轨道漂移
-  const orbit = getOrbitOffset(t);
+  // 3) 维度 1：线性平移（让画面看得见整体滑动）
+  const offset = getOrbitOffset(t);
 
-  // 4) 球面叠加：以 (0,0,0) 为中心
-  const r = baseR + breathR + orbit.zoom;
-  camera.position.x = Math.sin(orbit.yaw) * r;
-  camera.position.z = Math.cos(orbit.yaw) * r;
-  camera.position.y = Math.sin(orbit.pitch) * r;
-  camera.lookAt(0, 0, 0);
+  // 4) 平移叠加：相机平移 + 视线方向跟随（不锁主体居中，让主体在画面中相对滑动）
+  camera.position.x = offset.offsetX;
+  camera.position.y = offset.offsetY;
+  camera.position.z = baseR + offset.offsetZ - breathR;  // breathR 减去：吸气时 camera 推近
+  camera.lookAt(offset.offsetX, offset.offsetY, 0);
 
   // 5) 维度 3：FOV 耦合（仅 EXPERIENCE 才调 updateProjectionMatrix，IDLE/GUIDE 省开销）
   if (currentMode === 'EXPERIENCE' && breathStrength > 0) {
@@ -3766,7 +3766,7 @@ pixelRatioSlider.addEventListener('input', () => {
 // 边缘物理泛光（bloom strength 0.0~2.0，覆盖animate里的breath调制）
 const bloomSlider = document.getElementById('bloom-slider');
 const bloomVal = document.getElementById('bloom-val');
-let userBloomStrength = 0.32;
+let userBloomStrength = 1.3;
 bloomSlider.addEventListener('input', () => {
   userBloomStrength = bloomSlider.value / 100;
   bloomVal.textContent = userBloomStrength.toFixed(2);
