@@ -72,22 +72,22 @@ const N_AMB   = 300;                   // Layer E
 // 3. 颜色（低饱和度，优雅克制）
 // ============================================================
 
-const COLOR_DARK = new THREE.Color(0x3f2a82);  // 中等饱和深紫
+const COLOR_DARK = new THREE.Color(0x5B4A85);  // 中紫（Indigo x Amber 主色）
 const COLOR_MID  = new THREE.Color(0xd87890);  // 粉红过渡（饱和的中间色，不再灰）
 const COLOR_GOLD = new THREE.Color(0xd49c58);  // 中等饱和暖金
 
 // 高光色（接近白色的高亮，强烈正面光感）
-const HL_DARK = new THREE.Color(0xc8a0f4);   // 柔和亮紫
+const HL_DARK = new THREE.Color(0xC99857);   // 暖琥珀金（Indigo x Amber 高光）
 const HL_MID  = new THREE.Color(0xffd8e8);   // 亮粉高光
 const HL_GOLD = new THREE.Color(0xffe0a0);   // 柔和亮金
 
 // 对比色1：暖色系（高饱和）
-const AC1_DARK = new THREE.Color(0xff6840);  // 鲜橘红
+const AC1_DARK = new THREE.Color(0xA4ADC8);  // 浅银蓝（Indigo x Amber accent1）
 const AC1_MID  = new THREE.Color(0xf8d030);  // 亮黄（粉里撞出来的暖 pop 色）
 const AC1_GOLD = new THREE.Color(0xff3090);  // 亮品红（在金色中极醒目）
 
 // 对比色2：冷色系（高饱和）
-const AC2_DARK = new THREE.Color(0x20e0c0);  // 鲜翡翠
+const AC2_DARK = new THREE.Color(0x1E2156);  // 深靛蓝（Indigo x Amber 暗部）
 const AC2_MID  = new THREE.Color(0x30d0b0);  // 薄荷绿松石（粉的互补色，最强反差）
 const AC2_GOLD = new THREE.Color(0x2868ff);  // 亮宝蓝（金色的互补色）
 
@@ -1563,10 +1563,10 @@ const vineVertexShader = /* glsl */`
 
 // 藤蔓配色：与骨骼互补反相 + 饱和中点（每档都有色相，不走灰）
 // A 套（blend=0）：骨骼深紫时 → 藤蔓金
-const VINE_A_COLOR = new THREE.Color(0x584012);  // 深金基调（压暗）
-const VINE_A_HL    = new THREE.Color(0x3e3018);  // 闷金
-const VINE_A_AC1   = new THREE.Color(0x8a5830);  // 暗琥珀点缀
-const VINE_A_AC2   = new THREE.Color(0x4a2e08);  // 深青铜阴影
+const VINE_A_COLOR = new THREE.Color(0x8E6F3D);  // 深琥珀（金暗）
+const VINE_A_HL    = new THREE.Color(0xC99857);  // 暖琥珀金（金亮）
+const VINE_A_AC1   = new THREE.Color(0xA4ADC8);  // 浅银蓝（银亮）
+const VINE_A_AC2   = new THREE.Color(0x6B7290);  // 中靛蓝（银暗）
 // MID 套（blend=0.5）：翠绿过渡（粉红的对比色），高光/暗部都压得更深
 const VINE_MID_COLOR = new THREE.Color(0x3a6848);  // 暗翠绿（压低亮度）
 const VINE_MID_HL    = new THREE.Color(0x1e3428);  // 深闷翠
@@ -2333,10 +2333,10 @@ const leafVertexShader = /* glsl */`
 
 // ── 叶子颜色：4 色跨色相（强反差，叶子之间看起来色彩丰富）──
 // A 套（blend=0）：骨骼深紫时 → 叶子金（暖色域 4 色相）
-const LEAF_A_COLOR = new THREE.Color(0x8a6618);  // 金基座
-const LEAF_A_HL    = new THREE.Color(0xf0d040);  // 亮黄（pop）
-const LEAF_A_AC1   = new THREE.Color(0xe85020);  // 橘红
-const LEAF_A_AC2   = new THREE.Color(0xd83868);  // 玫红（跳出暖色域）
+const LEAF_A_COLOR = new THREE.Color(0x5B4A85);  // 中紫叶面
+const LEAF_A_HL    = new THREE.Color(0xC99857);  // 暖琥珀金（叶脉）
+const LEAF_A_AC1   = new THREE.Color(0xA4ADC8);  // 浅银蓝
+const LEAF_A_AC2   = new THREE.Color(0x1E2156);  // 深靛蓝（叶阴影）
 // MID 套（blend=0.5）：嫩翠过渡（高饱和撞色，粉色骨骼阶段要 pop）
 const LEAF_MID_COLOR = new THREE.Color(0x9ae0a8);  // 嫩翠基座
 const LEAF_MID_HL    = new THREE.Color(0xf8e830);  // 亮柠黄（强 pop）
@@ -2638,10 +2638,10 @@ const flowerVertexShader = /* glsl */`
 
 // ── 花朵颜色：白→淡紫→薰衣草（大部分偏浅）──
 // ── 花朵颜色：统一淡蓝白基调（不分 blend 阶段，花朵主要在体验后段才出现）──
-const FLOWER_A_COLOR = new THREE.Color(0xc0d0ec);  // 淡蓝白主色
-const FLOWER_A_HL    = new THREE.Color(0xf0e0a8);  // 鹅黄（花蕊）
-const FLOWER_A_AC1   = new THREE.Color(0xc8b8d8);  // 淡紫（强调 1）
-const FLOWER_A_AC2   = new THREE.Color(0xb0a0c8);  // 薰衣草（强调 2）
+const FLOWER_A_COLOR = new THREE.Color(0xD0D5E5);  // 亮银白（花瓣）
+const FLOWER_A_HL    = new THREE.Color(0xC99857);  // 暖琥珀金（花蕊）
+const FLOWER_A_AC1   = new THREE.Color(0xA4ADC8);  // 浅银蓝
+const FLOWER_A_AC2   = new THREE.Color(0x5B4A85);  // 中紫
 
 const FLOWER_MID_COLOR = new THREE.Color(0xc0d0ec);
 const FLOWER_MID_HL    = new THREE.Color(0xf0e0a8);
