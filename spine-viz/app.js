@@ -184,7 +184,14 @@ function boostSpineGoldAndSparkle(colorVars, sizes, alphas, i, t, worldX) {
   const rareSparkle = Math.random() < 0.0012 + lobe * 0.006;
 
   if (inGoldLobe) {
-    colorVars[i] = 0.30 + Math.random() * 0.22;  // palette[3] 金色，不改变全局金色区间
+    const mixRoll = Math.random();
+    if (mixRoll < 0.62) {
+      colorVars[i] = 0.32 + Math.random() * 0.24;   // 金色为主
+    } else if (mixRoll < 0.84) {
+      colorVars[i] = -0.02 + Math.random() * 0.18;  // 混入浅紫亮灰/中紫
+    } else {
+      colorVars[i] = -0.34 + Math.random() * 0.22;  // 少量深紫保结构
+    }
     alphas[i] *= 1.45 + lobe * 0.95;
     sizes[i] *= 1.04 + lobe * 0.16;
   }
@@ -536,7 +543,7 @@ for (let i = 0; i < N_BONE; i++) {
     bBaseA[i] *= 1.42;
   } else {
     // 普通粒子：紫色主体 + 一层浅紫亮灰面，少量进入金色高光
-    spColorVars[i] = (1 - zDepth) * 0.30 - 0.04 + (Math.random() - 0.5) * 0.08;
+    spColorVars[i] = (1 - zDepth) * 0.24 - 0.07 + (Math.random() - 0.5) * 0.08;
   }
   boostSpineGoldAndSparkle(spColorVars, bBaseS, bBaseA, i, tClamped, cpx + bOffCurvedX[i]);
   spPositions[i*3]   = cpx + bOffCurvedX[i];
@@ -653,7 +660,7 @@ for (let vi = 0; vi < 13; vi++) {
       spColorVars[gi] = 0.5 + Math.random() * 0.3;
       spAlphas[gi] *= 1.72;
     } else {
-      spColorVars[gi] = (1 - vzDepth) * 0.30 - 0.04 + (Math.random() - 0.5) * 0.07;
+      spColorVars[gi] = (1 - vzDepth) * 0.24 - 0.07 + (Math.random() - 0.5) * 0.07;
     }
     boostSpineGoldAndSparkle(spColorVars, spSizes, spAlphas, gi, t, cx + vOffCurvedX[idx]);
   }
@@ -3457,11 +3464,12 @@ function updateParticleVisibility() {
   const isExp   = currentMode === 'EXPERIENCE';
   const e = guideElapsed;
 
-  // 只 EXPERIENCE 显示（藤蔓/花/花粉，blend 高时生长）
-  vinePoints.visible   = isExp;
+  // 调色阶段：先隐藏藤蔓/叶片/花系统，只保留脊柱本体和脊柱 halo
+  vinePoints.visible   = false;
   spineHaloPoints.visible = isExp;
-  flowerPoints.visible = isExp;
-  pollenPoints.visible = isExp;
+  leafPoints.visible   = false;
+  flowerPoints.visible = false;
+  pollenPoints.visible = false;
 
   // GUIDE 时间窗口才显示（边界扩 0.5s 留 alpha 淡入淡出 buffer）
   ribPoints.visible   = isGuide && e >= 22.0 && e <= 32.0;
