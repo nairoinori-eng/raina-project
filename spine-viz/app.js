@@ -98,13 +98,13 @@ const AC2_GOLD = new THREE.Color(0x2D3050);  // 深靛蓝（accent2 暗部）
 // 2 = Sea Blue × Lavender（海蓝×薰衣草）
 const CURRENT_PHASE = 2;
 
-// 6 色 palette：
-//   [0] 最暗  [1] 暗  [2] 主色  [3] 主高光  [4] 极亮爆点  [5] 椎丸侧面 olive 点缀
-// 阶段一不用 [5]，回落到金色保持兼容
-const SPINE_PALETTE_P1 = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xB8A6D6, 0xD79A42];
-const SPINE_PALETTE_P2 = [0x182833, 0x1B536D, 0x5B4191, 0xA8C8D8, 0xE8DCC2, 0x82A85F];
-const HALO_PALETTE_P1  = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xD8D0F0, 0xD79A42];
-const HALO_PALETTE_P2  = [0x182833, 0x1B536D, 0x5B4191, 0xA8C8D8, 0xE8DCC2, 0x82A85F];
+// 7 色 palette：
+//   [0] 最暗  [1] 暗  [2] 主色  [3] 主高光  [4] 极亮爆点  [5] 椎丸侧面 olive  [6] 侧边短段粉紫
+// 阶段一不用 [5]/[6]，回落到金色保持兼容
+const SPINE_PALETTE_P1 = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xB8A6D6, 0xD79A42, 0xD79A42];
+const SPINE_PALETTE_P2 = [0x182833, 0x1B536D, 0x5B4191, 0xA8C8D8, 0xE8DCC2, 0x82A85F, 0xA867A0];
+const HALO_PALETTE_P1  = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xD8D0F0, 0xD79A42, 0xD79A42];
+const HALO_PALETTE_P2  = [0x182833, 0x1B536D, 0x5B4191, 0xA8C8D8, 0xE8DCC2, 0x82A85F, 0xA867A0];
 
 const ACTIVE_SPINE_PALETTE = (CURRENT_PHASE === 2 ? SPINE_PALETTE_P2 : SPINE_PALETTE_P1).map(h => new THREE.Color(h));
 const ACTIVE_HALO_PALETTE  = (CURRENT_PHASE === 2 ? HALO_PALETTE_P2  : HALO_PALETTE_P1 ).map(h => new THREE.Color(h));
@@ -366,7 +366,7 @@ const spineVertexShader = /* glsl */`
 
 // Spine-specific fragment shader with segment highlighting support
 const spineFragmentShader = /* glsl */`
-  uniform vec3 uPalette[6];         // 6 色：[0]最暗 [1]暗 [2]主色 [3]主高光 [4]极亮 [5]侧面 olive
+  uniform vec3 uPalette[7];         // 7 色：[0]最暗 [1]暗 [2]主色 [3]主高光 [4]极亮 [5]侧面 olive [6]侧边短段粉紫
   uniform float uSegmentHighlight;  // 0 = normal, 1 = 凸起侧暖白光晕 + 凹陷侧暗化
   uniform float uAlphaBoost; // 高清模式亮度补偿
   varying float vAlpha;
@@ -378,7 +378,8 @@ const spineFragmentShader = /* glsl */`
     if (d > 0.5) discard;
     // 按 vColorVar 区间直接选纯色（不 mix）
     vec3 c;
-    if      (vColorVar < -0.92) c = uPalette[5];   // 椎丸侧面 olive（阶段二专用）
+    if      (vColorVar >  0.95) c = uPalette[6];   // 侧边短段粉紫（阶段二专用）
+    else if (vColorVar < -0.92) c = uPalette[5];   // 椎丸侧面 olive（阶段二专用）
     else if (vColorVar < -0.6 ) c = uPalette[0];
     else if (vColorVar < -0.2 ) c = uPalette[1];
     else if (vColorVar <  0.2 ) c = uPalette[2];
@@ -560,8 +561,25 @@ for (let i = 0; i < N_BONE; i++) {
     // 高光粒子（收窄区间，多数落 palette[3] 金，极少 palette[4] 白）
     spColorVars[i] = 0.40 + Math.random() * 0.24;
     bBaseA[i] *= 1.55;
+  } else if (CURRENT_PHASE === 2) {
+    // 阶段二：侧边连续金/蓝带去掉，改成右上 + 左下 2 个短段粉紫
+    const tInRightLobe = tClamped > 0.20 && tClamped < 0.34;
+    const tInLeftLobe  = tClamped > 0.66 && tClamped < 0.80;
+    const inSidePinkLobe = !isInterior && wallRatio > 0.66 &&
+      ((tInRightLobe && sideSign > 0) || (tInLeftLobe && sideSign < 0));
+    const sidePink = inSidePinkLobe && Math.random() < 0.72;
+    const randomGold = !sidePink && Math.random() < 0.08;
+    if (sidePink) {
+      spColorVars[i] = 0.97 + Math.random() * 0.02;     // → palette[6] 粉紫
+      bBaseA[i] *= 1.28;
+    } else if (randomGold) {
+      spColorVars[i] = 0.24 + Math.random() * 0.24;
+      bBaseA[i] *= 1.14;
+    } else {
+      spColorVars[i] = (1 - zDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.08;
+    }
   } else {
-    // 普通粒子：中紫主体，侧边外缘形成连续细金边
+    // 阶段一：普通粒子，中紫主体，侧边外缘形成连续细金边
     const sideGold = !isInterior && sideSign > 0 && wallRatio > 0.66 && Math.random() < 0.72;
     const randomGold = !sideGold && Math.random() < 0.08;
     if (sideGold || randomGold) {
@@ -685,15 +703,32 @@ for (let vi = 0; vi < 13; vi++) {
     } else if (vacRoll < 0.205) {
       spColorVars[gi] = 0.42 + Math.random() * 0.22;
       spAlphas[gi] *= 1.9;
-    } else {
-      const isSideRim = !isVertFill && cosA > VERT_OUTER * 0.34 && radialNorm > 0.68;
-      const sideOlive = isSideRim && Math.random() < 0.10;   // 椎丸侧面 ~10% olive 点缀
-      const sideGold = !sideOlive && isSideRim && Math.random() < 0.78;
-      const randomGold = !isSideRim && Math.random() < 0.08;
-      if (sideOlive) {
-        spColorVars[gi] = -0.96 + Math.random() * 0.03;       // 触发 palette[5] olive band
+    } else if (CURRENT_PHASE === 2) {
+      // 阶段二：右侧连续金/蓝边去掉，改成右上 + 左下 2 个短 t-band 粉紫；保留 olive 点缀
+      const isRightRim = !isVertFill && cosA >  VERT_OUTER * 0.34 && radialNorm > 0.68;
+      const isLeftRim  = !isVertFill && cosA < -VERT_OUTER * 0.34 && radialNorm > 0.68;
+      const tInRightLobe = t > 0.20 && t < 0.34;
+      const tInLeftLobe  = t > 0.66 && t < 0.80;
+      const sidePink = ((isRightRim && tInRightLobe) || (isLeftRim && tInLeftLobe)) && Math.random() < 0.72;
+      const sideOlive = !sidePink && isRightRim && Math.random() < 0.10;
+      const randomGold = !sidePink && !sideOlive && !(isRightRim || isLeftRim) && Math.random() < 0.08;
+      if (sidePink) {
+        spColorVars[gi] = 0.97 + Math.random() * 0.02;        // → palette[6] 粉紫
+        spAlphas[gi] *= 1.30;
+      } else if (sideOlive) {
+        spColorVars[gi] = -0.96 + Math.random() * 0.03;       // → palette[5] olive
         spAlphas[gi] *= 1.18;
-      } else if (sideGold || randomGold) {
+      } else if (randomGold) {
+        spColorVars[gi] = 0.24 + Math.random() * 0.24;
+        spAlphas[gi] *= 1.16;
+      } else {
+        spColorVars[gi] = (1 - vzDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.07;
+      }
+    } else {
+      // 阶段一：保持原侧边连续金边
+      const sideGold = !isVertFill && cosA > VERT_OUTER * 0.34 && radialNorm > 0.68 && Math.random() < 0.70;
+      const randomGold = !sideGold && Math.random() < 0.08;
+      if (sideGold || randomGold) {
         spColorVars[gi] = 0.24 + Math.random() * 0.24;
         spAlphas[gi] *= sideGold ? 1.30 : 1.16;
       } else {
@@ -1213,7 +1248,7 @@ const spineHaloVertexShader = /* glsl */`
 `;
 
 const spineHaloFragmentShader = /* glsl */`
-  uniform vec3 uPalette[6];
+  uniform vec3 uPalette[7];
   uniform float uAlphaBoost;
   varying float vAlpha;
   varying float vColorVar;
@@ -1221,7 +1256,8 @@ const spineHaloFragmentShader = /* glsl */`
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
     vec3 c;
-    if      (vColorVar < -0.92) c = uPalette[5];
+    if      (vColorVar >  0.95) c = uPalette[6];
+    else if (vColorVar < -0.92) c = uPalette[5];
     else if (vColorVar < -0.6 ) c = uPalette[0];
     else if (vColorVar < -0.2 ) c = uPalette[1];
     else if (vColorVar <  0.2 ) c = uPalette[2];
