@@ -539,8 +539,8 @@ for (let i = 0; i < N_BONE; i++) {
     spColorVars[i] = -(0.50 + Math.random() * 0.35);
     bBaseA[i] *= 1.6;
   } else if (acRoll < 0.285) {
-    // 高光粒子
-    spColorVars[i] = 0.45 + Math.random() * 0.35;
+    // 高光粒子（收窄区间，多数落 palette[3] 金，极少 palette[4] 白）
+    spColorVars[i] = 0.40 + Math.random() * 0.24;
     bBaseA[i] *= 1.55;
   } else {
     // 普通粒子：中紫主体，侧边外缘形成连续细金边
@@ -665,7 +665,7 @@ for (let vi = 0; vi < 13; vi++) {
       spColorVars[gi] = -(0.55 + Math.random() * 0.30);
       spAlphas[gi] *= 2.2;
     } else if (vacRoll < 0.205) {
-      spColorVars[gi] = 0.5 + Math.random() * 0.3;
+      spColorVars[gi] = 0.42 + Math.random() * 0.22;
       spAlphas[gi] *= 1.9;
     } else {
       const sideGold = !isVertFill && cosA > VERT_OUTER * 0.34 && radialNorm > 0.68 && Math.random() < 0.70;
