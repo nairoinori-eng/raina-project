@@ -1756,9 +1756,11 @@ for (const si of DRIFT_SEG_INDICES) {
     vnVineId[particleIdx]    = 0;
     vnPhase[particleIdx]     = Math.random() * 3.0;
 
-    // 根部实（融入主藤）→ 远端淡（雾飘散）
-    const fadeAlpha = rawT < 1.0 ? 0.65 - rawT * 0.10           // 0.65 → 0.55
-                    : Math.max(0.30, 0.55 - (rawT - 1.0) * 0.08);
+    // 两端 alpha 软淡入淡出，消除圆柱端面带来的"矩形"硬边
+    // rawT=0 处 alpha=0（融入主藤看不见硬边）→ rawT=0.4 达到峰值 → rawT=5 平滑到 0
+    const fadeAlpha = rawT < 0.4 ? rawT * 1.5                       // 0 → 0.60
+                    : rawT < 2.0 ? 0.60 - (rawT - 0.4) * 0.06       // 0.60 → 0.50
+                    : Math.max(0, 0.50 - (rawT - 2.0) * 0.167);     // 0.50 → 0 at rawT=5
     vnAlphas[particleIdx]    = fadeAlpha;
     vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
 
