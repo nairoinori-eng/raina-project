@@ -93,6 +93,23 @@ const AC2_MID  = new THREE.Color(0x2D4658);  // 深海蓝暗部（accent2）
 const AC2_GOLD = new THREE.Color(0x2D3050);  // 深靛蓝（accent2 暗部）
 
 
+// ── 阶段色板开关（B 方案）：改 CURRENT_PHASE 切阶段 ──────────────
+// 1 = Indigo × Amber（紫×金）
+// 2 = Sea Blue × Lavender（海蓝×薰衣草）
+const CURRENT_PHASE = 2;
+
+// 6 色 palette：
+//   [0] 最暗  [1] 暗  [2] 主色  [3] 主高光  [4] 极亮爆点  [5] 椎丸侧面 olive 点缀
+// 阶段一不用 [5]，回落到金色保持兼容
+const SPINE_PALETTE_P1 = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xB8A6D6, 0xD79A42];
+const SPINE_PALETTE_P2 = [0x182833, 0x2D4252, 0x6C5F81, 0xD0C4B3, 0xE8DCC2, 0x9CAC85];
+const HALO_PALETTE_P1  = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xD8D0F0, 0xD79A42];
+const HALO_PALETTE_P2  = [0x182833, 0x2D4252, 0x6C5F81, 0xD0C4B3, 0xE8DCC2, 0x9CAC85];
+
+const ACTIVE_SPINE_PALETTE = (CURRENT_PHASE === 2 ? SPINE_PALETTE_P2 : SPINE_PALETTE_P1).map(h => new THREE.Color(h));
+const ACTIVE_HALO_PALETTE  = (CURRENT_PHASE === 2 ? HALO_PALETTE_P2  : HALO_PALETTE_P1 ).map(h => new THREE.Color(h));
+
+
 // ============================================================
 // 4. 工具函数
 // ============================================================
@@ -349,7 +366,7 @@ const spineVertexShader = /* glsl */`
 
 // Spine-specific fragment shader with segment highlighting support
 const spineFragmentShader = /* glsl */`
-  uniform vec3 uPalette[5];         // 5 个色板色（暗/暗-灰/灰/灰-高光/高光）
+  uniform vec3 uPalette[6];         // 6 色：[0]最暗 [1]暗 [2]主色 [3]主高光 [4]极亮 [5]侧面 olive
   uniform float uSegmentHighlight;  // 0 = normal, 1 = 凸起侧暖白光晕 + 凹陷侧暗化
   uniform float uAlphaBoost; // 高清模式亮度补偿
   varying float vAlpha;
@@ -361,11 +378,12 @@ const spineFragmentShader = /* glsl */`
     if (d > 0.5) discard;
     // 按 vColorVar 区间直接选纯色（不 mix）
     vec3 c;
-    if      (vColorVar < -0.6) c = uPalette[0];
-    else if (vColorVar < -0.2) c = uPalette[1];
-    else if (vColorVar <  0.2) c = uPalette[2];
-    else if (vColorVar <  0.6) c = uPalette[3];
-    else                       c = uPalette[4];
+    if      (vColorVar < -0.92) c = uPalette[5];   // 椎丸侧面 olive（阶段二专用）
+    else if (vColorVar < -0.6 ) c = uPalette[0];
+    else if (vColorVar < -0.2 ) c = uPalette[1];
+    else if (vColorVar <  0.2 ) c = uPalette[2];
+    else if (vColorVar <  0.6 ) c = uPalette[3];
+    else                        c = uPalette[4];
     c = clamp(c, 0.0, 1.0);
     if (uSegmentHighlight > 0.0) {
       float thorZone = smoothstep(0.12, 0.28, vParamT)
@@ -668,9 +686,14 @@ for (let vi = 0; vi < 13; vi++) {
       spColorVars[gi] = 0.42 + Math.random() * 0.22;
       spAlphas[gi] *= 1.9;
     } else {
-      const sideGold = !isVertFill && cosA > VERT_OUTER * 0.34 && radialNorm > 0.68 && Math.random() < 0.70;
-      const randomGold = !sideGold && Math.random() < 0.08;
-      if (sideGold || randomGold) {
+      const isSideRim = !isVertFill && cosA > VERT_OUTER * 0.34 && radialNorm > 0.68;
+      const sideOlive = isSideRim && Math.random() < 0.10;   // 椎丸侧面 ~10% olive 点缀
+      const sideGold = !sideOlive && isSideRim && Math.random() < 0.78;
+      const randomGold = !isSideRim && Math.random() < 0.08;
+      if (sideOlive) {
+        spColorVars[gi] = -0.96 + Math.random() * 0.03;       // 触发 palette[5] olive band
+        spAlphas[gi] *= 1.18;
+      } else if (sideGold || randomGold) {
         spColorVars[gi] = 0.24 + Math.random() * 0.24;
         spAlphas[gi] *= sideGold ? 1.30 : 1.16;
       } else {
@@ -755,13 +778,7 @@ spineGeo.setAttribute('aFormPower', new THREE.BufferAttribute(gpuFormPower, 1));
 const spineMat = new THREE.ShaderMaterial({
   vertexShader: spineVertexShader, fragmentShader: spineFragmentShader,
   uniforms: {
-    uPalette:           { value: [
-      new THREE.Color(0x1F2554),  // [0] 4% 暗部（亮一档）
-      new THREE.Color(0x3D4382),  // [1] 9% 深紫（亮一档）
-      new THREE.Color(0x66548F),  // [2] 紫相更明确的亮灰面
-      new THREE.Color(0xD79A42),  // [3] 更明确的琥珀金高光
-      new THREE.Color(0xB8A6D6),  // [4] 克制浅紫高光（避免发白）
-    ] },
+    uPalette:           { value: ACTIVE_SPINE_PALETTE },
     uColor:             { value: COLOR_DARK.clone() },
     uHighlight:         { value: HL_DARK.clone() },
     uAccent1:           { value: AC1_DARK.clone() },
@@ -1196,7 +1213,7 @@ const spineHaloVertexShader = /* glsl */`
 `;
 
 const spineHaloFragmentShader = /* glsl */`
-  uniform vec3 uPalette[5];
+  uniform vec3 uPalette[6];
   uniform float uAlphaBoost;
   varying float vAlpha;
   varying float vColorVar;
@@ -1204,11 +1221,12 @@ const spineHaloFragmentShader = /* glsl */`
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
     vec3 c;
-    if      (vColorVar < -0.6) c = uPalette[0];
-    else if (vColorVar < -0.2) c = uPalette[1];
-    else if (vColorVar <  0.2) c = uPalette[2];
-    else if (vColorVar <  0.6) c = uPalette[3];
-    else                       c = uPalette[4];
+    if      (vColorVar < -0.92) c = uPalette[5];
+    else if (vColorVar < -0.6 ) c = uPalette[0];
+    else if (vColorVar < -0.2 ) c = uPalette[1];
+    else if (vColorVar <  0.2 ) c = uPalette[2];
+    else if (vColorVar <  0.6 ) c = uPalette[3];
+    else                        c = uPalette[4];
     float core = exp(-d * d * 26.0) * 0.88;
     float halo = exp(-d * d * 5.8) * 0.22;
     gl_FragColor = vec4(clamp(c, 0.0, 1.0), (core + halo) * vAlpha * uAlphaBoost);
@@ -1229,13 +1247,7 @@ const spineHaloMat = new THREE.ShaderMaterial({
   vertexShader: spineHaloVertexShader,
   fragmentShader: spineHaloFragmentShader,
   uniforms: {
-    uPalette:    { value: [
-      new THREE.Color(0x1F2554),
-      new THREE.Color(0x3D4382),
-      new THREE.Color(0x66548F),
-      new THREE.Color(0xD79A42),
-      new THREE.Color(0xD8D0F0),
-    ] },
+    uPalette:    { value: ACTIVE_HALO_PALETTE },
     uAlphaBoost: { value: 1.35 },
     uBlend:      { value: 0.0 },
     uTime:       { value: 0.0 },
