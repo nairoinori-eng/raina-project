@@ -3629,8 +3629,8 @@ function updateParticleVisibility() {
   const isExp   = currentMode === 'EXPERIENCE';
   const e = guideElapsed;
 
-  // 调色阶段：先隐藏藤蔓/叶片/花系统，只保留脊柱本体和脊柱 halo
-  vinePoints.visible   = false;
+  // 调色阶段：放出藤蔓，叶片/花仍隐藏
+  vinePoints.visible   = true;
   spineHaloPoints.visible = isExp;
   leafPoints.visible   = false;
   flowerPoints.visible = false;
