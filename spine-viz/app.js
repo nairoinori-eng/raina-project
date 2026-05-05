@@ -410,15 +410,14 @@ const spineFragmentShader = /* glsl */`
   varying float vColorVar3;
   varying float vParamT;
   varying float vIdleness;
-  vec3 pickPaletteColor(vec3 pal[7], float v) {
-    if      (v >  0.95) return pal[6];
-    else if (v < -0.92) return pal[5];
-    else if (v < -0.6 ) return pal[0];
-    else if (v < -0.2 ) return pal[1];
-    else if (v <  0.2 ) return pal[2];
-    else if (v <  0.6 ) return pal[3];
-    else                return pal[4];
-  }
+  #define PICK_COLOR(pal, v, out) \
+    if      (v >  0.95) out = pal[6]; \
+    else if (v < -0.92) out = pal[5]; \
+    else if (v < -0.6 ) out = pal[0]; \
+    else if (v < -0.2 ) out = pal[1]; \
+    else if (v <  0.2 ) out = pal[2]; \
+    else if (v <  0.6 ) out = pal[3]; \
+    else                out = pal[4];
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
@@ -426,9 +425,10 @@ const spineFragmentShader = /* glsl */`
     float w1 = clamp(1.0 - uPhase, 0.0, 1.0);
     float w3 = clamp(uPhase - 1.0, 0.0, 1.0);
     float w2 = 1.0 - w1 - w3;
-    vec3 c1 = pickPaletteColor(uPaletteP1, vColorVar1);
-    vec3 c2 = pickPaletteColor(uPaletteP2, vColorVar2);
-    vec3 c3 = pickPaletteColor(uPaletteP3, vColorVar3);
+    vec3 c1, c2, c3;
+    PICK_COLOR(uPaletteP1, vColorVar1, c1)
+    PICK_COLOR(uPaletteP2, vColorVar2, c2)
+    PICK_COLOR(uPaletteP3, vColorVar3, c3)
     vec3 c = c1 * w1 + c2 * w2 + c3 * w3;
     float vAlpha = vAlpha1 * w1 + vAlpha2 * w2 + vAlpha3 * w3;
     c = clamp(c, 0.0, 1.0);
@@ -1340,24 +1340,25 @@ const spineHaloFragmentShader = /* glsl */`
   uniform float uAlphaBoost;
   varying float vAlpha;
   varying float vColorVar;
-  vec3 pickPaletteColor(vec3 pal[7], float v) {
-    if      (v >  0.95) return pal[6];
-    else if (v < -0.92) return pal[5];
-    else if (v < -0.6 ) return pal[0];
-    else if (v < -0.2 ) return pal[1];
-    else if (v <  0.2 ) return pal[2];
-    else if (v <  0.6 ) return pal[3];
-    else                return pal[4];
-  }
+  #define PICK_COLOR(pal, v, out) \
+    if      (v >  0.95) out = pal[6]; \
+    else if (v < -0.92) out = pal[5]; \
+    else if (v < -0.6 ) out = pal[0]; \
+    else if (v < -0.2 ) out = pal[1]; \
+    else if (v <  0.2 ) out = pal[2]; \
+    else if (v <  0.6 ) out = pal[3]; \
+    else                out = pal[4];
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
     float w1 = clamp(1.0 - uPhase, 0.0, 1.0);
     float w3 = clamp(uPhase - 1.0, 0.0, 1.0);
     float w2 = 1.0 - w1 - w3;
-    vec3 c = pickPaletteColor(uPaletteP1, vColorVar) * w1
-           + pickPaletteColor(uPaletteP2, vColorVar) * w2
-           + pickPaletteColor(uPaletteP3, vColorVar) * w3;
+    vec3 c1, c2, c3;
+    PICK_COLOR(uPaletteP1, vColorVar, c1)
+    PICK_COLOR(uPaletteP2, vColorVar, c2)
+    PICK_COLOR(uPaletteP3, vColorVar, c3)
+    vec3 c = c1 * w1 + c2 * w2 + c3 * w3;
     float core = exp(-d * d * 26.0) * 0.88;
     float halo = exp(-d * d * 5.8) * 0.22;
     gl_FragColor = vec4(clamp(c, 0.0, 1.0), (core + halo) * vAlpha * uAlphaBoost);
