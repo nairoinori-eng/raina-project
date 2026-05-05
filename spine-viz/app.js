@@ -1566,7 +1566,8 @@ for (let vi = 0; vi < vineData.length; vi++) {
   const pulsePhase = vi * 1.3 + 0.2;
 
   for (let si = 0; si < vd.curves.length; si++) {
-    // 弥散分支：主体（rawT 0~1）走主藤循环正常渲染，drift 系统只处理超出尖端的飘散
+    // 弥散分支：完全交给 drift 系统作为云团从主藤上长出来，主藤循环跳过
+    if (vi === 0 && DRIFT_SEG_INDICES.includes(si)) continue;
     const curve = vd.curves[si];
     const ppv = vd.ppvs[si];
     const { depth, rootAtStart } = vd.topo[si];
@@ -1696,28 +1697,40 @@ for (const si of DRIFT_SEG_INDICES) {
   const sideBias = tipWorldX > 0 ? 1.0 : -1.0; // 正=右侧→往右飘，负=左侧→往左飘
 
   for (let p = 0; p < DRIFT_PPV; p++) {
-    // rawT: 1=尖端起点, 1~5=超出尖端飘散到屏幕边缘（曲线本体由主藤循环渲染）
-    const rawT = 1.0 + (p / (DRIFT_PPV - 1)) * 4.0;
+    // rawT: 0=主藤交汇点（云团根部）, 1=曲线尖端, 1~5=超出尖端继续飘散
+    const rawT = (p / (DRIFT_PPV - 1)) * 5.0;
 
-    // 从分支尖端往外飘散：往左/右弯 + 蜿蜒 S 曲线
-    const beyond = (rawT - 0.95) * 1.2;
-    const forwardDrift = beyond * 0.3;
-    const lateralDrift = (beyond * 0.25 + beyond * beyond * 0.08) * sideBias;
-    const baseX = tipPt.x + tipTan.x * outSign * forwardDrift + lateralDrift;
-    const baseY = tipPt.y + tipTan.y * outSign * forwardDrift;
-    const waveAmp = 0.03 + beyond * 0.08;
-    const wave = Math.sin(beyond * 2.5 + si * 2.5);
-    const px = baseX;
-    const py = baseY + wave * waveAmp;
-    const tanX = tipTan.x * outSign;
-    const tanY = tipTan.y * outSign;
+    // 中心轨迹位置（沿原 Figma 曲线 + 超出尖端的延伸）
+    let px, py, tanX, tanY;
+    if (rawT <= 1.0) {
+      const ct = rootAtStart
+        ? Math.max(0.002, Math.min(0.998, rawT))
+        : Math.max(0.002, Math.min(0.998, 1.0 - rawT));
+      const cp = curve.getPointAt(ct);
+      const ctan = curve.getTangentAt(ct);
+      px = cp.x; py = cp.y;
+      tanX = ctan.x * outSign; tanY = ctan.y * outSign;
+    } else {
+      const beyond = (rawT - 1.0);
+      const forwardDrift = beyond * 0.4;
+      const lateralDrift = (beyond * 0.30 + beyond * beyond * 0.10) * sideBias;
+      const baseX = tipPt.x + tipTan.x * outSign * forwardDrift + lateralDrift;
+      const baseY = tipPt.y + tipTan.y * outSign * forwardDrift;
+      const waveAmp = beyond * 0.10;
+      const wave = Math.sin(beyond * 2.5 + si * 2.5);
+      px = baseX;
+      py = baseY + wave * waveAmp;
+      tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
+    }
 
-    // 散布：从分支尖端 thin → 远处渐散
-    const spreadWidth = rawT < 1.5
-      ? 0.003 + (rawT - 1.0) * 0.020       // 0.003 → 0.013，尖端起点和分支 taper 末梢匹配
-      : 0.013 + (rawT - 1.5) * 0.010;      // 0.013 → 0.048
-    // 3D 圆锥扩散：围绕中心切线轴在垂面内 2D 高斯分布（perp 法线 + Z 轴）
-    // 360° 对称 → 任意视角看都是从中心轨迹弥散开的雾管
+    // 云团宽度：根部胖（融入主藤 ≈ 0.015）→ 中段更宽 → 远处弥散
+    const spreadWidth = rawT < 1.0
+      ? 0.015 + rawT * 0.010                // 0.015 → 0.025
+      : rawT < 2.5
+        ? 0.025 + (rawT - 1.0) * 0.012      // 0.025 → 0.043
+        : 0.043 + (rawT - 2.5) * 0.006;     // 远处 → 0.058
+
+    // 3D 圆锥扩散：360° 对称的雾管
     const perpX = -tanY, perpY = tanX;
     const radInPerp = gaussRand() * spreadWidth;
     const radInZ    = gaussRand() * spreadWidth;
@@ -1728,10 +1741,10 @@ for (const si of DRIFT_SEG_INDICES) {
 
     const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
 
-    // Z 衔接：交汇点 rawT≈0 严格匹配主藤 Z，之后指数快速衰减到 0
+    // Z 衔接：rawT=0 锚到主藤 sin 缠绕，指数衰减到 z=0
     const wrapR = 0.10;
     const mainZ = Math.sin(yNorm * Math.PI * 2 * 2.5) * wrapR;
-    const zBlend = Math.exp(-rawT * 8);
+    const zBlend = Math.exp(-rawT * 1.5);
 
     vnCurvedX[particleIdx]   = sx + spineX;
     vnCurvedY[particleIdx]   = sy;
@@ -1743,21 +1756,19 @@ for (const si of DRIFT_SEG_INDICES) {
     vnVineId[particleIdx]    = 0;
     vnPhase[particleIdx]     = Math.random() * 3.0;
 
-    // 根部实 → 缓慢变淡 → 远端保留地板透明度（避免被 2.25× 振幅扩散后看不见）
-    const fadeAlpha = rawT < 1.0 ? 0.75 - rawT * 0.10
-                    : Math.max(0.30, 0.65 - (rawT - 1.0) * 0.10);
+    // 根部实（融入主藤）→ 远端淡（雾飘散）
+    const fadeAlpha = rawT < 1.0 ? 0.65 - rawT * 0.10           // 0.65 → 0.55
+                    : Math.max(0.30, 0.55 - (rawT - 1.0) * 0.08);
     vnAlphas[particleIdx]    = fadeAlpha;
     vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
 
-    // 颜色衔接：rawT<0.3 完全用主藤渐变（顶暖金/底冷紫 + Z 偏移），0.3~1.0 平滑过渡到冷紫飘散
+    // 颜色：根部继承主藤渐变（金/紫），渐变到冷紫飘散
     const mainGradient = 0.4 - yNorm * 0.9;
     const zForBias = vnZPos[particleIdx];
     const zBias = zForBias > 0.03 ? 0.15 : zForBias < -0.03 ? -0.15 : 0.0;
     const mainColor  = mainGradient + zBias + (Math.random() - 0.5) * 0.12;
     const driftColor = 0.1 + Math.random() * 0.2;
-    const colorBlend = rawT < 0.3 ? 0.0
-                     : rawT < 1.0 ? (rawT - 0.3) / 0.7
-                     : 1.0;
+    const colorBlend = Math.min(1.0, rawT * 0.7);  // rawT=0 → 0, rawT≥1.43 → 1
     vnColorVars[particleIdx] = mainColor * (1 - colorBlend) + driftColor * colorBlend;
     vnDriftT[particleIdx]    = rawT;
 
