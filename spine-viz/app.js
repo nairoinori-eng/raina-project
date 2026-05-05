@@ -74,22 +74,22 @@ const N_AMB   = 300;                   // Layer E
 
 const COLOR_DARK = new THREE.Color(0x5B4A85);  // 中紫（Indigo x Amber 主色）
 const COLOR_MID  = new THREE.Color(0x4A6680);  // 深海蓝（Sea Blue x Lavender 主色）
-const COLOR_GOLD = new THREE.Color(0xd49c58);  // 中等饱和暖金
+const COLOR_GOLD = new THREE.Color(0xC68A3E);  // 藏红花金（Saffron x Glacier 主色）
 
 // 高光色（接近白色的高亮，强烈正面光感）
 const HL_DARK = new THREE.Color(0xE5B576);   // 亮琥珀金（更夺目高光）
 const HL_MID  = new THREE.Color(0xE0D0B0);   // 米白象牙（柔和高光）
-const HL_GOLD = new THREE.Color(0xffe0a0);   // 柔和亮金
+const HL_GOLD = new THREE.Color(0xF0E5D0);   // 米白象牙（高光）
 
 // 对比色1：暖色系（高饱和）
 const AC1_DARK = new THREE.Color(0xA4ADC8);  // 浅银蓝（Indigo x Amber accent1）
 const AC1_MID  = new THREE.Color(0xB0A0C8);  // 薰衣草紫（accent1）
-const AC1_GOLD = new THREE.Color(0xff3090);  // 亮品红（在金色中极醒目）
+const AC1_GOLD = new THREE.Color(0xB5D0E5);  // 冰川蓝（accent1）
 
 // 对比色2：冷色系（高饱和）
 const AC2_DARK = new THREE.Color(0x1E2156);  // 深靛蓝（Indigo x Amber 暗部）
 const AC2_MID  = new THREE.Color(0x2D4658);  // 深海蓝暗部（accent2）
-const AC2_GOLD = new THREE.Color(0x2868ff);  // 亮宝蓝（金色的互补色）
+const AC2_GOLD = new THREE.Color(0x2D3050);  // 深靛蓝（accent2 暗部）
 
 
 // ============================================================
@@ -1573,10 +1573,10 @@ const VINE_MID_HL    = new THREE.Color(0xE0D0B0);  // 米白（lerp 到米色，
 const VINE_MID_AC1   = new THREE.Color(0x4A6680);  // 海蓝（备用暗部）
 const VINE_MID_AC2   = new THREE.Color(0x2D4658);  // 深海蓝（备用暗部）
 // B 套（blend=1）：骨骼金时 → 藤蔓花青
-const VINE_B_COLOR = new THREE.Color(0x1a3854);  // 花青基调
-const VINE_B_HL    = new THREE.Color(0x3a5a78);  // 沉花青高光（压低亮度）
-const VINE_B_AC1   = new THREE.Color(0x10243e);  // 深夜蓝
-const VINE_B_AC2   = new THREE.Color(0x244e7c);  // 中花青
+const VINE_B_COLOR = new THREE.Color(0xC68A3E);  // 藏红花金（基色）
+const VINE_B_HL    = new THREE.Color(0xB5D0E5);  // 冰川蓝（lerp 到冰蓝，金蓝渐变）
+const VINE_B_AC1   = new THREE.Color(0xF0E5D0);  // 米白（备用亮部）
+const VINE_B_AC2   = new THREE.Color(0x2D3050);  // 深靛蓝（备用暗部）
 
 // 骨骼曲线采样给 shader 做遮挡判定：
 // 沿 curveCurved 均匀取 33 个点（比直接用 13 控制点插值精度更高，
@@ -2343,10 +2343,10 @@ const LEAF_MID_HL    = new THREE.Color(0xE0D0B0);  // 米白叶脉
 const LEAF_MID_AC1   = new THREE.Color(0xB0A0C8);  // 薰衣草紫
 const LEAF_MID_AC2   = new THREE.Color(0x4A6680);  // 海蓝（叶阴影）
 // B 套（blend=1）：骨骼金时 → 叶子花青（冷色域 4 色相）
-const LEAF_B_COLOR = new THREE.Color(0x244e7c);  // 花青基座
-const LEAF_B_HL    = new THREE.Color(0x40c8e0);  // 亮青（pop）
-const LEAF_B_AC1   = new THREE.Color(0x30c078);  // 翡翠
-const LEAF_B_AC2   = new THREE.Color(0x7860d0);  // 紫罗兰
+const LEAF_B_COLOR = new THREE.Color(0x2D3050);  // 深靛蓝叶面
+const LEAF_B_HL    = new THREE.Color(0xF0E5D0);  // 米白叶脉
+const LEAF_B_AC1   = new THREE.Color(0xC68A3E);  // 藏红花金
+const LEAF_B_AC2   = new THREE.Color(0xB5D0E5);  // 冰川蓝
 
 const leafMat = new THREE.ShaderMaterial({
   vertexShader: leafVertexShader,
@@ -2648,10 +2648,10 @@ const FLOWER_MID_HL    = new THREE.Color(0xB0A0C8);  // 薰衣草花蕊
 const FLOWER_MID_AC1   = new THREE.Color(0xB0A0C8);  // 薰衣草
 const FLOWER_MID_AC2   = new THREE.Color(0x4A6680);  // 海蓝
 
-const FLOWER_B_COLOR = new THREE.Color(0xc0d0ec);
-const FLOWER_B_HL    = new THREE.Color(0xf0e0a8);
-const FLOWER_B_AC1   = new THREE.Color(0xc8b8d8);
-const FLOWER_B_AC2   = new THREE.Color(0xb0a0c8);
+const FLOWER_B_COLOR = new THREE.Color(0xF0E5D0);  // 米白花瓣
+const FLOWER_B_HL    = new THREE.Color(0xC68A3E);  // 藏红花金（花蕊）
+const FLOWER_B_AC1   = new THREE.Color(0xB5D0E5);  // 冰川蓝
+const FLOWER_B_AC2   = new THREE.Color(0x2D3050);  // 深靛蓝
 
 const flowerMat = new THREE.ShaderMaterial({
   vertexShader: flowerVertexShader,
