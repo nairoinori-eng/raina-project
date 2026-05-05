@@ -1729,10 +1729,9 @@ for (const si of DRIFT_SEG_INDICES) {
       tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
     }
 
-    // 散布：根部与父分支同宽 → 尖端微宽 → 远处渐散但仍成线
-    const rootBaseWidth = VINE_WIDTHS[1]; // 与父分支等粗，避免突变
+    // 散布：根部 0 宽（紧贴主藤交汇点）→ 尖端微宽 → 远处渐散但仍成线
     const spreadWidth = rawT < 0.5
-      ? rootBaseWidth + rawT * 0.006        // 0.005 → 0.008
+      ? rawT * 0.016                        // 0 → 0.008，从交汇点尖锐出发
       : rawT < 1.0
         ? 0.008 + (rawT - 0.5) * 0.012      // 0.008 → 0.014
         : 0.014 + (rawT - 1.0) * 0.008;     // 远处max≈0.046，仍可见
