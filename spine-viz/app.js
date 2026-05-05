@@ -1723,12 +1723,12 @@ for (const si of DRIFT_SEG_INDICES) {
       tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
     }
 
-    // 云团宽度：根部胖（融入主藤 ≈ 0.015）→ 中段更宽 → 远处弥散
+    // 云团宽度：根部和主藤同宽（VINE_WIDTHS[0]=0.012）→ 远端弥散
     const spreadWidth = rawT < 1.0
-      ? 0.015 + rawT * 0.010                // 0.015 → 0.025
+      ? 0.012 + rawT * 0.008                // 0.012 → 0.020
       : rawT < 2.5
-        ? 0.025 + (rawT - 1.0) * 0.012      // 0.025 → 0.043
-        : 0.043 + (rawT - 2.5) * 0.006;     // 远处 → 0.058
+        ? 0.020 + (rawT - 1.0) * 0.010      // 0.020 → 0.035
+        : 0.035 + (rawT - 2.5) * 0.005;     // 远处 → 0.048
 
     // 3D 圆锥扩散：360° 对称的雾管
     const perpX = -tanY, perpY = tanX;
