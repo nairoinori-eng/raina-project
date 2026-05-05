@@ -811,17 +811,17 @@ const ribMat = new THREE.ShaderMaterial({
       // 起点：椎体最外缘（用 vertOuter，不是硬编码常量）
       vec2 vertEdge = vec2(vert.x + aSide * vOuter, vert.y);
 
-      // 弧形路径（贝塞尔）+ 扇形展开：7 根肋骨在远端 Y 跨度（凸大凹紧 8:1）
-      //   凸侧：最上肋骨高弧水平延伸，最下扁平陡斜下，扇形巨大
-      //   凹侧：所有肋骨倾角几乎相同，平行聚拢
+      // 弧形路径（贝塞尔）+ 不对称扇形：
+      //   凸侧（右）：扇形大开（最上水平→最下陡下，远端 Y 跨度大）
+      //   凹侧（左）：反扇形漏斗（最上陡下→最下缓，远端 Y 聚拢到中间）
       vec2 start = vertEdge;
       float idxNorm = aRibIdx / 5.0;  // 0=最上, 1=最下（6 根肋骨）
       float archUp = (aSide > 0.0)
-        ? mix(0.40, 0.05, idxNorm)   // 凸侧跨度 0.35（最上高弧，最下扁平）
-        : mix(0.28, 0.24, idxNorm);  // 凹侧跨度 0.04（几乎相同）
+        ? mix(0.40, 0.05, idxNorm)   // 凸侧最上高拱→最下扁平
+        : mix(0.10, 0.40, idxNorm);  // 凹侧反向：最上扁平→最下高拱（漏斗对称）
       float archDown = (aSide > 0.0)
-        ? (0.05 + idxNorm * 0.80)    // 凸侧 0.05~0.85（跨度 0.80）
-        : (0.25 + idxNorm * 0.10);   // 凹侧 0.25~0.35（跨度 0.10）
+        ? (0.05 + idxNorm * 0.80)    // 凸侧 0.05~0.85（扇形展开）
+        : mix(0.85, 0.20, idxNorm);  // 凹侧 0.85~0.20（反扇形聚拢）
       vec2 ctrl  = vec2(vertEdge.x + lateral * 0.55 * aSide, vert.y + archUp);
       vec2 endPt = vec2(vertEdge.x + lateral * aSide,        vert.y - archDown);
       vec2 ab = mix(start, ctrl, aPathT);
