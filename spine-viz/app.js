@@ -542,12 +542,14 @@ for (let i = 0; i < N_BONE; i++) {
     spColorVars[i] = 0.45 + Math.random() * 0.35;
     bBaseA[i] *= 1.55;
   } else {
-    // 普通粒子：紫色主体 + 一层浅紫亮灰面，少量进入金色高光
-    if (Math.random() < 0.22) {
+    // 普通粒子：中紫主体，侧边外缘形成连续细金边
+    const sideGold = !isInterior && sideSign > 0 && wallRatio > 0.66 && Math.random() < 0.72;
+    const randomGold = !sideGold && Math.random() < 0.08;
+    if (sideGold || randomGold) {
       spColorVars[i] = 0.24 + Math.random() * 0.24;
-      bBaseA[i] *= 1.22;
+      bBaseA[i] *= sideGold ? 1.28 : 1.14;
     } else {
-      spColorVars[i] = (1 - zDepth) * 0.20 - 0.12 + (Math.random() - 0.5) * 0.08;
+      spColorVars[i] = (1 - zDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.08;
     }
   }
   boostSpineGoldAndSparkle(spColorVars, bBaseS, bBaseA, i, tClamped, cpx + bOffCurvedX[i]);
@@ -665,11 +667,13 @@ for (let vi = 0; vi < 13; vi++) {
       spColorVars[gi] = 0.5 + Math.random() * 0.3;
       spAlphas[gi] *= 1.9;
     } else {
-      if (Math.random() < 0.22) {
+      const sideGold = !isVertFill && cosA > VERT_OUTER * 0.34 && radialNorm > 0.68 && Math.random() < 0.70;
+      const randomGold = !sideGold && Math.random() < 0.08;
+      if (sideGold || randomGold) {
         spColorVars[gi] = 0.24 + Math.random() * 0.24;
-        spAlphas[gi] *= 1.24;
+        spAlphas[gi] *= sideGold ? 1.30 : 1.16;
       } else {
-        spColorVars[gi] = (1 - vzDepth) * 0.20 - 0.12 + (Math.random() - 0.5) * 0.07;
+        spColorVars[gi] = (1 - vzDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.07;
       }
     }
     boostSpineGoldAndSparkle(spColorVars, spSizes, spAlphas, gi, t, cx + vOffCurvedX[idx]);
@@ -1118,7 +1122,7 @@ for (let i = 0; i < N_SPINE_HALO; i++) {
   if (Math.random() < topBias * 0.55) side = 1;
   if (Math.random() < lowerBias * 0.55) side = -1;
 
-  const dist = 0.10 + Math.pow(Math.random(), 2.4) * 0.34;
+  const dist = 0.12 + Math.pow(Math.random(), 2.0) * 0.44;
   const along = gaussRand() * 0.075;
   const depth = gaussRand() * 0.18;
   const curvedX = cp.x + nx * side * dist + tan.x * along;
@@ -1137,11 +1141,11 @@ for (let i = 0; i < N_SPINE_HALO; i++) {
 
   const lobe = spineGoldLobeWeight(t, curvedX);
   const roll = Math.random();
-  const activeAlpha = activeCluster ? 1.0 : 0.32;
+  const activeAlpha = activeCluster ? 1.20 : 0.42;
   const activeSize = activeCluster ? 1.0 : 0.72;
   if (roll < 0.22) {
     haloColorVars[i] = 0.30 + Math.random() * 0.24;   // 随机金粉，不跟集中高光成片绑定
-    haloAlphas[i] = (0.074 + Math.random() * 0.105) * (1.0 + lobe * 0.55) * activeAlpha;
+    haloAlphas[i] = (0.082 + Math.random() * 0.118) * (1.0 + lobe * 0.55) * activeAlpha;
     haloSizes[i] = (0.014 + Math.random() * 0.030) * activeSize;
   } else if (roll < 0.27) {
     haloColorVars[i] = 0.70 + Math.random() * 0.18;   // 极少量浅紫白爆点
@@ -1149,15 +1153,15 @@ for (let i = 0; i < N_SPINE_HALO; i++) {
     haloSizes[i] = (0.034 + Math.random() * 0.038) * activeSize;
   } else if (roll < 0.78) {
     haloColorVars[i] = -0.05 + Math.random() * 0.20;  // 中紫主体
-    haloAlphas[i] = (0.044 + Math.random() * 0.070) * (1.0 + lobe * 0.22) * activeAlpha;
+    haloAlphas[i] = (0.052 + Math.random() * 0.080) * (1.0 + lobe * 0.22) * activeAlpha;
     haloSizes[i] = (0.010 + Math.random() * 0.022) * activeSize;
   } else if (roll < 0.90) {
     haloColorVars[i] = -0.45 - Math.random() * 0.25;  // 深紫暗粉
-    haloAlphas[i] = (0.030 + Math.random() * 0.044) * (1.0 + lobe * 0.15) * activeAlpha;
+    haloAlphas[i] = (0.036 + Math.random() * 0.052) * (1.0 + lobe * 0.15) * activeAlpha;
     haloSizes[i] = (0.009 + Math.random() * 0.020) * activeSize;
   } else {
     haloColorVars[i] = 0.16 + Math.random() * 0.18;   // 浅紫亮灰尘雾
-    haloAlphas[i] = (0.048 + Math.random() * 0.064) * (1.0 + lobe * 0.18) * activeAlpha;
+    haloAlphas[i] = (0.056 + Math.random() * 0.072) * (1.0 + lobe * 0.18) * activeAlpha;
     haloSizes[i] = (0.011 + Math.random() * 0.024) * activeSize;
   }
   haloPhases[i] = Math.random() * Math.PI * 2;
