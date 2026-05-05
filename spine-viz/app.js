@@ -1729,12 +1729,13 @@ for (const si of DRIFT_SEG_INDICES) {
       tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
     }
 
-    // 散布：根部实线 → 尖端微宽 → 远处渐散但仍成线
+    // 散布：根部与父分支同宽 → 尖端微宽 → 远处渐散但仍成线
+    const rootBaseWidth = VINE_WIDTHS[1]; // 与父分支等粗，避免突变
     const spreadWidth = rawT < 0.5
-      ? 0.003 + rawT * 0.010
+      ? rootBaseWidth + rawT * 0.006        // 0.005 → 0.008
       : rawT < 1.0
-        ? 0.008 + (rawT - 0.5) * 0.012
-        : 0.014 + (rawT - 1.0) * 0.008; // 远处max≈0.046，仍可见
+        ? 0.008 + (rawT - 0.5) * 0.012      // 0.008 → 0.014
+        : 0.014 + (rawT - 1.0) * 0.008;     // 远处max≈0.046，仍可见
     const perpX = -tanY, perpY = tanX;
     const spread = gaussRand() * spreadWidth;
 
@@ -1742,13 +1743,21 @@ for (const si of DRIFT_SEG_INDICES) {
     const sy = py * VINE_Y_SCALE + perpY * spread;
     const spineX = getSpineXAtY(sy);
 
+    const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
+
+    // Z 衔接：rawT<0.5 完全继承主藤正弦缠绕，0.5~1.0 衰减到 0
+    const wrapR = 0.10;
+    const mainZ = Math.sin(yNorm * Math.PI * 2 * 2.5) * wrapR; // vi=0, vineFactor=1
+    const zBlend = rawT < 0.5 ? 1.0
+                 : rawT < 1.0 ? 1.0 - (rawT - 0.5) * 2.0
+                 : 0.0;
+
     vnCurvedX[particleIdx]   = sx + spineX;
     vnCurvedY[particleIdx]   = sy;
     vnStraightX[particleIdx] = sx;
     vnStraightY[particleIdx] = sy;
-    vnZPos[particleIdx]      = gaussRand() * 0.01;
+    vnZPos[particleIdx]      = mainZ * zBlend + gaussRand() * 0.01;
 
-    const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
     vnParamT[particleIdx]    = yNorm;
     vnVineId[particleIdx]    = 0;
     vnPhase[particleIdx]     = Math.random() * 3.0;
@@ -1758,7 +1767,17 @@ for (const si of DRIFT_SEG_INDICES) {
                     : Math.max(0.30, 0.65 - (rawT - 1.0) * 0.10);
     vnAlphas[particleIdx]    = fadeAlpha;
     vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
-    vnColorVars[particleIdx] = 0.1 + Math.random() * 0.2;
+
+    // 颜色衔接：rawT<0.3 完全用主藤渐变（顶暖金/底冷紫 + Z 偏移），0.3~1.0 平滑过渡到冷紫飘散
+    const mainGradient = 0.4 - yNorm * 0.9;
+    const zForBias = vnZPos[particleIdx];
+    const zBias = zForBias > 0.03 ? 0.15 : zForBias < -0.03 ? -0.15 : 0.0;
+    const mainColor  = mainGradient + zBias + (Math.random() - 0.5) * 0.12;
+    const driftColor = 0.1 + Math.random() * 0.2;
+    const colorBlend = rawT < 0.3 ? 0.0
+                     : rawT < 1.0 ? (rawT - 0.3) / 0.7
+                     : 1.0;
+    vnColorVars[particleIdx] = mainColor * (1 - colorBlend) + driftColor * colorBlend;
     vnDriftT[particleIdx]    = rawT;
 
     particleIdx++;
