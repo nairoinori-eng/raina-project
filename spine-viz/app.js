@@ -311,13 +311,9 @@ const spineVertexShader = /* glsl */`
   attribute float aZPos;
   attribute float aParamT;
   attribute float aSize;
-  attribute float aAlpha;       // P1 alpha
-  attribute float aAlphaP2;
-  attribute float aAlphaP3;
+  attribute vec3 aAlphaPack;    // x=P1, y=P2, z=P3
   attribute float aPhase;
-  attribute float aColorVar;    // P1 colorVar
-  attribute float aColorVarP2;
-  attribute float aColorVarP3;
+  attribute vec3 aColorVarPack; // x=P1, y=P2, z=P3
   attribute float aFormStart;
   attribute float aFormPower;
   uniform float uBlend;
@@ -342,9 +338,9 @@ const spineVertexShader = /* glsl */`
     vec3 formedPos = vec3(center.x + off.x * uBreatheExpand, center.y + off.y, aZPos);
 
     // ── Scattered position (IDLE star dust) ──
-    float sX = aPhase * 2.7 + aParamT * 13.1 + aColorVar * 7.3;
-    float sY = aPhase * 5.1 + aParamT * 3.7  + aColorVar * 11.9;
-    float sZ = aPhase * 3.9 + aParamT * 19.7 + aColorVar * 2.3;
+    float sX = aPhase * 2.7 + aParamT * 13.1 + aColorVarPack.x * 7.3;
+    float sY = aPhase * 5.1 + aParamT * 3.7  + aColorVarPack.x * 11.9;
+    float sZ = aPhase * 3.9 + aParamT * 19.7 + aColorVarPack.x * 2.3;
     float rx = fract(sin(sX * 12.9898) * 43758.5453) * 2.0 - 1.0;
     float ry = fract(sin(sY * 78.233)  * 43758.5453) * 2.0 - 1.0;
     float rz = fract(sin(sZ * 45.164)  * 43758.5453) * 2.0 - 1.0;
@@ -373,9 +369,9 @@ const spineVertexShader = /* glsl */`
     float flightVisible = smoothstep(0.05, 0.20, pFormation) * (1.0 - smoothstep(0.85, 1.0, pFormation));
     float effectiveVisible = max(idleVisible, flightVisible);
     float idleAlpha = (0.20 + fract(sZ * 2.71) * 0.32) * effectiveVisible;
-    float formedA1 = aAlpha   * (0.55 + uBreathe * 0.45);
-    float formedA2 = aAlphaP2 * (0.55 + uBreathe * 0.45);
-    float formedA3 = aAlphaP3 * (0.55 + uBreathe * 0.45);
+    float formedA1 = aAlphaPack.x * (0.55 + uBreathe * 0.45);
+    float formedA2 = aAlphaPack.y * (0.55 + uBreathe * 0.45);
+    float formedA3 = aAlphaPack.z * (0.55 + uBreathe * 0.45);
     float a1 = mix(idleAlpha, formedA1, pFormation) * uGuideAlpha;
     float a2 = mix(idleAlpha, formedA2, pFormation) * uGuideAlpha;
     float a3 = mix(idleAlpha, formedA3, pFormation) * uGuideAlpha;
@@ -383,9 +379,9 @@ const spineVertexShader = /* glsl */`
     vAlpha1 = a1;
     vAlpha2 = a2;
     vAlpha3 = a3;
-    vColorVar1 = aColorVar;
-    vColorVar2 = aColorVarP2;
-    vColorVar3 = aColorVarP3;
+    vColorVar1 = aColorVarPack.x;
+    vColorVar2 = aColorVarPack.y;
+    vColorVar3 = aColorVarPack.z;
     vParamT = aParamT;
     vIdleness = 1.0 - pFormation;
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
@@ -820,12 +816,19 @@ for (let vi = 0; vi < 13; vi++) {
 const spineGeo = new THREE.BufferGeometry();
 spineGeo.setAttribute('position',    new THREE.BufferAttribute(spPositions, 3));
 spineGeo.setAttribute('aSize',       new THREE.BufferAttribute(spSizes, 1));
-spineGeo.setAttribute('aAlpha',      new THREE.BufferAttribute(spAlphas, 1));        // P1
-spineGeo.setAttribute('aAlphaP2',    new THREE.BufferAttribute(spAlphasP2, 1));
-spineGeo.setAttribute('aAlphaP3',    new THREE.BufferAttribute(spAlphasP3, 1));
-spineGeo.setAttribute('aColorVar',   new THREE.BufferAttribute(spColorVars, 1));     // P1
-spineGeo.setAttribute('aColorVarP2', new THREE.BufferAttribute(spColorVarsP2, 1));
-spineGeo.setAttribute('aColorVarP3', new THREE.BufferAttribute(spColorVarsP3, 1));
+// Pack alpha & colorVar P1/P2/P3 into vec3 attributes (WebGL1 limit ≤16 attributes)
+const spAlphaPack    = new Float32Array(N_SPINE * 3);
+const spColorVarPack = new Float32Array(N_SPINE * 3);
+for (let i = 0; i < N_SPINE; i++) {
+  spAlphaPack[i * 3]     = spAlphas[i];
+  spAlphaPack[i * 3 + 1] = spAlphasP2[i];
+  spAlphaPack[i * 3 + 2] = spAlphasP3[i];
+  spColorVarPack[i * 3]     = spColorVars[i];
+  spColorVarPack[i * 3 + 1] = spColorVarsP2[i];
+  spColorVarPack[i * 3 + 2] = spColorVarsP3[i];
+}
+spineGeo.setAttribute('aAlphaPack',    new THREE.BufferAttribute(spAlphaPack, 3));
+spineGeo.setAttribute('aColorVarPack', new THREE.BufferAttribute(spColorVarPack, 3));
 
 // ── GPU attribute packing (Layer A + Layer B into shared arrays) ──
 const gpuCurvedPos   = new Float32Array(N_SPINE * 2);
