@@ -102,9 +102,9 @@ const CURRENT_PHASE = 2;
 //   [0] 最暗  [1] 暗  [2] 主色  [3] 主高光  [4] 极亮爆点  [5] 椎丸侧面 olive  [6] 侧边短段粉紫
 // 阶段一不用 [5]/[6]，回落到金色保持兼容
 const SPINE_PALETTE_P1 = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xB8A6D6, 0xD79A42, 0xD79A42];
-const SPINE_PALETTE_P2 = [0x182833, 0x1B536D, 0x5B4191, 0x7CAFC8, 0xE8DCC2, 0x82A85F, 0xB855B0];
+const SPINE_PALETTE_P2 = [0x182833, 0x1B536D, 0x5B4191, 0x7CAFC8, 0xE8DCC2, 0x82A85F, 0xA867A0];
 const HALO_PALETTE_P1  = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xD8D0F0, 0xD79A42, 0xD79A42];
-const HALO_PALETTE_P2  = [0x182833, 0x1B536D, 0x5B4191, 0x7CAFC8, 0xE8DCC2, 0x82A85F, 0xB855B0];
+const HALO_PALETTE_P2  = [0x182833, 0x1B536D, 0x5B4191, 0x7CAFC8, 0xE8DCC2, 0x82A85F, 0xA867A0];
 
 const ACTIVE_SPINE_PALETTE = (CURRENT_PHASE === 2 ? SPINE_PALETTE_P2 : SPINE_PALETTE_P1).map(h => new THREE.Color(h));
 const ACTIVE_HALO_PALETTE  = (CURRENT_PHASE === 2 ? HALO_PALETTE_P2  : HALO_PALETTE_P1 ).map(h => new THREE.Color(h));
@@ -562,16 +562,22 @@ for (let i = 0; i < N_BONE; i++) {
     spColorVars[i] = 0.40 + Math.random() * 0.24;
     bBaseA[i] *= 1.55;
   } else if (CURRENT_PHASE === 2) {
-    // 阶段二：侧边连续金/蓝带去掉，改成右上 + 左下 2 个短段粉紫
-    const tInRightLobe = tClamped > 0.20 && tClamped < 0.34;
-    const tInLeftLobe  = tClamped > 0.66 && tClamped < 0.80;
+    // 阶段二：右上 + 左下大段粉紫 + 外层 sin-mask 断续橄榄
+    const tInRightLobe = tClamped > 0.10 && tClamped < 0.45;
+    const tInLeftLobe  = tClamped > 0.55 && tClamped < 0.90;
     const inSidePinkLobe = !isInterior && wallRatio > 0.66 &&
       ((tInRightLobe && sideSign > 0) || (tInLeftLobe && sideSign < 0));
     const sidePink = inSidePinkLobe && Math.random() < 0.82;
-    const randomGold = !sidePink && Math.random() < 0.08;
+    // 外层 olive 细带：sin-mask 制造断断续续（4 段 patch）
+    const oliveActive = Math.sin(tClamped * 24.0 + 0.7) > 0.35;
+    const sideOlive = !sidePink && !isInterior && wallRatio > 0.86 && oliveActive && Math.random() < 0.50;
+    const randomGold = !sidePink && !sideOlive && Math.random() < 0.08;
     if (sidePink) {
       spColorVars[i] = 0.97 + Math.random() * 0.02;     // → palette[6] 粉紫
       bBaseA[i] *= 1.55;
+    } else if (sideOlive) {
+      spColorVars[i] = -0.96 + Math.random() * 0.03;    // → palette[5] olive
+      bBaseA[i] *= 1.20;
     } else if (randomGold) {
       spColorVars[i] = 0.24 + Math.random() * 0.24;
       bBaseA[i] *= 1.14;
@@ -707,8 +713,8 @@ for (let vi = 0; vi < 13; vi++) {
       // 阶段二：右侧连续金/蓝边去掉，改成右上 + 左下 2 个短 t-band 粉紫；保留 olive 点缀
       const isRightRim = !isVertFill && cosA >  VERT_OUTER * 0.34 && radialNorm > 0.68;
       const isLeftRim  = !isVertFill && cosA < -VERT_OUTER * 0.34 && radialNorm > 0.68;
-      const tInRightLobe = t > 0.20 && t < 0.34;
-      const tInLeftLobe  = t > 0.66 && t < 0.80;
+      const tInRightLobe = t > 0.10 && t < 0.45;
+      const tInLeftLobe  = t > 0.55 && t < 0.90;
       const sidePink = ((isRightRim && tInRightLobe) || (isLeftRim && tInLeftLobe)) && Math.random() < 0.82;
       const sideOlive = !sidePink && isRightRim && Math.random() < 0.10;
       const randomGold = !sidePink && !sideOlive && !(isRightRim || isLeftRim) && Math.random() < 0.08;
