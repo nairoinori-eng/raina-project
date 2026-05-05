@@ -1417,7 +1417,9 @@ const ACCENT_VINES = [
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
 // ── 分支弥散粒子流：4 条程序化路径，每条独立起点/方向/多频率 sin 弯 ──
-// 4 条 twin 完全独立，不再依赖 figma 曲线
+// figma 中原本作为 drift 的 2 段（9/12）现在彻底从主藤循环跳过（不渲染为分支），
+// 弥散云完全用下面的程序化 cfg 从主藤上长出
+const DRIFT_SEG_INDICES = [9, 12];
 const DRIFT_TWIN_CONFIGS = [
   // [startY (vine local), dirX (终点 X 偏移), dirY, f1, f2, a1, a2, phase]
   // 上右：从主藤上部右侧出发，向上右扩展，2.8/1.2 双频
@@ -1519,26 +1521,6 @@ vineData.forEach(vd => {
   vd.ppvs = vd.lengths.map(len =>
     Math.max(30, Math.round(vineTarget * len / vineLen))
   );
-});
-
-// ── 从曲线计算弥散发射点（精确位于分支尖端）──
-const driftEmitters = DRIFT_SEG_INDICES.map(si => {
-  const curve = vineData[0].curves[si];
-  const { rootAtStart } = vineData[0].topo[si];
-  const tipT = rootAtStart ? 0.998 : 0.002; // 接近端点避免边界问题
-  const tipPt = curve.getPointAt(tipT);
-  const tipTan = curve.getTangentAt(tipT);
-  // 方向：从root指向tip（向外）
-  const sign = rootAtStart ? 1 : -1;
-  const rawDx = tipTan.x * sign * VINE_X_SCALE;
-  const rawDy = tipTan.y * sign * VINE_Y_SCALE;
-  const dLen = Math.sqrt(rawDx * rawDx + rawDy * rawDy) || 1;
-  return {
-    sx: tipPt.x * VINE_X_SCALE,
-    sy: tipPt.y * VINE_Y_SCALE,
-    dx: rawDx / dLen,
-    dy: rawDy / dLen,
-  };
 });
 
 const N_VINE_TOTAL = vineData.reduce((sum, vd) =>
