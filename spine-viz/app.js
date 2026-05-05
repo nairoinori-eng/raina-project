@@ -104,10 +104,10 @@ const CURRENT_PHASE = 3;
 // 阶段一不用 [5]/[6]，回落到金色保持兼容
 const SPINE_PALETTE_P1 = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xB8A6D6, 0xD79A42, 0xD79A42];
 const SPINE_PALETTE_P2 = [0x182833, 0x1B536D, 0x3A5A95, 0x9099C8, 0xE8DCC2, 0x82A85F, 0xA867A0];
-const SPINE_PALETTE_P3 = [0x304F5F, 0x404F7C, 0x9FC4D5, 0xC19A30, 0xF0E5D0, 0x82A85F, 0xC19A30];
+const SPINE_PALETTE_P3 = [0x304F5F, 0x404F7C, 0x9FC4D5, 0xC68A3E, 0xF0E5D0, 0x82A85F, 0xC68A3E];
 const HALO_PALETTE_P1  = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xD8D0F0, 0xD79A42, 0xD79A42];
 const HALO_PALETTE_P2  = [0x182833, 0x1B536D, 0x3A5A95, 0x9099C8, 0xE8DCC2, 0x82A85F, 0xA867A0];
-const HALO_PALETTE_P3  = [0x304F5F, 0x404F7C, 0x9FC4D5, 0xC19A30, 0xF0E5D0, 0x82A85F, 0xC19A30];
+const HALO_PALETTE_P3  = [0x304F5F, 0x404F7C, 0x9FC4D5, 0xC68A3E, 0xF0E5D0, 0x82A85F, 0xC68A3E];
 
 const SPINE_PALETTES = [null, SPINE_PALETTE_P1, SPINE_PALETTE_P2, SPINE_PALETTE_P3];
 const HALO_PALETTES  = [null, HALO_PALETTE_P1,  HALO_PALETTE_P2,  HALO_PALETTE_P3];
@@ -568,20 +568,19 @@ for (let i = 0; i < N_BONE; i++) {
     spColorVars[i] = 0.40 + Math.random() * 0.24;
     bBaseA[i] *= 1.55;
   } else if (CURRENT_PHASE === 3) {
-    // 阶段三：取消 lobe；外层 sin-mask 断续描边金占整个脊柱长度，混入极少量 olive
+    // 阶段三：sin-mask 外层区强制全金/olive（不混蓝），让金色独立成团避免混色发绿
     const sinMask = Math.sin(tClamped * 24.0 + 0.7) > -0.5;
     const inOuterRim = !isInterior && wallRatio > 0.66 && sinMask;
-    const sideOlive = inOuterRim && Math.random() < 0.10;       // 极少量 olive
-    const sideGold = !sideOlive && inOuterRim && Math.random() < 0.88;
-    const randomGold = !sideOlive && !sideGold && Math.random() < 0.08;
-    if (sideOlive) {
-      spColorVars[i] = -0.96 + Math.random() * 0.03;            // → palette[5] olive
-      bBaseA[i] *= 1.30;
-    } else if (sideGold) {
-      spColorVars[i] = 0.97 + Math.random() * 0.02;             // → palette[6] 描边金
-      bBaseA[i] *= 1.45;
-    } else if (randomGold) {
-      spColorVars[i] = 0.24 + Math.random() * 0.24;             // → palette[3] 普通高光金
+    if (inOuterRim) {
+      if (Math.random() < 0.10) {
+        spColorVars[i] = -0.96 + Math.random() * 0.03;          // → palette[5] olive
+        bBaseA[i] *= 1.30;
+      } else {
+        spColorVars[i] = 0.97 + Math.random() * 0.02;           // → palette[6] 描边金
+        bBaseA[i] *= 1.45;
+      }
+    } else if (Math.random() < 0.08) {
+      spColorVars[i] = 0.24 + Math.random() * 0.24;             // → palette[3] 普通高光金（散布）
       bBaseA[i] *= 1.14;
     } else {
       spColorVars[i] = (1 - zDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.08;
@@ -735,20 +734,19 @@ for (let vi = 0; vi < 13; vi++) {
       spColorVars[gi] = 0.42 + Math.random() * 0.22;
       spAlphas[gi] *= 1.9;
     } else if (CURRENT_PHASE === 3) {
-      // 阶段三：椎丸最凸起处不规则金团（角度噪声制造不规则形状），混入极少量 olive
+      // 阶段三：椎丸 outer ring + 角度通过区强制全金/olive（不混蓝），独立成团
       const angleNoise = Math.sin(vAngle * 3.5 + vi * 1.7) > -0.6;
       const isOuterRing = !isVertFill && radialNorm > 0.66;
-      const protrusionGold = isOuterRing && angleNoise && Math.random() < 0.85;
-      const tinyOlive = !protrusionGold && isOuterRing && Math.random() < 0.06;
-      const randomGold = !protrusionGold && !tinyOlive && !isOuterRing && Math.random() < 0.06;
-      if (protrusionGold) {
-        spColorVars[gi] = 0.97 + Math.random() * 0.02;        // → palette[6] 凸起金
-        spAlphas[gi] *= 1.65;
-      } else if (tinyOlive) {
-        spColorVars[gi] = -0.96 + Math.random() * 0.03;       // → palette[5] olive
-        spAlphas[gi] *= 1.18;
-      } else if (randomGold) {
-        spColorVars[gi] = 0.24 + Math.random() * 0.24;
+      if (isOuterRing && angleNoise) {
+        if (Math.random() < 0.06) {
+          spColorVars[gi] = -0.96 + Math.random() * 0.03;     // → palette[5] olive
+          spAlphas[gi] *= 1.18;
+        } else {
+          spColorVars[gi] = 0.97 + Math.random() * 0.02;      // → palette[6] 凸起金
+          spAlphas[gi] *= 1.55;
+        }
+      } else if (Math.random() < 0.06) {
+        spColorVars[gi] = 0.24 + Math.random() * 0.24;        // → palette[3] 普通高光金
         spAlphas[gi] *= 1.16;
       } else {
         spColorVars[gi] = (1 - vzDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.07;
