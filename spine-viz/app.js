@@ -96,18 +96,24 @@ const AC2_GOLD = new THREE.Color(0x2D3050);  // 深靛蓝（accent2 暗部）
 // ── 阶段色板开关（B 方案）：改 CURRENT_PHASE 切阶段 ──────────────
 // 1 = Indigo × Amber（紫×金）
 // 2 = Sea Blue × Lavender（海蓝×薰衣草）
-const CURRENT_PHASE = 2;
+// 3 = Saffron × Glacier（藏红花金×冰川蓝）
+const CURRENT_PHASE = 3;
 
 // 7 色 palette：
 //   [0] 最暗  [1] 暗  [2] 主色  [3] 主高光  [4] 极亮爆点  [5] 椎丸侧面 olive  [6] 侧边短段粉紫
 // 阶段一不用 [5]/[6]，回落到金色保持兼容
 const SPINE_PALETTE_P1 = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xB8A6D6, 0xD79A42, 0xD79A42];
 const SPINE_PALETTE_P2 = [0x182833, 0x1B536D, 0x3A5A95, 0x9099C8, 0xE8DCC2, 0x82A85F, 0xA867A0];
+const SPINE_PALETTE_P3 = [0x304F5F, 0x404F7C, 0x9FC4D5, 0xC68A3E, 0xF0E5D0, 0x82A85F, 0xC68A3E];
 const HALO_PALETTE_P1  = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xD8D0F0, 0xD79A42, 0xD79A42];
 const HALO_PALETTE_P2  = [0x182833, 0x1B536D, 0x3A5A95, 0x9099C8, 0xE8DCC2, 0x82A85F, 0xA867A0];
+const HALO_PALETTE_P3  = [0x304F5F, 0x404F7C, 0x9FC4D5, 0xC68A3E, 0xF0E5D0, 0x82A85F, 0xC68A3E];
 
-const ACTIVE_SPINE_PALETTE = (CURRENT_PHASE === 2 ? SPINE_PALETTE_P2 : SPINE_PALETTE_P1).map(h => new THREE.Color(h));
-const ACTIVE_HALO_PALETTE  = (CURRENT_PHASE === 2 ? HALO_PALETTE_P2  : HALO_PALETTE_P1 ).map(h => new THREE.Color(h));
+const SPINE_PALETTES = [null, SPINE_PALETTE_P1, SPINE_PALETTE_P2, SPINE_PALETTE_P3];
+const HALO_PALETTES  = [null, HALO_PALETTE_P1,  HALO_PALETTE_P2,  HALO_PALETTE_P3];
+
+const ACTIVE_SPINE_PALETTE = (SPINE_PALETTES[CURRENT_PHASE] || SPINE_PALETTE_P1).map(h => new THREE.Color(h));
+const ACTIVE_HALO_PALETTE  = (HALO_PALETTES[CURRENT_PHASE]  || HALO_PALETTE_P1 ).map(h => new THREE.Color(h));
 
 
 // ============================================================
@@ -561,6 +567,25 @@ for (let i = 0; i < N_BONE; i++) {
     // 高光粒子（收窄区间，多数落 palette[3] 金，极少 palette[4] 白）
     spColorVars[i] = 0.40 + Math.random() * 0.24;
     bBaseA[i] *= 1.55;
+  } else if (CURRENT_PHASE === 3) {
+    // 阶段三：取消 lobe；外层 sin-mask 断续描边金占整个脊柱长度，混入极少量 olive
+    const sinMask = Math.sin(tClamped * 24.0 + 0.7) > 0.05;
+    const inOuterRim = !isInterior && wallRatio > 0.78 && sinMask;
+    const sideOlive = inOuterRim && Math.random() < 0.10;       // 极少量 olive
+    const sideGold = !sideOlive && inOuterRim && Math.random() < 0.65;
+    const randomGold = !sideOlive && !sideGold && Math.random() < 0.08;
+    if (sideOlive) {
+      spColorVars[i] = -0.96 + Math.random() * 0.03;            // → palette[5] olive
+      bBaseA[i] *= 1.30;
+    } else if (sideGold) {
+      spColorVars[i] = 0.97 + Math.random() * 0.02;             // → palette[6] 描边金
+      bBaseA[i] *= 1.45;
+    } else if (randomGold) {
+      spColorVars[i] = 0.24 + Math.random() * 0.24;             // → palette[3] 普通高光金
+      bBaseA[i] *= 1.14;
+    } else {
+      spColorVars[i] = (1 - zDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.08;
+    }
   } else if (CURRENT_PHASE === 2) {
     // 阶段二：右上 + 左下大段粉紫 + 外层 sin-mask 断续橄榄
     const tInRightLobe = tClamped > 0.10 && tClamped < 0.45;
@@ -709,6 +734,25 @@ for (let vi = 0; vi < 13; vi++) {
     } else if (vacRoll < 0.205) {
       spColorVars[gi] = 0.42 + Math.random() * 0.22;
       spAlphas[gi] *= 1.9;
+    } else if (CURRENT_PHASE === 3) {
+      // 阶段三：椎丸最凸起处不规则金团（角度噪声制造不规则形状），混入极少量 olive
+      const angleNoise = Math.sin(vAngle * 3.5 + vi * 1.7) > -0.2;
+      const isOuterRing = !isVertFill && radialNorm > 0.78;
+      const protrusionGold = isOuterRing && angleNoise && Math.random() < 0.62;
+      const tinyOlive = !protrusionGold && isOuterRing && Math.random() < 0.06;
+      const randomGold = !protrusionGold && !tinyOlive && !isOuterRing && Math.random() < 0.06;
+      if (protrusionGold) {
+        spColorVars[gi] = 0.97 + Math.random() * 0.02;        // → palette[6] 凸起金
+        spAlphas[gi] *= 1.45;
+      } else if (tinyOlive) {
+        spColorVars[gi] = -0.96 + Math.random() * 0.03;       // → palette[5] olive
+        spAlphas[gi] *= 1.18;
+      } else if (randomGold) {
+        spColorVars[gi] = 0.24 + Math.random() * 0.24;
+        spAlphas[gi] *= 1.16;
+      } else {
+        spColorVars[gi] = (1 - vzDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.07;
+      }
     } else if (CURRENT_PHASE === 2) {
       // 阶段二：右侧连续金/蓝边去掉，改成右上 + 左下 2 个短 t-band 粉紫；保留 olive 点缀
       const isRightRim = !isVertFill && cosA >  VERT_OUTER * 0.34 && radialNorm > 0.68;
