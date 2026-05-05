@@ -163,14 +163,14 @@ function gaussian01(x, center, width) {
 }
 
 function spineGoldLobeWeight(t, worldX) {
-  const topRight = gaussian01(t, 0.20, 0.14) * smoothstep(0.02, 0.32, worldX);
-  const lowerLeft = gaussian01(t, 0.76, 0.16) * smoothstep(-0.02, -0.34, worldX);
+  const topRight = gaussian01(t, 0.055, 0.075) * smoothstep(0.00, 0.24, worldX);
+  const lowerLeft = gaussian01(t, 0.925, 0.085) * smoothstep(0.00, -0.26, worldX);
   return Math.max(topRight, lowerLeft);
 }
 
 function boostSpineGoldAndSparkle(colorVars, sizes, alphas, i, t, worldX) {
   const lobe = spineGoldLobeWeight(t, worldX);
-  const inGoldLobe = lobe > 0.05 && Math.random() < 0.34 * lobe;
+  const inGoldLobe = lobe > 0.05 && Math.random() < 0.46 * lobe;
   const rareSparkle = Math.random() < 0.0012 + lobe * 0.006;
 
   if (inGoldLobe) {
@@ -520,13 +520,13 @@ for (let i = 0; i < N_BONE; i++) {
     // 冷撞色
     spColorVars[i] = -(0.50 + Math.random() * 0.35);
     bBaseA[i] *= 1.6;
-  } else if (acRoll < 0.17) {
+  } else if (acRoll < 0.205) {
     // 高光粒子
     spColorVars[i] = 0.45 + Math.random() * 0.35;
-    bBaseA[i] *= 1.25;
+    bBaseA[i] *= 1.32;
   } else {
-    // 普通粒子：主体回到紫色，减少原结构里铺满的金色
-    spColorVars[i] = (1 - zDepth) * 0.20 - 0.02 + (Math.random() - 0.5) * 0.08;
+    // 普通粒子：紫色主体 + 一层浅紫亮灰面，少量进入金色高光
+    spColorVars[i] = (1 - zDepth) * 0.30 - 0.04 + (Math.random() - 0.5) * 0.08;
   }
   boostSpineGoldAndSparkle(spColorVars, bBaseS, bBaseA, i, tClamped, cpx + bOffCurvedX[i]);
   spPositions[i*3]   = cpx + bOffCurvedX[i];
@@ -639,11 +639,11 @@ for (let vi = 0; vi < 13; vi++) {
     } else if (vacRoll < 0.06) {
       spColorVars[gi] = -(0.55 + Math.random() * 0.30);
       spAlphas[gi] *= 2.2;
-    } else if (vacRoll < 0.09) {
+    } else if (vacRoll < 0.115) {
       spColorVars[gi] = 0.5 + Math.random() * 0.3;
-      spAlphas[gi] *= 1.45;
+      spAlphas[gi] *= 1.55;
     } else {
-      spColorVars[gi] = (1 - vzDepth) * 0.20 - 0.02 + (Math.random() - 0.5) * 0.07;
+      spColorVars[gi] = (1 - vzDepth) * 0.30 - 0.04 + (Math.random() - 0.5) * 0.07;
     }
     boostSpineGoldAndSparkle(spColorVars, spSizes, spAlphas, gi, t, cx + vOffCurvedX[idx]);
   }
@@ -726,7 +726,7 @@ const spineMat = new THREE.ShaderMaterial({
     uPalette:           { value: [
       new THREE.Color(0x1F2554),  // [0] 4% 暗部（亮一档）
       new THREE.Color(0x3D4382),  // [1] 9% 深紫（亮一档）
-      new THREE.Color(0x5C4A85),  // [2] 50% 中紫主色
+      new THREE.Color(0x7A6EA8),  // [2] 浅紫亮灰面（椎丸隆起主体）
       new THREE.Color(0xB98B58),  // [3] 30% 金色高光
       new THREE.Color(0xC5B8DA),  // [4] 6% 浅紫偏白（椎丸隆起最亮处）
     ] },
@@ -1083,8 +1083,8 @@ for (let i = 0; i < N_SPINE_HALO; i++) {
   const tan = curveCurved.getTangent(t);
   const nx = -tan.y;
   const ny = tan.x;
-  const topBias = gaussian01(t, 0.20, 0.14);
-  const lowerBias = gaussian01(t, 0.76, 0.16);
+  const topBias = gaussian01(t, 0.055, 0.075);
+  const lowerBias = gaussian01(t, 0.925, 0.085);
   let side = Math.random() < 0.5 ? 1 : -1;
   if (Math.random() < topBias * 0.55) side = 1;
   if (Math.random() < lowerBias * 0.55) side = -1;
@@ -1107,26 +1107,26 @@ for (let i = 0; i < N_SPINE_HALO; i++) {
 
   const lobe = spineGoldLobeWeight(t, curvedX);
   const roll = Math.random();
-  if (lobe > 0.12 && roll < 0.68) {
-    haloColorVars[i] = 0.32 + Math.random() * 0.22;   // 金色尘雾
-    haloAlphas[i] = (0.075 + Math.random() * 0.11) * (1.0 + lobe * 1.05);
+  if (roll < 0.10) {
+    haloColorVars[i] = 0.30 + Math.random() * 0.24;   // 随机金粉，不跟集中高光成片绑定
+    haloAlphas[i] = (0.064 + Math.random() * 0.090) * (1.0 + lobe * 0.55);
     haloSizes[i] = 0.014 + Math.random() * 0.030;
-  } else if (roll < 0.05) {
+  } else if (roll < 0.16) {
     haloColorVars[i] = 0.70 + Math.random() * 0.18;   // 极少量浅紫白爆点
-    haloAlphas[i] = 0.10 + Math.random() * 0.15;
+    haloAlphas[i] = (0.10 + Math.random() * 0.15) * (1.0 + lobe * 0.25);
     haloSizes[i] = 0.038 + Math.random() * 0.044;
-  } else if (roll < 0.74) {
+  } else if (roll < 0.78) {
     haloColorVars[i] = -0.05 + Math.random() * 0.20;  // 中紫主体
-    haloAlphas[i] = 0.032 + Math.random() * 0.055;
+    haloAlphas[i] = (0.040 + Math.random() * 0.065) * (1.0 + lobe * 0.30);
     haloSizes[i] = 0.010 + Math.random() * 0.022;
-  } else if (roll < 0.92) {
+  } else if (roll < 0.94) {
     haloColorVars[i] = -0.45 - Math.random() * 0.25;  // 深紫暗粉
-    haloAlphas[i] = 0.022 + Math.random() * 0.038;
+    haloAlphas[i] = (0.030 + Math.random() * 0.044) * (1.0 + lobe * 0.20);
     haloSizes[i] = 0.009 + Math.random() * 0.020;
   } else {
-    haloColorVars[i] = 0.30 + Math.random() * 0.22;   // 散落金粉
-    haloAlphas[i] = 0.048 + Math.random() * 0.075;
-    haloSizes[i] = 0.012 + Math.random() * 0.026;
+    haloColorVars[i] = 0.16 + Math.random() * 0.18;   // 浅紫亮灰尘雾
+    haloAlphas[i] = (0.045 + Math.random() * 0.060) * (1.0 + lobe * 0.25);
+    haloSizes[i] = 0.011 + Math.random() * 0.024;
   }
   haloPhases[i] = Math.random() * Math.PI * 2;
 }
@@ -1195,7 +1195,7 @@ const spineHaloMat = new THREE.ShaderMaterial({
     uPalette:    { value: [
       new THREE.Color(0x1F2554),
       new THREE.Color(0x3D4382),
-      new THREE.Color(0x5C4A85),
+      new THREE.Color(0x7A6EA8),
       new THREE.Color(0xB98B58),
       new THREE.Color(0xF0E8FF),
     ] },
