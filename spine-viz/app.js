@@ -1416,15 +1416,22 @@ const ACCENT_VINES = [
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
-// ── 分支尖端弥散粒子（4 条孪生路径 + 阶段递增可见 + 时间驱动流动）──
-const DRIFT_SEG_INDICES = [9, 12];
-const TWIN_OFFSETS_VINE = [-0.030, 0.030]; // 适中的孪生基准偏移
-const DRIFT_TWINS = DRIFT_SEG_INDICES.length * TWIN_OFFSETS_VINE.length;
-const DRIFT_PPV = 12000;       // 12k/twin × 4 = 48k 总
+// ── 分支弥散粒子流：4 条程序化路径，每条独立起点/方向/多频率 sin 弯 ──
+// 4 条 twin 完全独立，不再依赖 figma 曲线
+const DRIFT_TWIN_CONFIGS = [
+  // [startY (vine local), dirX (终点 X 偏移), dirY, f1, f2, a1, a2, phase]
+  // 上右：从主藤上部右侧出发，向上右扩展，2.8/1.2 双频
+  { startY:  0.50, dirX:  0.55, dirY:  0.45, f1: 2.8, f2: 1.2, a1: 0.10, a2: 0.06, phase: 0.0 },
+  // 中右：从中上部右侧，朝右出发横扫
+  { startY: -0.10, dirX:  0.70, dirY:  0.20, f1: 1.9, f2: 1.6, a1: 0.07, a2: 0.10, phase: 1.7 },
+  // 中左：从中下部左侧，朝左略上
+  { startY: -0.70, dirX: -0.65, dirY:  0.10, f1: 2.4, f2: 0.9, a1: 0.08, a2: 0.05, phase: 3.0 },
+  // 下左：从下部左侧，朝左下走
+  { startY: -1.50, dirX: -0.55, dirY: -0.30, f1: 1.6, f2: 1.7, a1: 0.06, a2: 0.09, phase: 4.5 },
+];
+const DRIFT_TWINS = DRIFT_TWIN_CONFIGS.length;
+const DRIFT_PPV = 12000;
 const DRIFT_TOTAL = DRIFT_TWINS * DRIFT_PPV;
-// 每条 twin 不同频率 + 振幅，避免同侧两条形态雷同
-const TWIN_FREQS = [1.1, 1.7, 1.3, 0.9];
-const TWIN_AMPS  = [0.030, 0.022, 0.026, 0.034];
 
 // ── 藤蔓拓扑分析（自动检测主干/分支/末梢）──
 function vineKey(pt) {
@@ -1696,130 +1703,112 @@ ACCENT_VINES.forEach((accent, accentIdx) => {
   }
 });
 
-// ── 分支弥散（4 条孪生路径，阶段递增可见，时间驱动流动）──
-let twinIdx = 0;
-for (const si of DRIFT_SEG_INDICES) {
-  const curve = vineData[0].curves[si];
-  const { rootAtStart } = vineData[0].topo[si];
-  const tipT = rootAtStart ? 0.998 : 0.002;
-  const tipPt = curve.getPointAt(tipT);
-  const tipTan = curve.getTangentAt(tipT);
-  const outSign = rootAtStart ? 1 : -1;
-  const tipWorldX = tipPt.x * VINE_X_SCALE;
-  const sideBias = tipWorldX > 0 ? 1.0 : -1.0;
+// ── 4 条程序化弥散路径（每条独立起点 Y、方向、多频率 sin 弯）──
+// 给定 cfg 和 t (0~1)，返回中心轨迹位置和近似切线
+function getDriftPath(cfg, t) {
+  // 主线性轨迹：从 (0, startY) 走到 (dirX, startY+dirY)
+  const lx = cfg.dirX * t;
+  const ly = cfg.startY + cfg.dirY * t;
+  // 多频率正弦垂直波动（envelope sin(πt) 让两端振幅渐隐）
+  const env = Math.sin(t * Math.PI);
+  const w1 = Math.sin(t * Math.PI * 2 * cfg.f1 + cfg.phase) * cfg.a1 * env;
+  const w2 = Math.sin(t * Math.PI * 2 * cfg.f2 + cfg.phase + 1.0) * cfg.a2 * env;
+  const wave = w1 + w2 * 0.7;
+  // 波动方向：垂直于线性方向
+  const dlen = Math.sqrt(cfg.dirX * cfg.dirX + cfg.dirY * cfg.dirY) + 1e-6;
+  const px_n = -cfg.dirY / dlen;
+  const py_n =  cfg.dirX / dlen;
+  return {
+    x: lx + wave * px_n,
+    y: ly + wave * py_n,
+  };
+}
 
-  for (const twinXOff of TWIN_OFFSETS_VINE) {
-    const myTwinIdx = twinIdx;
+for (let myTwinIdx = 0; myTwinIdx < DRIFT_TWINS; myTwinIdx++) {
+  const cfg = DRIFT_TWIN_CONFIGS[myTwinIdx];
 
-    for (let p = 0; p < DRIFT_PPV; p++) {
-      // rawT 0~5：0 = 主藤交汇点, 1 = 曲线尖端, 1~5 = 超出尖端飘散
-      const rawT = (p / (DRIFT_PPV - 1)) * 5.0;
+  for (let p = 0; p < DRIFT_PPV; p++) {
+    // t: 0~1 沿程序化路径
+    const t = p / (DRIFT_PPV - 1);
 
-      // 中心轨迹位置 + 切线
-      let px, py, tanX, tanY;
-      if (rawT <= 1.0) {
-        const ct = rootAtStart
-          ? Math.max(0.002, Math.min(0.998, rawT))
-          : Math.max(0.002, Math.min(0.998, 1.0 - rawT));
-        const cp = curve.getPointAt(ct);
-        const ctan = curve.getTangentAt(ct);
-        px = cp.x; py = cp.y;
-        tanX = ctan.x * outSign; tanY = ctan.y * outSign;
-      } else {
-        const beyond = rawT - 1.0;
-        const forwardDrift = beyond * 0.4;
-        const lateralDrift = (beyond * 0.30 + beyond * beyond * 0.10) * sideBias;
-        const baseX = tipPt.x + tipTan.x * outSign * forwardDrift + lateralDrift;
-        const baseY = tipPt.y + tipTan.y * outSign * forwardDrift;
-        const waveAmp = beyond * 0.10;
-        const wave = Math.sin(beyond * 2.5 + si * 2.5);
-        px = baseX;
-        py = baseY + wave * waveAmp;
-        tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
-      }
+    // 中心位置 + 切线（数值微分）
+    const here = getDriftPath(cfg, t);
+    const next = getDriftPath(cfg, Math.min(1, t + 0.005));
+    const tanX = next.x - here.x;
+    const tanY = next.y - here.y;
+    const tanLen = Math.sqrt(tanX * tanX + tanY * tanY) + 1e-6;
+    const tanNX = tanX / tanLen;
+    const tanNY = tanY / tanLen;
 
-      // 孪生 X/Y 偏移 + 每条路径独立频率/振幅的正弦摇摆 → 4 条形态完全独立
-      // ramp 因子保证 rawT=0 起点严格在主藤交汇点（不悬空）
-      const twinPhase = myTwinIdx * 1.7;
-      const twinFreq = TWIN_FREQS[myTwinIdx];
-      const twinAmp = TWIN_AMPS[myTwinIdx];
-      const startRamp = 1.0 - Math.exp(-rawT * 3.0); // 0 at rawT=0, ~1 at rawT > 1
-      const twinSwayX = twinAmp * Math.sin(rawT * twinFreq + twinPhase) * startRamp;
-      const twinSwayY = twinAmp * 0.7 * Math.sin(rawT * (twinFreq * 0.85) + twinPhase + 1.3) * startRamp;
-      px += (twinXOff * startRamp) + twinSwayX;
-      py += twinSwayY;
+    const px = here.x;
+    const py = here.y;
 
-      // 云团宽度（紧凑型，让粒子聚拢成形态分明的丝线，P2/P3 通过 visibility 扩展）
-      const spreadWidth = rawT < 1.0
-        ? 0.008 + rawT * 0.006                // 0.008 → 0.014
-        : rawT < 2.5
-          ? 0.014 + (rawT - 1.0) * 0.008      // 0.014 → 0.026
-          : 0.026 + (rawT - 2.5) * 0.004;     // 远端 → 0.036
+    // 云团宽度：根紧凑，远端弥散
+    const spreadWidth = t < 0.2
+      ? 0.008 + t * 0.030               // 0.008 → 0.014
+      : t < 0.6
+        ? 0.014 + (t - 0.2) * 0.030     // 0.014 → 0.026
+        : 0.026 + (t - 0.6) * 0.025;    // 远端 → 0.036
 
-      // 3D 圆锥扩散：visibility 决定径向距离（核心粒子小 spread / 外围粒子大 spread）
-      // 这样 P1 只看到核心丝线（紧凑），P3 看到外围 + 核心融合的雾管
-      const visibility = Math.random();           // 0~1 uniform
-      const spreadScale = 0.25 + visibility * 1.85; // 0.25× ~ 2.10× spread
-      const perpX = -tanY, perpY = tanX;
-      const radInPerp = gaussRand() * spreadWidth * spreadScale;
-      const radInZ    = gaussRand() * spreadWidth * spreadScale;
-      const radial    = Math.sqrt(radInPerp * radInPerp + radInZ * radInZ);
+    // visibility 0~1 决定径向距离（核心粒子小 spread / 外围粒子大 spread）
+    const visibility = Math.random();
+    const spreadScale = 0.25 + visibility * 1.85;
+    const perpX = -tanNY, perpY = tanNX;
+    const radInPerp = gaussRand() * spreadWidth * spreadScale;
+    const radInZ    = gaussRand() * spreadWidth * spreadScale;
 
-      const sx = px * VINE_X_SCALE + perpX * radInPerp;
-      const sy = py * VINE_Y_SCALE + perpY * radInPerp;
-      const spineX = getSpineXAtY(sy);
+    const sx = px * VINE_X_SCALE + perpX * radInPerp;
+    const sy = py * VINE_Y_SCALE + perpY * radInPerp;
+    const spineX = getSpineXAtY(sy);
 
-      const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
+    const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
 
-      // Z 衔接
-      const wrapR = 0.10;
-      const mainZ = Math.sin(yNorm * Math.PI * 2 * 2.5) * wrapR;
-      const zBlend = Math.exp(-rawT * 1.5);
+    // Z：起点锚到主藤 sin 缠绕，指数衰减
+    const wrapR = 0.10;
+    const mainZ = Math.sin(yNorm * Math.PI * 2 * 2.5) * wrapR;
+    const zBlend = Math.exp(-t * 6.0);
 
-      vnCurvedX[particleIdx]   = sx + spineX;
-      vnCurvedY[particleIdx]   = sy;
-      vnStraightX[particleIdx] = sx;
-      vnStraightY[particleIdx] = sy;
-      vnZPos[particleIdx]      = mainZ * zBlend + radInZ + gaussRand() * 0.005;
+    vnCurvedX[particleIdx]   = sx + spineX;
+    vnCurvedY[particleIdx]   = sy;
+    vnStraightX[particleIdx] = sx;
+    vnStraightY[particleIdx] = sy;
+    vnZPos[particleIdx]      = mainZ * zBlend + radInZ + gaussRand() * 0.005;
 
-      vnParamT[particleIdx]    = yNorm;
-      vnVineId[particleIdx]    = 0;
-      vnPhase[particleIdx]     = Math.random() * 3.0;
+    vnParamT[particleIdx]    = yNorm;
+    vnVineId[particleIdx]    = 0;
+    vnPhase[particleIdx]     = Math.random() * 3.0;
 
-      // 两端 alpha 软淡入淡出
-      const fadeAlpha = rawT < 0.4 ? rawT * 1.5
-                      : rawT < 2.0 ? 0.60 - (rawT - 0.4) * 0.06
-                      : Math.max(0, 0.50 - (rawT - 2.0) * 0.167);
-      vnAlphas[particleIdx]    = fadeAlpha;
-      vnSizes[particleIdx]     = 0.040 + Math.random() * 0.014;
+    // 两端 alpha 软淡入淡出
+    const fadeAlpha = t < 0.10 ? t * 6.0                            // 0 → 0.60
+                    : t < 0.85 ? 0.60 - (t - 0.10) * 0.10           // 0.60 → 0.525
+                    : Math.max(0, 0.525 - (t - 0.85) * 3.5);        // → 0
+    vnAlphas[particleIdx]    = fadeAlpha;
+    vnSizes[particleIdx]     = 0.040 + Math.random() * 0.014;
 
-      // 颜色衔接
-      const mainGradient = 0.4 - yNorm * 0.9;
-      const zForBias = vnZPos[particleIdx];
-      const zBias = zForBias > 0.03 ? 0.15 : zForBias < -0.03 ? -0.15 : 0.0;
-      const mainColor  = mainGradient + zBias + (Math.random() - 0.5) * 0.12;
-      const driftColor = 0.1 + Math.random() * 0.2;
-      const colorBlend = Math.min(1.0, rawT * 0.7);
-      vnColorVars[particleIdx] = mainColor * (1 - colorBlend) + driftColor * colorBlend;
-      vnDriftT[particleIdx]    = rawT;
+    // 颜色：根部继承主藤渐变 → 远端冷紫飘散
+    const mainGradient = 0.4 - yNorm * 0.9;
+    const zForBias = vnZPos[particleIdx];
+    const zBias = zForBias > 0.03 ? 0.15 : zForBias < -0.03 ? -0.15 : 0.0;
+    const mainColor  = mainGradient + zBias + (Math.random() - 0.5) * 0.12;
+    const driftColor = 0.1 + Math.random() * 0.2;
+    const colorBlend = Math.min(1.0, t * 1.5);
+    vnColorVars[particleIdx] = mainColor * (1 - colorBlend) + driftColor * colorBlend;
+    vnDriftT[particleIdx]    = t;
 
-      // drift meta：visibility 已在上面 uniform 0~1 烘焙，对应 spread 大小（核心 P1 可见 / 外围 P3 才可见）
-      const speedOffset = Math.random();
-      vnDriftMeta[particleIdx * 4]     = myTwinIdx;
-      vnDriftMeta[particleIdx * 4 + 1] = visibility;
-      vnDriftMeta[particleIdx * 4 + 2] = speedOffset;
-      vnDriftMeta[particleIdx * 4 + 3] = 0;
+    // drift meta：(twinIdx, visibility, speedOffset, _)
+    const speedOffset = Math.random();
+    vnDriftMeta[particleIdx * 4]     = myTwinIdx;
+    vnDriftMeta[particleIdx * 4 + 1] = visibility;
+    vnDriftMeta[particleIdx * 4 + 2] = speedOffset;
+    vnDriftMeta[particleIdx * 4 + 3] = 0;
 
-      // 流动速度：沿本地切线方向，幅度 ≈ 0.05 vine local
-      // 时间驱动循环 0~1，粒子沿轨迹滑动一段，然后渐隐重置
-      const flowMag = 0.05;
-      vnVelocity[particleIdx * 3]     = tanX * flowMag * VINE_X_SCALE;
-      vnVelocity[particleIdx * 3 + 1] = tanY * flowMag * VINE_Y_SCALE;
-      vnVelocity[particleIdx * 3 + 2] = 0;
+    // 流动速度：沿本地切线方向，幅度小（短距离循环 + 异步起点 = 流动感）
+    const flowMag = 0.04;
+    vnVelocity[particleIdx * 3]     = tanNX * flowMag * VINE_X_SCALE;
+    vnVelocity[particleIdx * 3 + 1] = tanNY * flowMag * VINE_Y_SCALE;
+    vnVelocity[particleIdx * 3 + 2] = 0;
 
-      particleIdx++;
-    }
-    twinIdx++;
+    particleIdx++;
   }
 }
 
