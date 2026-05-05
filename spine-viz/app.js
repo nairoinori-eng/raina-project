@@ -201,25 +201,21 @@ const vertexShader = /* glsl */`
 `;
 
 const fragmentShader = /* glsl */`
-  uniform vec3 uColor;
-  uniform vec3 uHighlight;
-  uniform vec3 uAccent1;
-  uniform vec3 uAccent2;
-  uniform float uAlphaBoost; // 高清模式亮度补偿
+  uniform vec3 uPalette[5];        // 5 个色板色（每个 mat 自己赋值）
+  uniform float uAlphaBoost;
   varying float vAlpha;
   varying float vColorVar;
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
+    // 按 vColorVar 区间直接选纯色（不 mix），让每组粒子显示明确颜色
     vec3 c;
-    if (vColorVar > 0.0) {
-      c = mix(uColor, uHighlight, clamp(vColorVar, 0.0, 1.0));
-    } else if (vColorVar > -0.5) {
-      c = mix(uColor, uAccent1, clamp(-vColorVar * 2.0, 0.0, 1.0));
-    } else {
-      c = mix(uColor, uAccent2, clamp((-vColorVar - 0.5) * 2.0, 0.0, 1.0));
-    }
-    c = clamp(c, 0.0, 0.88);
+    if      (vColorVar < -0.6) c = uPalette[0];
+    else if (vColorVar < -0.2) c = uPalette[1];
+    else if (vColorVar <  0.2) c = uPalette[2];
+    else if (vColorVar <  0.6) c = uPalette[3];
+    else                       c = uPalette[4];
+    c = clamp(c, 0.0, 0.95);
     float core  = exp(-d * d * 24.0);
     float halo  = exp(-d * d * 10.0) * 0.12;
     float alpha = (core + halo) * vAlpha * uAlphaBoost;
@@ -304,10 +300,7 @@ const spineVertexShader = /* glsl */`
 
 // Spine-specific fragment shader with segment highlighting support
 const spineFragmentShader = /* glsl */`
-  uniform vec3 uColor;
-  uniform vec3 uHighlight;
-  uniform vec3 uAccent1;
-  uniform vec3 uAccent2;
+  uniform vec3 uPalette[5];         // 5 个色板色（暗/暗-灰/灰/灰-高光/高光）
   uniform float uSegmentHighlight;  // 0 = normal, 1 = 凸起侧暖白光晕 + 凹陷侧暗化
   uniform float uAlphaBoost; // 高清模式亮度补偿
   varying float vAlpha;
@@ -317,15 +310,14 @@ const spineFragmentShader = /* glsl */`
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
+    // 按 vColorVar 区间直接选纯色（不 mix）
     vec3 c;
-    if (vColorVar > 0.0) {
-      c = mix(uColor, uHighlight, clamp(vColorVar, 0.0, 1.0));
-    } else if (vColorVar > -0.5) {
-      c = mix(uColor, uAccent1, clamp(-vColorVar * 2.0, 0.0, 1.0));
-    } else {
-      c = mix(uColor, uAccent2, clamp((-vColorVar - 0.5) * 2.0, 0.0, 1.0));
-    }
-    c = clamp(c, 0.0, 0.88);
+    if      (vColorVar < -0.6) c = uPalette[0];
+    else if (vColorVar < -0.2) c = uPalette[1];
+    else if (vColorVar <  0.2) c = uPalette[2];
+    else if (vColorVar <  0.6) c = uPalette[3];
+    else                       c = uPalette[4];
+    c = clamp(c, 0.0, 0.95);
     if (uSegmentHighlight > 0.0) {
       float thorZone = smoothstep(0.12, 0.28, vParamT)
                      * (1.0 - smoothstep(0.38, 0.52, vParamT));
@@ -697,6 +689,13 @@ spineGeo.setAttribute('aFormPower', new THREE.BufferAttribute(gpuFormPower, 1));
 const spineMat = new THREE.ShaderMaterial({
   vertexShader: spineVertexShader, fragmentShader: spineFragmentShader,
   uniforms: {
+    uPalette:           { value: [
+      new THREE.Color(0x11193A),  // [0] 暗部
+      new THREE.Color(0x11193A),  // [1] 暗-灰
+      new THREE.Color(0x42306D),  // [2] 灰面
+      new THREE.Color(0x42306D),  // [3] 灰-高光
+      new THREE.Color(0xB98B58),  // [4] 高光
+    ] },
     uColor:             { value: COLOR_DARK.clone() },
     uHighlight:         { value: HL_DARK.clone() },
     uAccent1:           { value: AC1_DARK.clone() },
@@ -1014,6 +1013,13 @@ diffuseGeo.setAttribute('aColorVar', new THREE.BufferAttribute(dfColorVars, 1));
 const diffuseMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
   uniforms: {
+    uPalette:    { value: [
+      new THREE.Color(0x11193A),  // [0] 辅1
+      new THREE.Color(0x11193A),  // [1]
+      new THREE.Color(0x42306D),  // [2] 主
+      new THREE.Color(0x42306D),  // [3]
+      new THREE.Color(0xB98B58),  // [4] 辅2
+    ] },
     uColor:      { value: COLOR_DARK.clone() },
     uHighlight:  { value: HL_DARK.clone() },
     uAccent1:    { value: AC1_DARK.clone() },
@@ -1600,6 +1606,13 @@ const SPINE_YS_FLAT = new Array(SPINE_SAMPLE_N);
 const vineMat = new THREE.ShaderMaterial({
   vertexShader: vineVertexShader, fragmentShader,
   uniforms: {
+    uPalette:   { value: [
+      new THREE.Color(0x785B66),  // [0] 起点
+      new THREE.Color(0x2D3374),  // [1] 暗（脊柱后）
+      new THREE.Color(0x7B869D),  // [2] 亮1（脊柱前）
+      new THREE.Color(0x7B869D),  // [3] 亮1
+      new THREE.Color(0xB98B58),  // [4] 点缀
+    ] },
     uColor:     { value: VINE_A_COLOR.clone() },
     uHighlight: { value: VINE_A_HL.clone() },
     uAccent1:   { value: VINE_A_AC1.clone() },
@@ -2352,6 +2365,13 @@ const leafMat = new THREE.ShaderMaterial({
   vertexShader: leafVertexShader,
   fragmentShader, // 复用藤蔓的soft-circle fragment shader
   uniforms: {
+    uPalette:   { value: [
+      new THREE.Color(0x42306D),  // [0] 叶面
+      new THREE.Color(0x42306D),  // [1]
+      new THREE.Color(0xB98B58),  // [2] 脉根
+      new THREE.Color(0x785B66),  // [3]
+      new THREE.Color(0x785B66),  // [4] 脉尖
+    ] },
     uColor:     { value: LEAF_A_COLOR.clone() },
     uHighlight: { value: LEAF_A_HL.clone() },
     uAccent1:   { value: LEAF_A_AC1.clone() },
@@ -2657,6 +2677,13 @@ const flowerMat = new THREE.ShaderMaterial({
   vertexShader: flowerVertexShader,
   fragmentShader,
   uniforms: {
+    uPalette:   { value: [
+      new THREE.Color(0x7C889E),  // [0] 花A
+      new THREE.Color(0x7C889E),  // [1] 花A
+      new THREE.Color(0x7C889E),  // [2] 花A
+      new THREE.Color(0x7C889E),  // [3] 花A
+      new THREE.Color(0xB98B58),  // [4] 花B
+    ] },
     uColor:     { value: FLOWER_A_COLOR.clone() },
     uHighlight: { value: FLOWER_A_HL.clone() },
     uAccent1:   { value: FLOWER_A_AC1.clone() },
@@ -2748,6 +2775,13 @@ const pollenMat = new THREE.ShaderMaterial({
     uHighlight: { value: new THREE.Color(0xf0e0a8) },
     uAccent1:   { value: new THREE.Color(0xc8b8d8) },
     uAccent2:   { value: new THREE.Color(0xc8b8d8) },
+    uPalette:   { value: [
+      new THREE.Color(0x785B66),  // [0] 淡紫粉
+      new THREE.Color(0x785B66),  // [1]
+      new THREE.Color(0xB98B58),  // [2] 金（花粉主色）
+      new THREE.Color(0xB98B58),  // [3]
+      new THREE.Color(0xB98B58),  // [4] 金
+    ] },
     uAlphaBoost: { value: 1.0 },
   },
   transparent: true,
@@ -2801,6 +2835,13 @@ const ambMat = new THREE.ShaderMaterial({
     uHighlight:  { value: new THREE.Color(0x18102e) },
     uAccent1:    { value: new THREE.Color(0x18102e) },
     uAccent2:    { value: new THREE.Color(0x18102e) },
+    uPalette:    { value: [
+      new THREE.Color(0x11193A),  // 远景星尘全部用暗紫，阶段一统一
+      new THREE.Color(0x11193A),
+      new THREE.Color(0x11193A),
+      new THREE.Color(0x11193A),
+      new THREE.Color(0x11193A),
+    ] },
     uAlphaBoost: { value: 1.0 },
   },
   transparent: true,
