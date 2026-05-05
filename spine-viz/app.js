@@ -1416,11 +1416,12 @@ const ACCENT_VINES = [
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
-// ── 分支尖端弥散粒子 ──
-// 从3个分支尖端弥散（位置从实际曲线计算，不硬编码）
+// ── 分支尖端弥散粒子（4 条孪生路径 + 阶段递增可见 + 时间驱动流动）──
 const DRIFT_SEG_INDICES = [9, 12]; // VINE1中弥散的2个分支段
-const DRIFT_PPV = 8000; // 每个分支弥散粒子数
-const DRIFT_TOTAL = DRIFT_SEG_INDICES.length * DRIFT_PPV;
+const TWIN_OFFSETS_VINE = [-0.012, 0.012]; // 每段拆 2 条孪生 → 共 4 条独立路径
+const DRIFT_TWINS = DRIFT_SEG_INDICES.length * TWIN_OFFSETS_VINE.length; // 4
+const DRIFT_PPV = 4000; // 每条孪生路径粒子数（4×4000=16000 总）
+const DRIFT_TOTAL = DRIFT_TWINS * DRIFT_PPV;
 
 // ── 藤蔓拓扑分析（自动检测主干/分支/末梢）──
 function vineKey(pt) {
@@ -1559,6 +1560,14 @@ const vnColorVars = new Float32Array(N_VINE_TOTAL);
 const vnPhase     = new Float32Array(N_VINE_TOTAL);
 // 弥散粒子的"远端度"：0=分支根部/普通藤蔓，1=分支尖端，>1 飘出尖端到屏幕边缘（最大 5）
 const vnDriftT    = new Float32Array(N_VINE_TOTAL);
+// drift 元数据：(twinIdx 0~3 / -1 非 drift, visibility 0~1, speedOffset, padding)
+const vnDriftMeta = new Float32Array(N_VINE_TOTAL * 4);
+// drift 粒子流速度：本地切线方向 × 振幅，时间驱动循环
+const vnVelocity  = new Float32Array(N_VINE_TOTAL * 3);
+// 非 drift 粒子默认值：twinIdx = -1
+for (let i = 0; i < N_VINE_TOTAL; i++) {
+  vnDriftMeta[i * 4] = -1;
+}
 
 let particleIdx = 0;
 for (let vi = 0; vi < vineData.length; vi++) {
@@ -1684,7 +1693,8 @@ ACCENT_VINES.forEach((accent, accentIdx) => {
   }
 });
 
-// ── 分支弥散（整个分支逐渐化开：根部实→尖端散→远处消失）──
+// ── 分支弥散（4 条孪生路径，阶段递增可见，时间驱动流动）──
+let twinIdx = 0;
 for (const si of DRIFT_SEG_INDICES) {
   const curve = vineData[0].curves[si];
   const { rootAtStart } = vineData[0].topo[si];
@@ -1692,89 +1702,112 @@ for (const si of DRIFT_SEG_INDICES) {
   const tipPt = curve.getPointAt(tipT);
   const tipTan = curve.getTangentAt(tipT);
   const outSign = rootAtStart ? 1 : -1;
-  // 尖端在脊柱左边还是右边？决定飘散的横向偏移
   const tipWorldX = tipPt.x * VINE_X_SCALE;
-  const sideBias = tipWorldX > 0 ? 1.0 : -1.0; // 正=右侧→往右飘，负=左侧→往左飘
+  const sideBias = tipWorldX > 0 ? 1.0 : -1.0;
 
-  for (let p = 0; p < DRIFT_PPV; p++) {
-    // rawT: 0=主藤交汇点（云团根部）, 1=曲线尖端, 1~5=超出尖端继续飘散
-    const rawT = (p / (DRIFT_PPV - 1)) * 5.0;
+  for (const twinXOff of TWIN_OFFSETS_VINE) {
+    const myTwinIdx = twinIdx;
 
-    // 中心轨迹位置（沿原 Figma 曲线 + 超出尖端的延伸）
-    let px, py, tanX, tanY;
-    if (rawT <= 1.0) {
-      const ct = rootAtStart
-        ? Math.max(0.002, Math.min(0.998, rawT))
-        : Math.max(0.002, Math.min(0.998, 1.0 - rawT));
-      const cp = curve.getPointAt(ct);
-      const ctan = curve.getTangentAt(ct);
-      px = cp.x; py = cp.y;
-      tanX = ctan.x * outSign; tanY = ctan.y * outSign;
-    } else {
-      const beyond = (rawT - 1.0);
-      const forwardDrift = beyond * 0.4;
-      const lateralDrift = (beyond * 0.30 + beyond * beyond * 0.10) * sideBias;
-      const baseX = tipPt.x + tipTan.x * outSign * forwardDrift + lateralDrift;
-      const baseY = tipPt.y + tipTan.y * outSign * forwardDrift;
-      const waveAmp = beyond * 0.10;
-      const wave = Math.sin(beyond * 2.5 + si * 2.5);
-      px = baseX;
-      py = baseY + wave * waveAmp;
-      tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
+    for (let p = 0; p < DRIFT_PPV; p++) {
+      // rawT 0~5：0 = 主藤交汇点, 1 = 曲线尖端, 1~5 = 超出尖端飘散
+      const rawT = (p / (DRIFT_PPV - 1)) * 5.0;
+
+      // 中心轨迹位置 + 切线
+      let px, py, tanX, tanY;
+      if (rawT <= 1.0) {
+        const ct = rootAtStart
+          ? Math.max(0.002, Math.min(0.998, rawT))
+          : Math.max(0.002, Math.min(0.998, 1.0 - rawT));
+        const cp = curve.getPointAt(ct);
+        const ctan = curve.getTangentAt(ct);
+        px = cp.x; py = cp.y;
+        tanX = ctan.x * outSign; tanY = ctan.y * outSign;
+      } else {
+        const beyond = rawT - 1.0;
+        const forwardDrift = beyond * 0.4;
+        const lateralDrift = (beyond * 0.30 + beyond * beyond * 0.10) * sideBias;
+        const baseX = tipPt.x + tipTan.x * outSign * forwardDrift + lateralDrift;
+        const baseY = tipPt.y + tipTan.y * outSign * forwardDrift;
+        const waveAmp = beyond * 0.10;
+        const wave = Math.sin(beyond * 2.5 + si * 2.5);
+        px = baseX;
+        py = baseY + wave * waveAmp;
+        tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
+      }
+
+      // 孪生 X 偏移（vine local），让 4 条路径分开
+      px += twinXOff;
+
+      // 云团宽度
+      const spreadWidth = rawT < 1.0
+        ? 0.012 + rawT * 0.008
+        : rawT < 2.5
+          ? 0.020 + (rawT - 1.0) * 0.010
+          : 0.035 + (rawT - 2.5) * 0.005;
+
+      // 3D 高斯扩散
+      const perpX = -tanY, perpY = tanX;
+      const radInPerp = gaussRand() * spreadWidth;
+      const radInZ    = gaussRand() * spreadWidth;
+      const radial    = Math.sqrt(radInPerp * radInPerp + radInZ * radInZ);
+
+      const sx = px * VINE_X_SCALE + perpX * radInPerp;
+      const sy = py * VINE_Y_SCALE + perpY * radInPerp;
+      const spineX = getSpineXAtY(sy);
+
+      const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
+
+      // Z 衔接
+      const wrapR = 0.10;
+      const mainZ = Math.sin(yNorm * Math.PI * 2 * 2.5) * wrapR;
+      const zBlend = Math.exp(-rawT * 1.5);
+
+      vnCurvedX[particleIdx]   = sx + spineX;
+      vnCurvedY[particleIdx]   = sy;
+      vnStraightX[particleIdx] = sx;
+      vnStraightY[particleIdx] = sy;
+      vnZPos[particleIdx]      = mainZ * zBlend + radInZ + gaussRand() * 0.005;
+
+      vnParamT[particleIdx]    = yNorm;
+      vnVineId[particleIdx]    = 0;
+      vnPhase[particleIdx]     = Math.random() * 3.0;
+
+      // 两端 alpha 软淡入淡出
+      const fadeAlpha = rawT < 0.4 ? rawT * 1.5
+                      : rawT < 2.0 ? 0.60 - (rawT - 0.4) * 0.06
+                      : Math.max(0, 0.50 - (rawT - 2.0) * 0.167);
+      vnAlphas[particleIdx]    = fadeAlpha;
+      vnSizes[particleIdx]     = 0.040 + Math.random() * 0.014;
+
+      // 颜色衔接
+      const mainGradient = 0.4 - yNorm * 0.9;
+      const zForBias = vnZPos[particleIdx];
+      const zBias = zForBias > 0.03 ? 0.15 : zForBias < -0.03 ? -0.15 : 0.0;
+      const mainColor  = mainGradient + zBias + (Math.random() - 0.5) * 0.12;
+      const driftColor = 0.1 + Math.random() * 0.2;
+      const colorBlend = Math.min(1.0, rawT * 0.7);
+      vnColorVars[particleIdx] = mainColor * (1 - colorBlend) + driftColor * colorBlend;
+      vnDriftT[particleIdx]    = rawT;
+
+      // drift meta：visibility = 径向距离归一化（核心粒子 P1 可见，外围粒子 P3 才可见）
+      // radial 范围 ~0~0.06，归一到 0~1
+      const visibility = Math.min(1.0, radial / 0.05);
+      const speedOffset = Math.random();
+      vnDriftMeta[particleIdx * 4]     = myTwinIdx;
+      vnDriftMeta[particleIdx * 4 + 1] = visibility;
+      vnDriftMeta[particleIdx * 4 + 2] = speedOffset;
+      vnDriftMeta[particleIdx * 4 + 3] = 0;
+
+      // 流动速度：沿本地切线方向，幅度 ≈ 0.05 vine local
+      // 时间驱动循环 0~1，粒子沿轨迹滑动一段，然后渐隐重置
+      const flowMag = 0.05;
+      vnVelocity[particleIdx * 3]     = tanX * flowMag * VINE_X_SCALE;
+      vnVelocity[particleIdx * 3 + 1] = tanY * flowMag * VINE_Y_SCALE;
+      vnVelocity[particleIdx * 3 + 2] = 0;
+
+      particleIdx++;
     }
-
-    // 云团宽度：根部和主藤同宽（VINE_WIDTHS[0]=0.012）→ 远端弥散
-    const spreadWidth = rawT < 1.0
-      ? 0.012 + rawT * 0.008                // 0.012 → 0.020
-      : rawT < 2.5
-        ? 0.020 + (rawT - 1.0) * 0.010      // 0.020 → 0.035
-        : 0.035 + (rawT - 2.5) * 0.005;     // 远处 → 0.048
-
-    // 3D 圆锥扩散：360° 对称的雾管
-    const perpX = -tanY, perpY = tanX;
-    const radInPerp = gaussRand() * spreadWidth;
-    const radInZ    = gaussRand() * spreadWidth;
-
-    const sx = px * VINE_X_SCALE + perpX * radInPerp;
-    const sy = py * VINE_Y_SCALE + perpY * radInPerp;
-    const spineX = getSpineXAtY(sy);
-
-    const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
-
-    // Z 衔接：rawT=0 锚到主藤 sin 缠绕，指数衰减到 z=0
-    const wrapR = 0.10;
-    const mainZ = Math.sin(yNorm * Math.PI * 2 * 2.5) * wrapR;
-    const zBlend = Math.exp(-rawT * 1.5);
-
-    vnCurvedX[particleIdx]   = sx + spineX;
-    vnCurvedY[particleIdx]   = sy;
-    vnStraightX[particleIdx] = sx;
-    vnStraightY[particleIdx] = sy;
-    vnZPos[particleIdx]      = mainZ * zBlend + radInZ + gaussRand() * 0.005;
-
-    vnParamT[particleIdx]    = yNorm;
-    vnVineId[particleIdx]    = 0;
-    vnPhase[particleIdx]     = Math.random() * 3.0;
-
-    // 两端 alpha 软淡入淡出，消除圆柱端面带来的"矩形"硬边
-    // rawT=0 处 alpha=0（融入主藤看不见硬边）→ rawT=0.4 达到峰值 → rawT=5 平滑到 0
-    const fadeAlpha = rawT < 0.4 ? rawT * 1.5                       // 0 → 0.60
-                    : rawT < 2.0 ? 0.60 - (rawT - 0.4) * 0.06       // 0.60 → 0.50
-                    : Math.max(0, 0.50 - (rawT - 2.0) * 0.167);     // 0.50 → 0 at rawT=5
-    vnAlphas[particleIdx]    = fadeAlpha;
-    vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
-
-    // 颜色：根部继承主藤渐变（金/紫），渐变到冷紫飘散
-    const mainGradient = 0.4 - yNorm * 0.9;
-    const zForBias = vnZPos[particleIdx];
-    const zBias = zForBias > 0.03 ? 0.15 : zForBias < -0.03 ? -0.15 : 0.0;
-    const mainColor  = mainGradient + zBias + (Math.random() - 0.5) * 0.12;
-    const driftColor = 0.1 + Math.random() * 0.2;
-    const colorBlend = Math.min(1.0, rawT * 0.7);  // rawT=0 → 0, rawT≥1.43 → 1
-    vnColorVars[particleIdx] = mainColor * (1 - colorBlend) + driftColor * colorBlend;
-    vnDriftT[particleIdx]    = rawT;
-
-    particleIdx++;
+    twinIdx++;
   }
 }
 
@@ -1807,6 +1840,8 @@ vineGeo.setAttribute('aParamT',      new THREE.BufferAttribute(vnParamT, 1));
 vineGeo.setAttribute('aVineId',      new THREE.BufferAttribute(vnVineId, 1));
 vineGeo.setAttribute('aVinePhase',   new THREE.BufferAttribute(vnPhase, 1));
 vineGeo.setAttribute('aDriftT',      new THREE.BufferAttribute(vnDriftT, 1));
+vineGeo.setAttribute('aDriftMeta',   new THREE.BufferAttribute(vnDriftMeta, 4));
+vineGeo.setAttribute('aVelocity',    new THREE.BufferAttribute(vnVelocity, 3));
 
 // 藤蔓 vertex shader：GPU双态插值 + 触发式生长 + 能量脉冲
 const vineVertexShader = /* glsl */`
@@ -1820,6 +1855,8 @@ const vineVertexShader = /* glsl */`
   attribute float aAlpha;
   attribute float aColorVar;
   attribute float aDriftT;
+  attribute vec4 aDriftMeta;   // (twinIdx[-1 非drift / 0..3], visibility[0..1], speedOffset, _)
+  attribute vec3 aVelocity;    // drift 流动速度向量
 
   uniform float uBlend;
   uniform float uTime;
@@ -1828,7 +1865,8 @@ const vineVertexShader = /* glsl */`
   uniform float uSpineYs[33];
   uniform float uSpineHalfW;
   uniform float uSpineRotY;
-  uniform float uFormation;  // hide vines during intro (0=hidden, 1=visible)
+  uniform float uFormation;
+  uniform float uPhase;        // 0=P1, 1=P2, 2=P3 (与脊柱共用)
 
   varying float vAlpha;
   varying float vColorVar;
@@ -1887,6 +1925,16 @@ const vineVertexShader = /* glsl */`
       pos2d.x += swayX;
       pos2d.y += swayY;
 
+      // drift 粒子流动：沿本地切线方向时间驱动循环
+      float driftFlowFade = 1.0;
+      if (aDriftMeta.x >= -0.5) {
+        float cyc = mod(uTime * 0.18 + aDriftMeta.z, 1.0);  // 0~1 循环
+        pos2d.x += aVelocity.x * cyc;
+        pos2d.y += aVelocity.y * cyc;
+        // 循环末段渐隐 → 重置位置不闪烁
+        driftFlowFade = smoothstep(0.0, 0.10, cyc) * (1.0 - smoothstep(0.85, 1.0, cyc));
+      }
+
       pos = vec3(pos2d.x, pos2d.y, aZPos);
 
       // 3根藤蔓依次生长
@@ -1934,7 +1982,21 @@ const vineVertexShader = /* glsl */`
       float pulseAlpha = (aVineId < 0.5) ? 0.08 : 0.45;
       float pulseSize  = (aVineId < 0.5) ? 0.08 : 0.5;
       alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * pulseAlpha);
-      alpha *= uFormation;  // hide vines during intro
+      alpha *= uFormation;
+
+      // drift 阶段可见性 + 流动渐隐
+      if (aDriftMeta.x >= -0.5) {
+        float w1 = clamp(1.0 - uPhase, 0.0, 1.0);
+        float w3 = clamp(uPhase - 1.0, 0.0, 1.0);
+        float w2 = 1.0 - w1 - w3;
+        // P1: 30% 粒子可见, P2: 65%, P3: 100%
+        float phaseFactor = 0.30 * w1 + 0.65 * w2 + 1.0 * w3;
+        float visMask = step(aDriftMeta.y, phaseFactor);
+        // P3 整体 alpha 增强 1.3 + 沿 rawT 正弦带状调制 (丝缕感)
+        float p3Boost = 1.0 + w3 * (0.3 + 0.5 * sin(aDriftT * 6.0 + aDriftMeta.x * 1.7));
+        alpha *= visMask * driftFlowFade * p3Boost;
+      }
+
       sz = aSize * (1.0 + effectivePulse * pulseSize);
 
       vAlpha = alpha;
@@ -2006,6 +2068,7 @@ const vineMat = new THREE.ShaderMaterial({
     uSpineHalfW: { value: 0.18 },
     uSpineRotY:  { value: 0.0 },
     uFormation:  { value: 0.0 },
+    uPhase:      { value: 0.0 },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -3860,6 +3923,7 @@ function updateIdle(t) {
   spineMat.uniforms.uBlend.value      = 0.0;
   spineMat.uniforms.uPhase.value      = 0.0;     // IDLE = 阶段一
   spineHaloMat.uniforms.uPhase.value  = 0.0;
+  vineMat.uniforms.uPhase.value       = 0.0;
   spineMat.uniforms.uBreatheExpand.value = 1.0;
   spineMat.uniforms.uBreathe.value    = 0.0;
   spineMat.uniforms.uTime.value       = t;
@@ -3945,6 +4009,7 @@ function updateGuide(t) {
   spineMat.uniforms.uBlend.value = guideBlend;
   spineMat.uniforms.uPhase.value = 0.0;          // GUIDE 全程阶段一
   spineHaloMat.uniforms.uPhase.value = 0.0;
+  vineMat.uniforms.uPhase.value = 0.0;
 
   // 颜色全程保持紫色（DARK 系），跟 IDLE 一致，避免凝聚时变金色突兀
   spineMat.uniforms.uColor.value.copy(COLOR_DARK);
@@ -4085,6 +4150,7 @@ function updateExperience(t) {
   const phaseProg = colorBlend * 2;
   spineMat.uniforms.uPhase.value     = phaseProg;
   spineHaloMat.uniforms.uPhase.value = phaseProg;
+  vineMat.uniforms.uPhase.value      = phaseProg;
   const blendColor = getBlendColor(colorBlend);
   const hlColor    = getHighlightColor(colorBlend);
   const ac1Color   = getAccent1Color(colorBlend);
