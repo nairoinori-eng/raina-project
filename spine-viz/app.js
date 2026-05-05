@@ -515,11 +515,12 @@ for (let i = 0; i < N_BONE; i++) {
   bOffStraightX[i] = cosA;
   bOffStraightY[i] = 0;
 
+  let wallRatio = 0;
   if (isInterior) {
     bBaseS[i] = (0.024 + Math.random() * 0.020) * Math.max(0.3, taperFactor) * gapFactor;
     bBaseA[i] = (0.06 + Math.random() * 0.04) * Math.max(0.3, taperFactor) * gapFactor;
   } else {
-    const wallRatio = effectiveOuter > effectiveInner
+    wallRatio = effectiveOuter > effectiveInner
       ? (r - effectiveInner) / (effectiveOuter - effectiveInner) : 0;
     bBaseS[i] = (0.032 + wallRatio * 0.024 + Math.random() * 0.016) * (0.6 + Math.random() * 0.7) * Math.max(0.2, taperFactor);
     bBaseA[i] = ((0.12 + wallRatio * 0.10) + Math.random() * 0.05) * taperFactor * gapFactor;
