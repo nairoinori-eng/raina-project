@@ -115,6 +115,14 @@ const HALO_PALETTES  = [null, HALO_PALETTE_P1,  HALO_PALETTE_P2,  HALO_PALETTE_P
 const ACTIVE_SPINE_PALETTE = (SPINE_PALETTES[CURRENT_PHASE] || SPINE_PALETTE_P1).map(h => new THREE.Color(h));
 const ACTIVE_HALO_PALETTE  = (HALO_PALETTES[CURRENT_PHASE]  || HALO_PALETTE_P1 ).map(h => new THREE.Color(h));
 
+// 3 阶段共用：spineMat / spineHaloMat 同时持有 P1/P2/P3 三套，shader 按 uPhase 加权混合
+const SPINE_PALETTE_OBJ_P1 = SPINE_PALETTE_P1.map(h => new THREE.Color(h));
+const SPINE_PALETTE_OBJ_P2 = SPINE_PALETTE_P2.map(h => new THREE.Color(h));
+const SPINE_PALETTE_OBJ_P3 = SPINE_PALETTE_P3.map(h => new THREE.Color(h));
+const HALO_PALETTE_OBJ_P1  = HALO_PALETTE_P1.map(h => new THREE.Color(h));
+const HALO_PALETTE_OBJ_P2  = HALO_PALETTE_P2.map(h => new THREE.Color(h));
+const HALO_PALETTE_OBJ_P3  = HALO_PALETTE_P3.map(h => new THREE.Color(h));
+
 
 // ============================================================
 // 4. 工具函数
@@ -303,21 +311,29 @@ const spineVertexShader = /* glsl */`
   attribute float aZPos;
   attribute float aParamT;
   attribute float aSize;
-  attribute float aAlpha;
+  attribute float aAlpha;       // P1 alpha
+  attribute float aAlphaP2;
+  attribute float aAlphaP3;
   attribute float aPhase;
-  attribute float aColorVar;
-  attribute float aFormStart;  // 每粒子起跑延迟（5 个时间波次 + ±0.02 微抖）
-  attribute float aFormPower;  // ease 曲线幂数 per-particle 1.5~4.0
+  attribute float aColorVar;    // P1 colorVar
+  attribute float aColorVarP2;
+  attribute float aColorVarP3;
+  attribute float aFormStart;
+  attribute float aFormPower;
   uniform float uBlend;
   uniform float uBreatheExpand;
   uniform float uBreathe;
   uniform float uTime;
-  uniform float uFormation;    // 0 = scattered (IDLE), 1 = formed (spine visible)
+  uniform float uFormation;
   uniform float uGuideAlpha;
-  varying float vAlpha;
-  varying float vColorVar;
+  varying float vAlpha1;
+  varying float vAlpha2;
+  varying float vAlpha3;
+  varying float vColorVar1;
+  varying float vColorVar2;
+  varying float vColorVar3;
   varying float vParamT;
-  varying float vIdleness;     // 1.0 = IDLE, 0.0 = formed（fragment shader 用来加 IDLE 发光）
+  varying float vIdleness;
   void main() {
     // ── Formed position (normal spine) ──
     float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
@@ -357,11 +373,19 @@ const spineVertexShader = /* glsl */`
     float flightVisible = smoothstep(0.05, 0.20, pFormation) * (1.0 - smoothstep(0.85, 1.0, pFormation));
     float effectiveVisible = max(idleVisible, flightVisible);
     float idleAlpha = (0.20 + fract(sZ * 2.71) * 0.32) * effectiveVisible;
-    float formedAlpha = aAlpha * (0.55 + uBreathe * 0.45);
-    float alpha = mix(idleAlpha, formedAlpha, pFormation) * uGuideAlpha;
+    float formedA1 = aAlpha   * (0.55 + uBreathe * 0.45);
+    float formedA2 = aAlphaP2 * (0.55 + uBreathe * 0.45);
+    float formedA3 = aAlphaP3 * (0.55 + uBreathe * 0.45);
+    float a1 = mix(idleAlpha, formedA1, pFormation) * uGuideAlpha;
+    float a2 = mix(idleAlpha, formedA2, pFormation) * uGuideAlpha;
+    float a3 = mix(idleAlpha, formedA3, pFormation) * uGuideAlpha;
 
-    vAlpha = alpha;
-    vColorVar = aColorVar;
+    vAlpha1 = a1;
+    vAlpha2 = a2;
+    vAlpha3 = a3;
+    vColorVar1 = aColorVar;
+    vColorVar2 = aColorVarP2;
+    vColorVar3 = aColorVarP3;
     vParamT = aParamT;
     vIdleness = 1.0 - pFormation;
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
@@ -372,25 +396,41 @@ const spineVertexShader = /* glsl */`
 
 // Spine-specific fragment shader with segment highlighting support
 const spineFragmentShader = /* glsl */`
-  uniform vec3 uPalette[7];         // 7 色：[0]最暗 [1]暗 [2]主色 [3]主高光 [4]极亮 [5]侧面 olive [6]侧边短段粉紫
-  uniform float uSegmentHighlight;  // 0 = normal, 1 = 凸起侧暖白光晕 + 凹陷侧暗化
-  uniform float uAlphaBoost; // 高清模式亮度补偿
-  varying float vAlpha;
-  varying float vColorVar;
+  uniform vec3 uPaletteP1[7];
+  uniform vec3 uPaletteP2[7];
+  uniform vec3 uPaletteP3[7];
+  uniform float uPhase;             // 0~2，0=P1, 1=P2, 2=P3
+  uniform float uSegmentHighlight;
+  uniform float uAlphaBoost;
+  varying float vAlpha1;
+  varying float vAlpha2;
+  varying float vAlpha3;
+  varying float vColorVar1;
+  varying float vColorVar2;
+  varying float vColorVar3;
   varying float vParamT;
-  varying float vIdleness;          // 1.0 = IDLE, 0.0 = formed
+  varying float vIdleness;
+  vec3 pickPaletteColor(vec3 pal[7], float v) {
+    if      (v >  0.95) return pal[6];
+    else if (v < -0.92) return pal[5];
+    else if (v < -0.6 ) return pal[0];
+    else if (v < -0.2 ) return pal[1];
+    else if (v <  0.2 ) return pal[2];
+    else if (v <  0.6 ) return pal[3];
+    else                return pal[4];
+  }
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
-    // 按 vColorVar 区间直接选纯色（不 mix）
-    vec3 c;
-    if      (vColorVar >  0.95) c = uPalette[6];   // 侧边短段粉紫（阶段二专用）
-    else if (vColorVar < -0.92) c = uPalette[5];   // 椎丸侧面 olive（阶段二专用）
-    else if (vColorVar < -0.6 ) c = uPalette[0];
-    else if (vColorVar < -0.2 ) c = uPalette[1];
-    else if (vColorVar <  0.2 ) c = uPalette[2];
-    else if (vColorVar <  0.6 ) c = uPalette[3];
-    else                        c = uPalette[4];
+    // 3 阶段权重（uPhase 0~2，平滑过渡）
+    float w1 = clamp(1.0 - uPhase, 0.0, 1.0);
+    float w3 = clamp(uPhase - 1.0, 0.0, 1.0);
+    float w2 = 1.0 - w1 - w3;
+    vec3 c1 = pickPaletteColor(uPaletteP1, vColorVar1);
+    vec3 c2 = pickPaletteColor(uPaletteP2, vColorVar2);
+    vec3 c3 = pickPaletteColor(uPaletteP3, vColorVar3);
+    vec3 c = c1 * w1 + c2 * w2 + c3 * w3;
+    float vAlpha = vAlpha1 * w1 + vAlpha2 * w2 + vAlpha3 * w3;
     c = clamp(c, 0.0, 1.0);
     if (uSegmentHighlight > 0.0) {
       float thorZone = smoothstep(0.12, 0.28, vParamT)
@@ -420,8 +460,13 @@ const spineFragmentShader = /* glsl */`
 
 const spPositions = new Float32Array(N_SPINE * 3);
 const spSizes     = new Float32Array(N_SPINE);
-const spAlphas    = new Float32Array(N_SPINE);
-const spColorVars = new Float32Array(N_SPINE);
+// 3 套 phase-specific (colorVar, alpha)：spineMat shader 按 uPhase 加权混合
+const spAlphas    = new Float32Array(N_SPINE);   // phase 1
+const spAlphasP2  = new Float32Array(N_SPINE);
+const spAlphasP3  = new Float32Array(N_SPINE);
+const spColorVars   = new Float32Array(N_SPINE); // phase 1
+const spColorVarsP2 = new Float32Array(N_SPINE);
+const spColorVarsP3 = new Float32Array(N_SPINE);
 
 
 // ── Layer A：骨骼柱体（5000粒子，静止，空心管状）─────────────
@@ -555,76 +600,69 @@ for (let i = 0; i < N_BONE; i++) {
   // colorVar：明暗区掺撞色，粒子大小不变
   const zDepth = Math.abs(bZ[i]) / Math.max(effectiveOuter * TUBE_Y_SCALE, 0.01);
   const acRoll = Math.random();
+  let cv1, cv2, cv3, am1, am2, am3;   // 3 套 colorVar / alpha multiplier
   if (acRoll < 0.07) {
-    // 暖撞色（暗部掺入）
-    spColorVars[i] = -(0.15 + Math.random() * 0.25);
-    bBaseA[i] *= 1.6;
+    // 暖撞色（暗部掺入）— shared
+    const v = -(0.15 + Math.random() * 0.25);
+    cv1 = cv2 = cv3 = v;
+    am1 = am2 = am3 = 1.6;
   } else if (acRoll < 0.14) {
-    // 冷撞色
-    spColorVars[i] = -(0.50 + Math.random() * 0.35);
-    bBaseA[i] *= 1.6;
+    // 冷撞色 — shared
+    const v = -(0.50 + Math.random() * 0.35);
+    cv1 = cv2 = cv3 = v;
+    am1 = am2 = am3 = 1.6;
   } else if (acRoll < 0.285) {
-    // 高光粒子（收窄区间，多数落 palette[3] 金，极少 palette[4] 白）
-    spColorVars[i] = 0.40 + Math.random() * 0.24;
-    bBaseA[i] *= 1.55;
-  } else if (CURRENT_PHASE === 3) {
-    // 阶段三：sin-mask 外层区强制全金/olive（不混蓝），让金色独立成团避免混色发绿
-    const sinMask = Math.sin(tClamped * 24.0 + 0.7) > -0.5;
-    const inOuterRim = !isInterior && wallRatio > 0.66 && sinMask;
-    if (inOuterRim) {
-      if (Math.random() < 0.10) {
-        spColorVars[i] = -0.96 + Math.random() * 0.03;          // → palette[5] olive
-        bBaseA[i] *= 1.30;
-      } else {
-        spColorVars[i] = 0.97 + Math.random() * 0.02;           // → palette[6] 描边金
-        bBaseA[i] *= 1.45;
-      }
-    } else if (Math.random() < 0.08) {
-      spColorVars[i] = 0.24 + Math.random() * 0.24;             // → palette[3] 普通高光金（散布）
-      bBaseA[i] *= 1.14;
-    } else {
-      spColorVars[i] = (1 - zDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.08;
-    }
-  } else if (CURRENT_PHASE === 2) {
-    // 阶段二：右上 + 左下大段粉紫 + 外层 sin-mask 断续橄榄
-    const tInRightLobe = tClamped > 0.10 && tClamped < 0.45;
-    const tInLeftLobe  = tClamped > 0.55 && tClamped < 0.90;
-    const inSidePinkLobe = !isInterior && wallRatio > 0.66 &&
-      ((tInRightLobe && sideSign > 0) || (tInLeftLobe && sideSign < 0));
-    const sidePink = inSidePinkLobe && Math.random() < 0.82;
-    // 外层 olive 细带：sin-mask 制造断断续续（patch 之间小间隙）
-    const oliveActive = Math.sin(tClamped * 24.0 + 0.7) > 0.05;
-    const sideOlive = !sidePink && !isInterior && wallRatio > 0.78 && oliveActive && Math.random() < 0.65;
-    const randomGold = !sidePink && !sideOlive && Math.random() < 0.08;
-    if (sidePink) {
-      spColorVars[i] = 0.97 + Math.random() * 0.02;     // → palette[6] 粉紫
-      bBaseA[i] *= 1.55;
-    } else if (sideOlive) {
-      spColorVars[i] = -0.96 + Math.random() * 0.03;    // → palette[5] olive
-      bBaseA[i] *= 1.40;
-    } else if (randomGold) {
-      spColorVars[i] = 0.24 + Math.random() * 0.24;
-      bBaseA[i] *= 1.14;
-    } else {
-      spColorVars[i] = (1 - zDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.08;
-    }
+    // 高光粒子 — shared
+    const v = 0.40 + Math.random() * 0.24;
+    cv1 = cv2 = cv3 = v;
+    am1 = am2 = am3 = 1.55;
   } else {
-    // 阶段一：普通粒子，中紫主体，侧边外缘形成连续细金边
-    const sideGold = !isInterior && sideSign > 0 && wallRatio > 0.66 && Math.random() < 0.72;
-    const randomGold = !sideGold && Math.random() < 0.08;
-    if (sideGold || randomGold) {
-      spColorVars[i] = 0.24 + Math.random() * 0.24;
-      bBaseA[i] *= sideGold ? 1.28 : 1.14;
+    // 普通 — phase-specific 三套独立烘焙
+    // P1：阶段一 — 侧边连续金边
+    const p1_sideGold = !isInterior && sideSign > 0 && wallRatio > 0.66 && Math.random() < 0.72;
+    const p1_randomGold = !p1_sideGold && Math.random() < 0.08;
+    if (p1_sideGold || p1_randomGold) {
+      cv1 = 0.24 + Math.random() * 0.24;
+      am1 = p1_sideGold ? 1.28 : 1.14;
     } else {
-      spColorVars[i] = (1 - zDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.08;
+      cv1 = (1 - zDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.08;
+      am1 = 1.0;
+    }
+    // P2：阶段二 — 右上 + 左下粉紫 lobe + sin-mask olive
+    const p2_tInRightLobe = tClamped > 0.10 && tClamped < 0.45;
+    const p2_tInLeftLobe  = tClamped > 0.55 && tClamped < 0.90;
+    const p2_inPinkLobe = !isInterior && wallRatio > 0.66 &&
+      ((p2_tInRightLobe && sideSign > 0) || (p2_tInLeftLobe && sideSign < 0));
+    const p2_sidePink = p2_inPinkLobe && Math.random() < 0.82;
+    const p2_oliveActive = Math.sin(tClamped * 24.0 + 0.7) > 0.05;
+    const p2_sideOlive = !p2_sidePink && !isInterior && wallRatio > 0.78 && p2_oliveActive && Math.random() < 0.65;
+    const p2_randomGold = !p2_sidePink && !p2_sideOlive && Math.random() < 0.08;
+    if (p2_sidePink) { cv2 = 0.97 + Math.random() * 0.02; am2 = 1.55; }
+    else if (p2_sideOlive) { cv2 = -0.96 + Math.random() * 0.03; am2 = 1.40; }
+    else if (p2_randomGold) { cv2 = 0.24 + Math.random() * 0.24; am2 = 1.14; }
+    else { cv2 = (1 - zDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.08; am2 = 1.0; }
+    // P3：阶段三 — sin-mask 外层全金/olive
+    const p3_sinMask = Math.sin(tClamped * 24.0 + 0.7) > -0.5;
+    const p3_inOuterRim = !isInterior && wallRatio > 0.66 && p3_sinMask;
+    if (p3_inOuterRim) {
+      if (Math.random() < 0.10) { cv3 = -0.96 + Math.random() * 0.03; am3 = 1.30; }
+      else                       { cv3 = 0.97 + Math.random() * 0.02; am3 = 1.45; }
+    } else if (Math.random() < 0.08) {
+      cv3 = 0.24 + Math.random() * 0.24; am3 = 1.14;
+    } else {
+      cv3 = (1 - zDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.08; am3 = 1.0;
     }
   }
-  boostSpineGoldAndSparkle(spColorVars, bBaseS, bBaseA, i, tClamped, cpx + bOffCurvedX[i]);
+  // 写 3 套（用 baseA 各自乘倍率）
+  spColorVars[i]   = cv1; spAlphas[i]   = bBaseA[i] * am1;
+  spColorVarsP2[i] = cv2; spAlphasP2[i] = bBaseA[i] * am2;
+  spColorVarsP3[i] = cv3; spAlphasP3[i] = bBaseA[i] * am3;
+  // 阶段一专属 boost（gold lobe + sparkle），只作用 P1 套
+  boostSpineGoldAndSparkle(spColorVars, bBaseS, spAlphas, i, tClamped, cpx + bOffCurvedX[i]);
   spPositions[i*3]   = cpx + bOffCurvedX[i];
   spPositions[i*3+1] = cpy + bOffCurvedY[i];
   spPositions[i*3+2] = bZ[i];
   spSizes[i]  = bBaseS[i];
-  spAlphas[i] = bBaseA[i];
 }
 
 
@@ -721,78 +759,73 @@ for (let vi = 0; vi < 13; vi++) {
     spPositions[gi*3+1] = cy + vOffCurvedY[idx];
     spPositions[gi*3+2] = gz;
     spSizes[gi]         = vBaseSize[idx];
-    spAlphas[gi]        = vBaseAlph[idx];
     const vzDepth = Math.abs(gz) / Math.max(VERT_OUTER, 0.01);
     const vacRoll = Math.random();
+    let cv1, cv2, cv3, am1, am2, am3;
     if (vacRoll < 0.03) {
-      spColorVars[gi] = -(0.20 + Math.random() * 0.20);
-      spAlphas[gi] *= 2.2;
+      const v = -(0.20 + Math.random() * 0.20);
+      cv1 = cv2 = cv3 = v;
+      am1 = am2 = am3 = 2.2;
     } else if (vacRoll < 0.06) {
-      spColorVars[gi] = -(0.55 + Math.random() * 0.30);
-      spAlphas[gi] *= 2.2;
+      const v = -(0.55 + Math.random() * 0.30);
+      cv1 = cv2 = cv3 = v;
+      am1 = am2 = am3 = 2.2;
     } else if (vacRoll < 0.205) {
-      spColorVars[gi] = 0.42 + Math.random() * 0.22;
-      spAlphas[gi] *= 1.9;
-    } else if (CURRENT_PHASE === 3) {
-      // 阶段三：椎丸外圈金按角度 sin 概率分布（永远>0，每节都有金；密度起伏制造不规则）
-      const angleSin = Math.sin(vAngle * 3.5 + vi * 1.7);   // -1~1
-      const goldProb = 0.30 + 0.55 * (angleSin + 1) / 2;    // 0.30~0.85
-      const isOuterRing = !isVertFill && radialNorm > 0.60;
-      const protrusionGold = isOuterRing && Math.random() < goldProb;
-      const tinyOlive = !protrusionGold && isOuterRing && Math.random() < 0.06;
-      if (protrusionGold) {
-        spColorVars[gi] = 0.97 + Math.random() * 0.02;        // → palette[6] 凸起金
-        spAlphas[gi] *= 1.55;
-      } else if (tinyOlive) {
-        spColorVars[gi] = -0.96 + Math.random() * 0.03;       // → palette[5] olive
-        spAlphas[gi] *= 1.18;
-      } else if (Math.random() < 0.06) {
-        spColorVars[gi] = 0.24 + Math.random() * 0.24;        // → palette[3] 普通高光金
-        spAlphas[gi] *= 1.16;
-      } else {
-        spColorVars[gi] = (1 - vzDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.07;
-      }
-    } else if (CURRENT_PHASE === 2) {
-      // 阶段二：右侧连续金/蓝边去掉，改成右上 + 左下 2 个短 t-band 粉紫；保留 olive 点缀
-      const isRightRim = !isVertFill && cosA >  VERT_OUTER * 0.34 && radialNorm > 0.68;
-      const isLeftRim  = !isVertFill && cosA < -VERT_OUTER * 0.34 && radialNorm > 0.68;
-      const tInRightLobe = t > 0.10 && t < 0.45;
-      const tInLeftLobe  = t > 0.55 && t < 0.90;
-      const sidePink = ((isRightRim && tInRightLobe) || (isLeftRim && tInLeftLobe)) && Math.random() < 0.82;
-      const sideOlive = !sidePink && isRightRim && Math.random() < 0.18;
-      const randomGold = !sidePink && !sideOlive && !(isRightRim || isLeftRim) && Math.random() < 0.08;
-      if (sidePink) {
-        spColorVars[gi] = 0.97 + Math.random() * 0.02;        // → palette[6] 粉紫
-        spAlphas[gi] *= 1.55;
-      } else if (sideOlive) {
-        spColorVars[gi] = -0.96 + Math.random() * 0.03;       // → palette[5] olive
-        spAlphas[gi] *= 1.18;
-      } else if (randomGold) {
-        spColorVars[gi] = 0.24 + Math.random() * 0.24;
-        spAlphas[gi] *= 1.16;
-      } else {
-        spColorVars[gi] = (1 - vzDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.07;
-      }
+      const v = 0.42 + Math.random() * 0.22;
+      cv1 = cv2 = cv3 = v;
+      am1 = am2 = am3 = 1.9;
     } else {
-      // 阶段一：保持原侧边连续金边
-      const sideGold = !isVertFill && cosA > VERT_OUTER * 0.34 && radialNorm > 0.68 && Math.random() < 0.70;
-      const randomGold = !sideGold && Math.random() < 0.08;
-      if (sideGold || randomGold) {
-        spColorVars[gi] = 0.24 + Math.random() * 0.24;
-        spAlphas[gi] *= sideGold ? 1.30 : 1.16;
+      // 普通 — 3 阶段独立
+      // P1：阶段一 — 侧边连续金边
+      const p1_sideGold = !isVertFill && cosA > VERT_OUTER * 0.34 && radialNorm > 0.68 && Math.random() < 0.70;
+      const p1_randomGold = !p1_sideGold && Math.random() < 0.08;
+      if (p1_sideGold || p1_randomGold) {
+        cv1 = 0.24 + Math.random() * 0.24;
+        am1 = p1_sideGold ? 1.30 : 1.16;
       } else {
-        spColorVars[gi] = (1 - vzDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.07;
+        cv1 = (1 - vzDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.07;
+        am1 = 1.0;
       }
+      // P2：阶段二 — 粉紫 lobe + sin-mask 上 olive 点缀
+      const p2_isRightRim = !isVertFill && cosA >  VERT_OUTER * 0.34 && radialNorm > 0.68;
+      const p2_isLeftRim  = !isVertFill && cosA < -VERT_OUTER * 0.34 && radialNorm > 0.68;
+      const p2_tInRightLobe = t > 0.10 && t < 0.45;
+      const p2_tInLeftLobe  = t > 0.55 && t < 0.90;
+      const p2_sidePink = ((p2_isRightRim && p2_tInRightLobe) || (p2_isLeftRim && p2_tInLeftLobe)) && Math.random() < 0.82;
+      const p2_sideOlive = !p2_sidePink && p2_isRightRim && Math.random() < 0.18;
+      const p2_randomGold = !p2_sidePink && !p2_sideOlive && !(p2_isRightRim || p2_isLeftRim) && Math.random() < 0.08;
+      if (p2_sidePink) { cv2 = 0.97 + Math.random() * 0.02; am2 = 1.55; }
+      else if (p2_sideOlive) { cv2 = -0.96 + Math.random() * 0.03; am2 = 1.18; }
+      else if (p2_randomGold) { cv2 = 0.24 + Math.random() * 0.24; am2 = 1.16; }
+      else { cv2 = (1 - vzDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.07; am2 = 1.0; }
+      // P3：阶段三 — 椎丸外圈金（sin 角度概率梯度）
+      const p3_angleSin = Math.sin(vAngle * 3.5 + vi * 1.7);
+      const p3_goldProb = 0.30 + 0.55 * (p3_angleSin + 1) / 2;
+      const p3_isOuterRing = !isVertFill && radialNorm > 0.60;
+      const p3_protrusionGold = p3_isOuterRing && Math.random() < p3_goldProb;
+      const p3_tinyOlive = !p3_protrusionGold && p3_isOuterRing && Math.random() < 0.06;
+      if (p3_protrusionGold) { cv3 = 0.97 + Math.random() * 0.02; am3 = 1.55; }
+      else if (p3_tinyOlive) { cv3 = -0.96 + Math.random() * 0.03; am3 = 1.18; }
+      else if (Math.random() < 0.06) { cv3 = 0.24 + Math.random() * 0.24; am3 = 1.16; }
+      else { cv3 = (1 - vzDepth) * 0.15 - 0.15 + (Math.random() - 0.5) * 0.07; am3 = 1.0; }
     }
+    spColorVars[gi]   = cv1; spAlphas[gi]   = vBaseAlph[idx] * am1;
+    spColorVarsP2[gi] = cv2; spAlphasP2[gi] = vBaseAlph[idx] * am2;
+    spColorVarsP3[gi] = cv3; spAlphasP3[gi] = vBaseAlph[idx] * am3;
+    // 阶段一专属 boost 只作用 P1
     boostSpineGoldAndSparkle(spColorVars, spSizes, spAlphas, gi, t, cx + vOffCurvedX[idx]);
   }
 }
 
 const spineGeo = new THREE.BufferGeometry();
-spineGeo.setAttribute('position',  new THREE.BufferAttribute(spPositions, 3));
-spineGeo.setAttribute('aSize',     new THREE.BufferAttribute(spSizes, 1));
-spineGeo.setAttribute('aAlpha',    new THREE.BufferAttribute(spAlphas, 1));
-spineGeo.setAttribute('aColorVar', new THREE.BufferAttribute(spColorVars, 1));
+spineGeo.setAttribute('position',    new THREE.BufferAttribute(spPositions, 3));
+spineGeo.setAttribute('aSize',       new THREE.BufferAttribute(spSizes, 1));
+spineGeo.setAttribute('aAlpha',      new THREE.BufferAttribute(spAlphas, 1));        // P1
+spineGeo.setAttribute('aAlphaP2',    new THREE.BufferAttribute(spAlphasP2, 1));
+spineGeo.setAttribute('aAlphaP3',    new THREE.BufferAttribute(spAlphasP3, 1));
+spineGeo.setAttribute('aColorVar',   new THREE.BufferAttribute(spColorVars, 1));     // P1
+spineGeo.setAttribute('aColorVarP2', new THREE.BufferAttribute(spColorVarsP2, 1));
+spineGeo.setAttribute('aColorVarP3', new THREE.BufferAttribute(spColorVarsP3, 1));
 
 // ── GPU attribute packing (Layer A + Layer B into shared arrays) ──
 const gpuCurvedPos   = new Float32Array(N_SPINE * 2);
@@ -862,7 +895,10 @@ spineGeo.setAttribute('aFormPower', new THREE.BufferAttribute(gpuFormPower, 1));
 const spineMat = new THREE.ShaderMaterial({
   vertexShader: spineVertexShader, fragmentShader: spineFragmentShader,
   uniforms: {
-    uPalette:           { value: ACTIVE_SPINE_PALETTE },
+    uPaletteP1:         { value: SPINE_PALETTE_OBJ_P1 },
+    uPaletteP2:         { value: SPINE_PALETTE_OBJ_P2 },
+    uPaletteP3:         { value: SPINE_PALETTE_OBJ_P3 },
+    uPhase:             { value: 0.0 },     // 0~2，由 uBlend 驱动
     uColor:             { value: COLOR_DARK.clone() },
     uHighlight:         { value: HL_DARK.clone() },
     uAccent1:           { value: AC1_DARK.clone() },
@@ -1297,21 +1333,31 @@ const spineHaloVertexShader = /* glsl */`
 `;
 
 const spineHaloFragmentShader = /* glsl */`
-  uniform vec3 uPalette[7];
+  uniform vec3 uPaletteP1[7];
+  uniform vec3 uPaletteP2[7];
+  uniform vec3 uPaletteP3[7];
+  uniform float uPhase;
   uniform float uAlphaBoost;
   varying float vAlpha;
   varying float vColorVar;
+  vec3 pickPaletteColor(vec3 pal[7], float v) {
+    if      (v >  0.95) return pal[6];
+    else if (v < -0.92) return pal[5];
+    else if (v < -0.6 ) return pal[0];
+    else if (v < -0.2 ) return pal[1];
+    else if (v <  0.2 ) return pal[2];
+    else if (v <  0.6 ) return pal[3];
+    else                return pal[4];
+  }
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
-    vec3 c;
-    if      (vColorVar >  0.95) c = uPalette[6];
-    else if (vColorVar < -0.92) c = uPalette[5];
-    else if (vColorVar < -0.6 ) c = uPalette[0];
-    else if (vColorVar < -0.2 ) c = uPalette[1];
-    else if (vColorVar <  0.2 ) c = uPalette[2];
-    else if (vColorVar <  0.6 ) c = uPalette[3];
-    else                        c = uPalette[4];
+    float w1 = clamp(1.0 - uPhase, 0.0, 1.0);
+    float w3 = clamp(uPhase - 1.0, 0.0, 1.0);
+    float w2 = 1.0 - w1 - w3;
+    vec3 c = pickPaletteColor(uPaletteP1, vColorVar) * w1
+           + pickPaletteColor(uPaletteP2, vColorVar) * w2
+           + pickPaletteColor(uPaletteP3, vColorVar) * w3;
     float core = exp(-d * d * 26.0) * 0.88;
     float halo = exp(-d * d * 5.8) * 0.22;
     gl_FragColor = vec4(clamp(c, 0.0, 1.0), (core + halo) * vAlpha * uAlphaBoost);
@@ -1332,7 +1378,10 @@ const spineHaloMat = new THREE.ShaderMaterial({
   vertexShader: spineHaloVertexShader,
   fragmentShader: spineHaloFragmentShader,
   uniforms: {
-    uPalette:    { value: ACTIVE_HALO_PALETTE },
+    uPaletteP1:  { value: HALO_PALETTE_OBJ_P1 },
+    uPaletteP2:  { value: HALO_PALETTE_OBJ_P2 },
+    uPaletteP3:  { value: HALO_PALETTE_OBJ_P3 },
+    uPhase:      { value: 0.0 },
     uAlphaBoost: { value: 1.35 },
     uBlend:      { value: 0.0 },
     uTime:       { value: 0.0 },
@@ -3792,6 +3841,8 @@ function updateIdle(t) {
   spineMat.uniforms.uFormation.value  = 0.0;
   spineMat.uniforms.uGuideAlpha.value = 1.0;
   spineMat.uniforms.uBlend.value      = 0.0;
+  spineMat.uniforms.uPhase.value      = 0.0;     // IDLE = 阶段一
+  spineHaloMat.uniforms.uPhase.value  = 0.0;
   spineMat.uniforms.uBreatheExpand.value = 1.0;
   spineMat.uniforms.uBreathe.value    = 0.0;
   spineMat.uniforms.uTime.value       = t;
@@ -3875,6 +3926,8 @@ function updateGuide(t) {
   else                         guideBlend = 0.0;                              // 9.5s 起保持弯曲
 
   spineMat.uniforms.uBlend.value = guideBlend;
+  spineMat.uniforms.uPhase.value = 0.0;          // GUIDE 全程阶段一
+  spineHaloMat.uniforms.uPhase.value = 0.0;
 
   // 颜色全程保持紫色（DARK 系），跟 IDLE 一致，避免凝聚时变金色突兀
   spineMat.uniforms.uColor.value.copy(COLOR_DARK);
@@ -4011,6 +4064,10 @@ function updateExperience(t) {
   // colorBlend: 两端不对称"停留"的重映射 blend，用于颜色。
   // 紫色停留 0~0.3（30%），过渡 0.3~0.9（60%），金色只停留 0.9~1（10%）。
   const colorBlend = remapDwellAsym(smoothBlend, 0.3, 0.1);
+  // 3 阶段 palette 加权混合：colorBlend 0~1 → uPhase 0~2 (P1→P2→P3)
+  const phaseProg = colorBlend * 2;
+  spineMat.uniforms.uPhase.value     = phaseProg;
+  spineHaloMat.uniforms.uPhase.value = phaseProg;
   const blendColor = getBlendColor(colorBlend);
   const hlColor    = getHighlightColor(colorBlend);
   const ac1Color   = getAccent1Color(colorBlend);
