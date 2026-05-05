@@ -734,17 +734,18 @@ for (let vi = 0; vi < 13; vi++) {
       spColorVars[gi] = 0.42 + Math.random() * 0.22;
       spAlphas[gi] *= 1.9;
     } else if (CURRENT_PHASE === 3) {
-      // 阶段三：椎丸 outer ring + 角度通过区强制全金/olive（不混蓝），独立成团
-      const angleNoise = Math.sin(vAngle * 3.5 + vi * 1.7) > -0.6;
-      const isOuterRing = !isVertFill && radialNorm > 0.66;
-      if (isOuterRing && angleNoise) {
-        if (Math.random() < 0.06) {
-          spColorVars[gi] = -0.96 + Math.random() * 0.03;     // → palette[5] olive
-          spAlphas[gi] *= 1.18;
-        } else {
-          spColorVars[gi] = 0.97 + Math.random() * 0.02;      // → palette[6] 凸起金
-          spAlphas[gi] *= 1.55;
-        }
+      // 阶段三：椎丸外圈金按角度 sin 概率分布（永远>0，每节都有金；密度起伏制造不规则）
+      const angleSin = Math.sin(vAngle * 3.5 + vi * 1.7);   // -1~1
+      const goldProb = 0.30 + 0.55 * (angleSin + 1) / 2;    // 0.30~0.85
+      const isOuterRing = !isVertFill && radialNorm > 0.60;
+      const protrusionGold = isOuterRing && Math.random() < goldProb;
+      const tinyOlive = !protrusionGold && isOuterRing && Math.random() < 0.06;
+      if (protrusionGold) {
+        spColorVars[gi] = 0.97 + Math.random() * 0.02;        // → palette[6] 凸起金
+        spAlphas[gi] *= 1.55;
+      } else if (tinyOlive) {
+        spColorVars[gi] = -0.96 + Math.random() * 0.03;       // → palette[5] olive
+        spAlphas[gi] *= 1.18;
       } else if (Math.random() < 0.06) {
         spColorVars[gi] = 0.24 + Math.random() * 0.24;        // → palette[3] 普通高光金
         spAlphas[gi] *= 1.16;
