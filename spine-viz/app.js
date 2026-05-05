@@ -1744,12 +1744,10 @@ for (const si of DRIFT_SEG_INDICES) {
 
     const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
 
-    // Z 衔接：rawT<0.5 完全继承主藤正弦缠绕，0.5~1.0 衰减到 0
+    // Z 衔接：交汇点 rawT≈0 严格匹配主藤 Z，之后指数快速衰减到 0（drift 是 2D 飘散）
     const wrapR = 0.10;
     const mainZ = Math.sin(yNorm * Math.PI * 2 * 2.5) * wrapR; // vi=0, vineFactor=1
-    const zBlend = rawT < 0.5 ? 1.0
-                 : rawT < 1.0 ? 1.0 - (rawT - 0.5) * 2.0
-                 : 0.0;
+    const zBlend = Math.exp(-rawT * 8); // rawT=0→1, 0.1→0.45, 0.3→0.09, 0.5→0.02
 
     vnCurvedX[particleIdx]   = sx + spineX;
     vnCurvedY[particleIdx]   = sy;
