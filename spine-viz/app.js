@@ -543,7 +543,12 @@ for (let i = 0; i < N_BONE; i++) {
     bBaseA[i] *= 1.55;
   } else {
     // 普通粒子：紫色主体 + 一层浅紫亮灰面，少量进入金色高光
-    spColorVars[i] = (1 - zDepth) * 0.24 - 0.07 + (Math.random() - 0.5) * 0.08;
+    if (Math.random() < 0.22) {
+      spColorVars[i] = 0.24 + Math.random() * 0.24;
+      bBaseA[i] *= 1.22;
+    } else {
+      spColorVars[i] = (1 - zDepth) * 0.24 - 0.07 + (Math.random() - 0.5) * 0.08;
+    }
   }
   boostSpineGoldAndSparkle(spColorVars, bBaseS, bBaseA, i, tClamped, cpx + bOffCurvedX[i]);
   spPositions[i*3]   = cpx + bOffCurvedX[i];
@@ -660,7 +665,12 @@ for (let vi = 0; vi < 13; vi++) {
       spColorVars[gi] = 0.5 + Math.random() * 0.3;
       spAlphas[gi] *= 1.9;
     } else {
-      spColorVars[gi] = (1 - vzDepth) * 0.24 - 0.07 + (Math.random() - 0.5) * 0.07;
+      if (Math.random() < 0.22) {
+        spColorVars[gi] = 0.24 + Math.random() * 0.24;
+        spAlphas[gi] *= 1.24;
+      } else {
+        spColorVars[gi] = (1 - vzDepth) * 0.24 - 0.07 + (Math.random() - 0.5) * 0.07;
+      }
     }
     boostSpineGoldAndSparkle(spColorVars, spSizes, spAlphas, gi, t, cx + vOffCurvedX[idx]);
   }
