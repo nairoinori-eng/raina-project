@@ -104,10 +104,10 @@ const CURRENT_PHASE = 3;
 // 阶段一不用 [5]/[6]，回落到金色保持兼容
 const SPINE_PALETTE_P1 = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xB8A6D6, 0xD79A42, 0xD79A42];
 const SPINE_PALETTE_P2 = [0x182833, 0x1B536D, 0x3A5A95, 0x9099C8, 0xE8DCC2, 0x82A85F, 0xA867A0];
-const SPINE_PALETTE_P3 = [0x304F5F, 0x404F7C, 0x9FC4D5, 0xC68A3E, 0xF0E5D0, 0x82A85F, 0xC68A3E];
+const SPINE_PALETTE_P3 = [0x304F5F, 0x404F7C, 0x9FC4D5, 0xC19A30, 0xF0E5D0, 0x82A85F, 0xC19A30];
 const HALO_PALETTE_P1  = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xD8D0F0, 0xD79A42, 0xD79A42];
 const HALO_PALETTE_P2  = [0x182833, 0x1B536D, 0x3A5A95, 0x9099C8, 0xE8DCC2, 0x82A85F, 0xA867A0];
-const HALO_PALETTE_P3  = [0x304F5F, 0x404F7C, 0x9FC4D5, 0xC68A3E, 0xF0E5D0, 0x82A85F, 0xC68A3E];
+const HALO_PALETTE_P3  = [0x304F5F, 0x404F7C, 0x9FC4D5, 0xC19A30, 0xF0E5D0, 0x82A85F, 0xC19A30];
 
 const SPINE_PALETTES = [null, SPINE_PALETTE_P1, SPINE_PALETTE_P2, SPINE_PALETTE_P3];
 const HALO_PALETTES  = [null, HALO_PALETTE_P1,  HALO_PALETTE_P2,  HALO_PALETTE_P3];
@@ -569,10 +569,10 @@ for (let i = 0; i < N_BONE; i++) {
     bBaseA[i] *= 1.55;
   } else if (CURRENT_PHASE === 3) {
     // 阶段三：取消 lobe；外层 sin-mask 断续描边金占整个脊柱长度，混入极少量 olive
-    const sinMask = Math.sin(tClamped * 24.0 + 0.7) > -0.3;
-    const inOuterRim = !isInterior && wallRatio > 0.72 && sinMask;
+    const sinMask = Math.sin(tClamped * 24.0 + 0.7) > -0.5;
+    const inOuterRim = !isInterior && wallRatio > 0.66 && sinMask;
     const sideOlive = inOuterRim && Math.random() < 0.10;       // 极少量 olive
-    const sideGold = !sideOlive && inOuterRim && Math.random() < 0.78;
+    const sideGold = !sideOlive && inOuterRim && Math.random() < 0.88;
     const randomGold = !sideOlive && !sideGold && Math.random() < 0.08;
     if (sideOlive) {
       spColorVars[i] = -0.96 + Math.random() * 0.03;            // → palette[5] olive
@@ -736,9 +736,9 @@ for (let vi = 0; vi < 13; vi++) {
       spAlphas[gi] *= 1.9;
     } else if (CURRENT_PHASE === 3) {
       // 阶段三：椎丸最凸起处不规则金团（角度噪声制造不规则形状），混入极少量 olive
-      const angleNoise = Math.sin(vAngle * 3.5 + vi * 1.7) > -0.4;
-      const isOuterRing = !isVertFill && radialNorm > 0.72;
-      const protrusionGold = isOuterRing && angleNoise && Math.random() < 0.75;
+      const angleNoise = Math.sin(vAngle * 3.5 + vi * 1.7) > -0.6;
+      const isOuterRing = !isVertFill && radialNorm > 0.66;
+      const protrusionGold = isOuterRing && angleNoise && Math.random() < 0.85;
       const tinyOlive = !protrusionGold && isOuterRing && Math.random() < 0.06;
       const randomGold = !protrusionGold && !tinyOlive && !isOuterRing && Math.random() < 0.06;
       if (protrusionGold) {
