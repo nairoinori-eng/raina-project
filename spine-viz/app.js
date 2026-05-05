@@ -77,7 +77,7 @@ const COLOR_MID  = new THREE.Color(0xd87890);  // 粉红过渡（饱和的中间
 const COLOR_GOLD = new THREE.Color(0xd49c58);  // 中等饱和暖金
 
 // 高光色（接近白色的高亮，强烈正面光感）
-const HL_DARK = new THREE.Color(0xC99857);   // 暖琥珀金（Indigo x Amber 高光）
+const HL_DARK = new THREE.Color(0xE5B576);   // 亮琥珀金（更夺目高光）
 const HL_MID  = new THREE.Color(0xffd8e8);   // 亮粉高光
 const HL_GOLD = new THREE.Color(0xffe0a0);   // 柔和亮金
 
@@ -1563,10 +1563,10 @@ const vineVertexShader = /* glsl */`
 
 // 藤蔓配色：与骨骼互补反相 + 饱和中点（每档都有色相，不走灰）
 // A 套（blend=0）：骨骼深紫时 → 藤蔓金
-const VINE_A_COLOR = new THREE.Color(0x8E6F3D);  // 深琥珀（金暗）
-const VINE_A_HL    = new THREE.Color(0xC99857);  // 暖琥珀金（金亮）
-const VINE_A_AC1   = new THREE.Color(0xA4ADC8);  // 浅银蓝（银亮）
-const VINE_A_AC2   = new THREE.Color(0x6B7290);  // 中靛蓝（银暗）
+const VINE_A_COLOR = new THREE.Color(0xC99857);  // 暖琥珀金（基色）
+const VINE_A_HL    = new THREE.Color(0xA4ADC8);  // 浅银蓝（lerp 到银，金银渐变）
+const VINE_A_AC1   = new THREE.Color(0xE5B576);  // 亮琥珀（备用暗部）
+const VINE_A_AC2   = new THREE.Color(0x6B7290);  // 中靛蓝（备用暗部）
 // MID 套（blend=0.5）：翠绿过渡（粉红的对比色），高光/暗部都压得更深
 const VINE_MID_COLOR = new THREE.Color(0x3a6848);  // 暗翠绿（压低亮度）
 const VINE_MID_HL    = new THREE.Color(0x1e3428);  // 深闷翠
@@ -2334,7 +2334,7 @@ const leafVertexShader = /* glsl */`
 // ── 叶子颜色：4 色跨色相（强反差，叶子之间看起来色彩丰富）──
 // A 套（blend=0）：骨骼深紫时 → 叶子金（暖色域 4 色相）
 const LEAF_A_COLOR = new THREE.Color(0x5B4A85);  // 中紫叶面
-const LEAF_A_HL    = new THREE.Color(0xC99857);  // 暖琥珀金（叶脉）
+const LEAF_A_HL    = new THREE.Color(0xE5B576);  // 亮琥珀金（叶脉更显眼）
 const LEAF_A_AC1   = new THREE.Color(0xA4ADC8);  // 浅银蓝
 const LEAF_A_AC2   = new THREE.Color(0x1E2156);  // 深靛蓝（叶阴影）
 // MID 套（blend=0.5）：嫩翠过渡（高饱和撞色，粉色骨骼阶段要 pop）
