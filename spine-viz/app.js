@@ -1418,10 +1418,13 @@ const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
 
 // ── 分支尖端弥散粒子（4 条孪生路径 + 阶段递增可见 + 时间驱动流动）──
 const DRIFT_SEG_INDICES = [9, 12];
-const TWIN_OFFSETS_VINE = [-0.05, 0.05]; // 明显分开的孪生基准偏移
-const DRIFT_TWINS = DRIFT_SEG_INDICES.length * TWIN_OFFSETS_VINE.length; // 4
-const DRIFT_PPV = 8000;
+const TWIN_OFFSETS_VINE = [-0.030, 0.030]; // 适中的孪生基准偏移
+const DRIFT_TWINS = DRIFT_SEG_INDICES.length * TWIN_OFFSETS_VINE.length;
+const DRIFT_PPV = 12000;       // 12k/twin × 4 = 48k 总
 const DRIFT_TOTAL = DRIFT_TWINS * DRIFT_PPV;
+// 每条 twin 不同频率 + 振幅，避免同侧两条形态雷同
+const TWIN_FREQS = [1.1, 1.7, 1.3, 0.9];
+const TWIN_AMPS  = [0.030, 0.022, 0.026, 0.034];
 
 // ── 藤蔓拓扑分析（自动检测主干/分支/末梢）──
 function vineKey(pt) {
@@ -1735,24 +1738,31 @@ for (const si of DRIFT_SEG_INDICES) {
         tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
       }
 
-      // 孪生 X 偏移 + 每条路径独立相位的正弦摇摆 → 4 条形态独立的弯曲路径
-      const twinPhase = myTwinIdx * Math.PI / 2;
-      const twinSwayX = 0.04 * Math.sin(rawT * 1.5 + twinPhase);
-      const twinSwayY = 0.025 * Math.sin(rawT * 1.2 + twinPhase + 0.5);
-      px += twinXOff + twinSwayX;
+      // 孪生 X/Y 偏移 + 每条路径独立频率/振幅的正弦摇摆 → 4 条形态完全独立
+      // ramp 因子保证 rawT=0 起点严格在主藤交汇点（不悬空）
+      const twinPhase = myTwinIdx * 1.7;
+      const twinFreq = TWIN_FREQS[myTwinIdx];
+      const twinAmp = TWIN_AMPS[myTwinIdx];
+      const startRamp = 1.0 - Math.exp(-rawT * 3.0); // 0 at rawT=0, ~1 at rawT > 1
+      const twinSwayX = twinAmp * Math.sin(rawT * twinFreq + twinPhase) * startRamp;
+      const twinSwayY = twinAmp * 0.7 * Math.sin(rawT * (twinFreq * 0.85) + twinPhase + 1.3) * startRamp;
+      px += (twinXOff * startRamp) + twinSwayX;
       py += twinSwayY;
 
-      // 云团宽度（整体放大，让 P3 弥散云更丰满）
+      // 云团宽度（紧凑型，让粒子聚拢成形态分明的丝线，P2/P3 通过 visibility 扩展）
       const spreadWidth = rawT < 1.0
-        ? 0.014 + rawT * 0.012                // 0.014 → 0.026
+        ? 0.008 + rawT * 0.006                // 0.008 → 0.014
         : rawT < 2.5
-          ? 0.026 + (rawT - 1.0) * 0.018      // 0.026 → 0.053
-          : 0.053 + (rawT - 2.5) * 0.012;     // 远端 → 0.083
+          ? 0.014 + (rawT - 1.0) * 0.008      // 0.014 → 0.026
+          : 0.026 + (rawT - 2.5) * 0.004;     // 远端 → 0.036
 
-      // 3D 高斯扩散
+      // 3D 圆锥扩散：visibility 决定径向距离（核心粒子小 spread / 外围粒子大 spread）
+      // 这样 P1 只看到核心丝线（紧凑），P3 看到外围 + 核心融合的雾管
+      const visibility = Math.random();           // 0~1 uniform
+      const spreadScale = 0.25 + visibility * 1.85; // 0.25× ~ 2.10× spread
       const perpX = -tanY, perpY = tanX;
-      const radInPerp = gaussRand() * spreadWidth;
-      const radInZ    = gaussRand() * spreadWidth;
+      const radInPerp = gaussRand() * spreadWidth * spreadScale;
+      const radInZ    = gaussRand() * spreadWidth * spreadScale;
       const radial    = Math.sqrt(radInPerp * radInPerp + radInZ * radInZ);
 
       const sx = px * VINE_X_SCALE + perpX * radInPerp;
@@ -1793,9 +1803,7 @@ for (const si of DRIFT_SEG_INDICES) {
       vnColorVars[particleIdx] = mainColor * (1 - colorBlend) + driftColor * colorBlend;
       vnDriftT[particleIdx]    = rawT;
 
-      // drift meta：visibility = 径向距离归一化（核心粒子 P1 可见，外围粒子 P3 才可见）
-      // 用 spreadWidth 标准化，让每个 rawT 位置的"核心 30%"分布一致
-      const visibility = Math.min(1.0, radial / (spreadWidth * 1.6));
+      // drift meta：visibility 已在上面 uniform 0~1 烘焙，对应 spread 大小（核心 P1 可见 / 外围 P3 才可见）
       const speedOffset = Math.random();
       vnDriftMeta[particleIdx * 4]     = myTwinIdx;
       vnDriftMeta[particleIdx * 4 + 1] = visibility;
@@ -1993,10 +2001,10 @@ const vineVertexShader = /* glsl */`
         float w1 = clamp(1.0 - uPhase, 0.0, 1.0);
         float w3 = clamp(uPhase - 1.0, 0.0, 1.0);
         float w2 = 1.0 - w1 - w3;
-        // P1: 25% 可见 (核心 4 条线), P2: 70% (更粗扩散), P3: 100% (满雾)
-        float phaseFactor = 0.25 * w1 + 0.70 * w2 + 1.0 * w3;
+        // P1: 40% 可见 (核心 4 条丝线), P2: 75% (融合更粗), P3: 100%+ (满雾)
+        float phaseFactor = 0.40 * w1 + 0.75 * w2 + 1.05 * w3;
         // smoothstep 让阶段过渡平滑，不再突跳
-        float visMask = 1.0 - smoothstep(phaseFactor - 0.10, phaseFactor + 0.05, aDriftMeta.y);
+        float visMask = 1.0 - smoothstep(phaseFactor - 0.15, phaseFactor + 0.05, aDriftMeta.y);
         // P3 丝缕：每条孪生不同相位 sin 带状调制，alpha 范围 0.25~1.75
         float strandWave = sin(aDriftT * 8.0 + aDriftMeta.x * 1.7);
         float p3Mod = 1.0 + w3 * 0.75 * strandWave;
