@@ -64,7 +64,7 @@ const N_SPINE = N_BONE + N_VERT;       // spineGeo 总量
 const N_DIFF  = 0;                     // Layer C（暂时关闭弥散粒子）
 const N_GLOW  = 0;                     // Layer D（暂时关闭辉光线）
 const N_DFULL = N_DIFF + N_GLOW;       // diffuseGeo 总量
-const N_SPINE_HALO = 5200;             // 脊柱周围金紫弥散尘雾（阶段一示意图增强层）
+const N_SPINE_HALO = 11000;            // 脊柱周围金紫弥散尘雾（阶段一示意图增强层）
 
 const N_AMB   = 300;                   // Layer E
 
@@ -170,21 +170,21 @@ function spineGoldLobeWeight(t, worldX) {
 
 function boostSpineGoldAndSparkle(colorVars, sizes, alphas, i, t, worldX) {
   const lobe = spineGoldLobeWeight(t, worldX);
-  const inGoldLobe = lobe > 0.05 && Math.random() < 0.18 * lobe;
+  const inGoldLobe = lobe > 0.05 && Math.random() < 0.34 * lobe;
   const rareSparkle = Math.random() < 0.0012 + lobe * 0.006;
 
   if (inGoldLobe) {
     colorVars[i] = 0.30 + Math.random() * 0.22;  // palette[3] 金色，不改变全局金色区间
-    alphas[i] *= 1.55 + lobe * 1.20;
-    sizes[i] *= 1.08 + lobe * 0.22;
+    alphas[i] *= 1.45 + lobe * 0.95;
+    sizes[i] *= 1.04 + lobe * 0.16;
   }
 
   if (rareSparkle) {
     colorVars[i] = Math.random() < 0.55
       ? 0.70 + Math.random() * 0.18   // palette[4] 浅紫白
       : 0.42 + Math.random() * 0.16;  // palette[3] 金
-    alphas[i] *= 2.4 + lobe * 1.8;
-    sizes[i] *= 1.70 + lobe * 0.90;
+    alphas[i] *= 1.85 + lobe * 1.15;
+    sizes[i] *= 1.24 + lobe * 0.38;
   }
 }
 
@@ -364,8 +364,8 @@ const spineFragmentShader = /* glsl */`
     }
     // IDLE 微发光（温和，不过曝）
     float haloAmount = 0.12 + vIdleness * 0.18;
-    float core  = exp(-d * d * 24.0);
-    float halo  = exp(-d * d * 10.0) * haloAmount;
+    float core  = exp(-d * d * 16.0);
+    float halo  = exp(-d * d * 5.5) * haloAmount * 0.82;
     float alpha = (core + halo) * vAlpha * uAlphaBoost;
     gl_FragColor = vec4(c, alpha);
   }
@@ -520,13 +520,13 @@ for (let i = 0; i < N_BONE; i++) {
     // 冷撞色
     spColorVars[i] = -(0.50 + Math.random() * 0.35);
     bBaseA[i] *= 1.6;
-  } else if (acRoll < 0.22) {
+  } else if (acRoll < 0.17) {
     // 高光粒子
     spColorVars[i] = 0.45 + Math.random() * 0.35;
-    bBaseA[i] *= 1.4;
+    bBaseA[i] *= 1.25;
   } else {
-    // 普通粒子：前亮后暗
-    spColorVars[i] = (1 - zDepth) * 0.35 + (Math.random() - 0.5) * 0.10;
+    // 普通粒子：主体回到紫色，减少原结构里铺满的金色
+    spColorVars[i] = (1 - zDepth) * 0.20 - 0.02 + (Math.random() - 0.5) * 0.08;
   }
   boostSpineGoldAndSparkle(spColorVars, bBaseS, bBaseA, i, tClamped, cpx + bOffCurvedX[i]);
   spPositions[i*3]   = cpx + bOffCurvedX[i];
@@ -639,11 +639,11 @@ for (let vi = 0; vi < 13; vi++) {
     } else if (vacRoll < 0.06) {
       spColorVars[gi] = -(0.55 + Math.random() * 0.30);
       spAlphas[gi] *= 2.2;
-    } else if (vacRoll < 0.12) {
+    } else if (vacRoll < 0.09) {
       spColorVars[gi] = 0.5 + Math.random() * 0.3;
-      spAlphas[gi] *= 1.8;
+      spAlphas[gi] *= 1.45;
     } else {
-      spColorVars[gi] = (1 - vzDepth) * 0.35 + (Math.random() - 0.5) * 0.08;
+      spColorVars[gi] = (1 - vzDepth) * 0.20 - 0.02 + (Math.random() - 0.5) * 0.07;
     }
     boostSpineGoldAndSparkle(spColorVars, spSizes, spAlphas, gi, t, cx + vOffCurvedX[idx]);
   }
@@ -1074,6 +1074,7 @@ const haloSizes       = new Float32Array(N_SPINE_HALO);
 const haloAlphas      = new Float32Array(N_SPINE_HALO);
 const haloColorVars   = new Float32Array(N_SPINE_HALO);
 const haloPhases      = new Float32Array(N_SPINE_HALO);
+const haloFlows       = new Float32Array(N_SPINE_HALO * 2);
 
 for (let i = 0; i < N_SPINE_HALO; i++) {
   const t = Math.pow(Math.random(), 0.92);
@@ -1088,9 +1089,9 @@ for (let i = 0; i < N_SPINE_HALO; i++) {
   if (Math.random() < topBias * 0.55) side = 1;
   if (Math.random() < lowerBias * 0.55) side = -1;
 
-  const dist = 0.17 + Math.pow(Math.random(), 1.65) * 0.56;
-  const along = gaussRand() * 0.11;
-  const depth = gaussRand() * 0.24;
+  const dist = 0.10 + Math.pow(Math.random(), 2.4) * 0.34;
+  const along = gaussRand() * 0.075;
+  const depth = gaussRand() * 0.18;
   const curvedX = cp.x + nx * side * dist + tan.x * along;
   const curvedY = cp.y + ny * side * dist + tan.y * along;
 
@@ -1100,29 +1101,32 @@ for (let i = 0; i < N_SPINE_HALO; i++) {
   haloStraightPos[i * 3]     = side * dist + tan.x * along * 0.3;
   haloStraightPos[i * 3 + 1] = sp.y + tan.y * along;
   haloStraightPos[i * 3 + 2] = depth;
+  const flowAmp = 0.026 + Math.random() * 0.038;
+  haloFlows[i * 2]     = tan.x * flowAmp;
+  haloFlows[i * 2 + 1] = tan.y * flowAmp;
 
   const lobe = spineGoldLobeWeight(t, curvedX);
   const roll = Math.random();
-  if (lobe > 0.12 && roll < 0.58) {
+  if (lobe > 0.12 && roll < 0.68) {
     haloColorVars[i] = 0.32 + Math.random() * 0.22;   // 金色尘雾
-    haloAlphas[i] = (0.08 + Math.random() * 0.13) * (1.0 + lobe * 1.2);
-    haloSizes[i] = 0.020 + Math.random() * 0.040;
+    haloAlphas[i] = (0.075 + Math.random() * 0.11) * (1.0 + lobe * 1.05);
+    haloSizes[i] = 0.014 + Math.random() * 0.030;
   } else if (roll < 0.05) {
     haloColorVars[i] = 0.70 + Math.random() * 0.18;   // 极少量浅紫白爆点
-    haloAlphas[i] = 0.18 + Math.random() * 0.24;
-    haloSizes[i] = 0.060 + Math.random() * 0.070;
-  } else if (roll < 0.68) {
+    haloAlphas[i] = 0.10 + Math.random() * 0.15;
+    haloSizes[i] = 0.038 + Math.random() * 0.044;
+  } else if (roll < 0.74) {
     haloColorVars[i] = -0.05 + Math.random() * 0.20;  // 中紫主体
-    haloAlphas[i] = 0.035 + Math.random() * 0.060;
-    haloSizes[i] = 0.014 + Math.random() * 0.028;
-  } else if (roll < 0.88) {
+    haloAlphas[i] = 0.032 + Math.random() * 0.055;
+    haloSizes[i] = 0.010 + Math.random() * 0.022;
+  } else if (roll < 0.92) {
     haloColorVars[i] = -0.45 - Math.random() * 0.25;  // 深紫暗粉
-    haloAlphas[i] = 0.025 + Math.random() * 0.045;
-    haloSizes[i] = 0.012 + Math.random() * 0.024;
+    haloAlphas[i] = 0.022 + Math.random() * 0.038;
+    haloSizes[i] = 0.009 + Math.random() * 0.020;
   } else {
     haloColorVars[i] = 0.30 + Math.random() * 0.22;   // 散落金粉
-    haloAlphas[i] = 0.055 + Math.random() * 0.090;
-    haloSizes[i] = 0.016 + Math.random() * 0.034;
+    haloAlphas[i] = 0.048 + Math.random() * 0.075;
+    haloSizes[i] = 0.012 + Math.random() * 0.026;
   }
   haloPhases[i] = Math.random() * Math.PI * 2;
 }
@@ -1134,20 +1138,43 @@ const spineHaloVertexShader = /* glsl */`
   attribute float aAlpha;
   attribute float aColorVar;
   attribute float aPhase;
+  attribute vec2 aFlow;
   uniform float uBlend;
   uniform float uTime;
   varying float vAlpha;
   varying float vColorVar;
   void main() {
     vec3 pos = mix(aCurvedPos, aStraightPos, uBlend);
-    pos.x += sin(uTime * 0.33 + aPhase) * 0.026;
-    pos.y += cos(uTime * 0.27 + aPhase * 1.7) * 0.020;
-    pos.z += sin(uTime * 0.21 + aPhase * 2.1) * 0.034;
+    float drift = sin(uTime * 0.46 + aPhase);
+    pos.xy += aFlow * drift;
+    pos.x += sin(uTime * 0.23 + aPhase) * 0.010;
+    pos.y += cos(uTime * 0.19 + aPhase * 1.7) * 0.008;
+    pos.z += sin(uTime * 0.21 + aPhase * 2.1) * 0.026;
     vAlpha = aAlpha * (0.82 + sin(uTime * 0.55 + aPhase) * 0.18);
     vColorVar = aColorVar;
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_PointSize = aSize * (300.0 / -mv.z);
     gl_Position = projectionMatrix * mv;
+  }
+`;
+
+const spineHaloFragmentShader = /* glsl */`
+  uniform vec3 uPalette[5];
+  uniform float uAlphaBoost;
+  varying float vAlpha;
+  varying float vColorVar;
+  void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    vec3 c;
+    if      (vColorVar < -0.6) c = uPalette[0];
+    else if (vColorVar < -0.2) c = uPalette[1];
+    else if (vColorVar <  0.2) c = uPalette[2];
+    else if (vColorVar <  0.6) c = uPalette[3];
+    else                       c = uPalette[4];
+    float core = exp(-d * d * 12.0) * 0.62;
+    float halo = exp(-d * d * 3.4) * 0.34;
+    gl_FragColor = vec4(clamp(c, 0.0, 1.0), (core + halo) * vAlpha * uAlphaBoost);
   }
 `;
 
@@ -1159,10 +1186,11 @@ spineHaloGeo.setAttribute('aSize',        new THREE.BufferAttribute(haloSizes, 1
 spineHaloGeo.setAttribute('aAlpha',       new THREE.BufferAttribute(haloAlphas, 1));
 spineHaloGeo.setAttribute('aColorVar',    new THREE.BufferAttribute(haloColorVars, 1));
 spineHaloGeo.setAttribute('aPhase',       new THREE.BufferAttribute(haloPhases, 1));
+spineHaloGeo.setAttribute('aFlow',        new THREE.BufferAttribute(haloFlows, 2));
 
 const spineHaloMat = new THREE.ShaderMaterial({
   vertexShader: spineHaloVertexShader,
-  fragmentShader,
+  fragmentShader: spineHaloFragmentShader,
   uniforms: {
     uPalette:    { value: [
       new THREE.Color(0x1F2554),
@@ -1171,7 +1199,7 @@ const spineHaloMat = new THREE.ShaderMaterial({
       new THREE.Color(0xB98B58),
       new THREE.Color(0xF0E8FF),
     ] },
-    uAlphaBoost: { value: 1.65 },
+    uAlphaBoost: { value: 1.45 },
     uBlend:      { value: 0.0 },
     uTime:       { value: 0.0 },
   },
