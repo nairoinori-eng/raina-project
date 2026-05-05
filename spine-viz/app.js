@@ -1566,8 +1566,7 @@ for (let vi = 0; vi < vineData.length; vi++) {
   const pulsePhase = vi * 1.3 + 0.2;
 
   for (let si = 0; si < vd.curves.length; si++) {
-    // 弥散分支由专门的弥散系统处理，跳过
-    if (vi === 0 && DRIFT_SEG_INDICES.includes(si)) continue;
+    // 弥散分支：主体（rawT 0~1）走主藤循环正常渲染，drift 系统只处理超出尖端的飘散
     const curve = vd.curves[si];
     const ppv = vd.ppvs[si];
     const { depth, rootAtStart } = vd.topo[si];
@@ -1697,44 +1696,26 @@ for (const si of DRIFT_SEG_INDICES) {
   const sideBias = tipWorldX > 0 ? 1.0 : -1.0; // 正=右侧→往右飘，负=左侧→往左飘
 
   for (let p = 0; p < DRIFT_PPV; p++) {
-    // rawT: 0=分支根部, 1=尖端, 1~5=超出尖端飘散到屏幕边缘
-    const rawT = (p / (DRIFT_PPV - 1)) * 5.0;
+    // rawT: 1=尖端起点, 1~5=超出尖端飘散到屏幕边缘（曲线本体由主藤循环渲染）
+    const rawT = 1.0 + (p / (DRIFT_PPV - 1)) * 4.0;
 
-    // 计算沿曲线位置 + 超出尖端的延伸
-    let px, py, tanX, tanY;
-    const clampedT = Math.min(rawT, 1.0);
-    const ct = rootAtStart
-      ? Math.max(0.002, Math.min(0.998, clampedT))
-      : Math.max(0.002, Math.min(0.998, 1.0 - clampedT));
-    const curvePt = curve.getPointAt(ct);
-    const curveTan = curve.getTangentAt(ct);
+    // 从分支尖端往外飘散：往左/右弯 + 蜿蜒 S 曲线
+    const beyond = (rawT - 0.95) * 1.2;
+    const forwardDrift = beyond * 0.3;
+    const lateralDrift = (beyond * 0.25 + beyond * beyond * 0.08) * sideBias;
+    const baseX = tipPt.x + tipTan.x * outSign * forwardDrift + lateralDrift;
+    const baseY = tipPt.y + tipTan.y * outSign * forwardDrift;
+    const waveAmp = 0.03 + beyond * 0.08;
+    const wave = Math.sin(beyond * 2.5 + si * 2.5);
+    const px = baseX;
+    const py = baseY + wave * waveAmp;
+    const tanX = tipTan.x * outSign;
+    const tanY = tipTan.y * outSign;
 
-    if (rawT <= 0.95) {
-      // 在分支曲线上
-      px = curvePt.x; py = curvePt.y;
-      tanX = curveTan.x * outSign; tanY = curveTan.y * outSign;
-    } else {
-      // 0.95+延伸：一出尖端就往左/右弯，带蜿蜒
-      const beyond = Math.max(0, rawT - 0.95) * 1.2;
-      // 沿切线少量前进，主要是横向飘
-      const forwardDrift = beyond * 0.3;
-      const lateralDrift = (beyond * 0.25 + beyond * beyond * 0.08) * sideBias;
-      const baseX = tipPt.x + tipTan.x * outSign * forwardDrift + lateralDrift;
-      const baseY = tipPt.y + tipTan.y * outSign * forwardDrift;
-      // 蜿蜒S曲线
-      const waveAmp = 0.03 + beyond * 0.08;
-      const wave = Math.sin(beyond * 2.5 + si * 2.5);
-      px = baseX;
-      py = baseY + wave * waveAmp;
-      tanX = tipTan.x * outSign; tanY = tipTan.y * outSign;
-    }
-
-    // 散布：根部 0 宽（紧贴主藤交汇点）→ 尖端微宽 → 远处渐散但仍成线
-    const spreadWidth = rawT < 0.5
-      ? rawT * 0.016                        // 0 → 0.008，从交汇点尖锐出发
-      : rawT < 1.0
-        ? 0.008 + (rawT - 0.5) * 0.012      // 0.008 → 0.014
-        : 0.014 + (rawT - 1.0) * 0.008;     // 远处max≈0.046，仍可见
+    // 散布：从分支尖端 thin → 远处渐散
+    const spreadWidth = rawT < 1.5
+      ? 0.003 + (rawT - 1.0) * 0.020       // 0.003 → 0.013，尖端起点和分支 taper 末梢匹配
+      : 0.013 + (rawT - 1.5) * 0.010;      // 0.013 → 0.048
     // 3D 圆锥扩散：围绕中心切线轴在垂面内 2D 高斯分布（perp 法线 + Z 轴）
     // 360° 对称 → 任意视角看都是从中心轨迹弥散开的雾管
     const perpX = -tanY, perpY = tanX;
