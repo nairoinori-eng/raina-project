@@ -690,11 +690,11 @@ const spineMat = new THREE.ShaderMaterial({
   vertexShader: spineVertexShader, fragmentShader: spineFragmentShader,
   uniforms: {
     uPalette:           { value: [
-      new THREE.Color(0x11193A),  // [0] 暗部
-      new THREE.Color(0x11193A),  // [1] 暗-灰
-      new THREE.Color(0x42306D),  // [2] 灰面
-      new THREE.Color(0x42306D),  // [3] 灰-高光
-      new THREE.Color(0xB98B58),  // [4] 高光
+      new THREE.Color(0x11193A),  // [0] 4% 椎丸最暗（空腔）
+      new THREE.Color(0x2D3374),  // [1] 9% 深冷紫（暗-灰过渡）
+      new THREE.Color(0x42306D),  // [2] 50% 中紫主色
+      new THREE.Color(0xB98B58),  // [3] 30% 金色（让金高光更明显）
+      new THREE.Color(0xB98B58),  // [4] 6% 极亮金高光
     ] },
     uColor:             { value: COLOR_DARK.clone() },
     uHighlight:         { value: HL_DARK.clone() },
@@ -1014,11 +1014,11 @@ const diffuseMat = new THREE.ShaderMaterial({
   vertexShader, fragmentShader,
   uniforms: {
     uPalette:    { value: [
-      new THREE.Color(0x11193A),  // [0] 辅1
-      new THREE.Color(0x11193A),  // [1]
-      new THREE.Color(0x42306D),  // [2] 主
-      new THREE.Color(0x42306D),  // [3]
-      new THREE.Color(0xB98B58),  // [4] 辅2
+      new THREE.Color(0x11193A),  // [0] 暗
+      new THREE.Color(0x2D3374),  // [1] 暗-主
+      new THREE.Color(0x42306D),  // [2] 50% 主色
+      new THREE.Color(0xB98B58),  // [3] 30% 金粒子
+      new THREE.Color(0xB98B58),  // [4] 6% 极亮金
     ] },
     uColor:      { value: COLOR_DARK.clone() },
     uHighlight:  { value: HL_DARK.clone() },
