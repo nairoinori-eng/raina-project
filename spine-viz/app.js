@@ -569,10 +569,10 @@ for (let i = 0; i < N_BONE; i++) {
     bBaseA[i] *= 1.55;
   } else if (CURRENT_PHASE === 3) {
     // 阶段三：取消 lobe；外层 sin-mask 断续描边金占整个脊柱长度，混入极少量 olive
-    const sinMask = Math.sin(tClamped * 24.0 + 0.7) > 0.05;
-    const inOuterRim = !isInterior && wallRatio > 0.78 && sinMask;
+    const sinMask = Math.sin(tClamped * 24.0 + 0.7) > -0.3;
+    const inOuterRim = !isInterior && wallRatio > 0.72 && sinMask;
     const sideOlive = inOuterRim && Math.random() < 0.10;       // 极少量 olive
-    const sideGold = !sideOlive && inOuterRim && Math.random() < 0.65;
+    const sideGold = !sideOlive && inOuterRim && Math.random() < 0.78;
     const randomGold = !sideOlive && !sideGold && Math.random() < 0.08;
     if (sideOlive) {
       spColorVars[i] = -0.96 + Math.random() * 0.03;            // → palette[5] olive
@@ -736,14 +736,14 @@ for (let vi = 0; vi < 13; vi++) {
       spAlphas[gi] *= 1.9;
     } else if (CURRENT_PHASE === 3) {
       // 阶段三：椎丸最凸起处不规则金团（角度噪声制造不规则形状），混入极少量 olive
-      const angleNoise = Math.sin(vAngle * 3.5 + vi * 1.7) > -0.2;
-      const isOuterRing = !isVertFill && radialNorm > 0.78;
-      const protrusionGold = isOuterRing && angleNoise && Math.random() < 0.62;
+      const angleNoise = Math.sin(vAngle * 3.5 + vi * 1.7) > -0.4;
+      const isOuterRing = !isVertFill && radialNorm > 0.72;
+      const protrusionGold = isOuterRing && angleNoise && Math.random() < 0.75;
       const tinyOlive = !protrusionGold && isOuterRing && Math.random() < 0.06;
       const randomGold = !protrusionGold && !tinyOlive && !isOuterRing && Math.random() < 0.06;
       if (protrusionGold) {
         spColorVars[gi] = 0.97 + Math.random() * 0.02;        // → palette[6] 凸起金
-        spAlphas[gi] *= 1.45;
+        spAlphas[gi] *= 1.65;
       } else if (tinyOlive) {
         spColorVars[gi] = -0.96 + Math.random() * 0.03;       // → palette[5] olive
         spAlphas[gi] *= 1.18;
