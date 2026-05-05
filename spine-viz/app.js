@@ -102,9 +102,9 @@ const CURRENT_PHASE = 2;
 //   [0] 最暗  [1] 暗  [2] 主色  [3] 主高光  [4] 极亮爆点  [5] 椎丸侧面 olive  [6] 侧边短段粉紫
 // 阶段一不用 [5]/[6]，回落到金色保持兼容
 const SPINE_PALETTE_P1 = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xB8A6D6, 0xD79A42, 0xD79A42];
-const SPINE_PALETTE_P2 = [0x182833, 0x1B536D, 0x5B4191, 0xA8C8D8, 0xE8DCC2, 0x82A85F, 0xA867A0];
+const SPINE_PALETTE_P2 = [0x182833, 0x1B536D, 0x5B4191, 0x7CAFC8, 0xE8DCC2, 0x82A85F, 0xB855B0];
 const HALO_PALETTE_P1  = [0x1F2554, 0x3D4382, 0x66548F, 0xD79A42, 0xD8D0F0, 0xD79A42, 0xD79A42];
-const HALO_PALETTE_P2  = [0x182833, 0x1B536D, 0x5B4191, 0xA8C8D8, 0xE8DCC2, 0x82A85F, 0xA867A0];
+const HALO_PALETTE_P2  = [0x182833, 0x1B536D, 0x5B4191, 0x7CAFC8, 0xE8DCC2, 0x82A85F, 0xB855B0];
 
 const ACTIVE_SPINE_PALETTE = (CURRENT_PHASE === 2 ? SPINE_PALETTE_P2 : SPINE_PALETTE_P1).map(h => new THREE.Color(h));
 const ACTIVE_HALO_PALETTE  = (CURRENT_PHASE === 2 ? HALO_PALETTE_P2  : HALO_PALETTE_P1 ).map(h => new THREE.Color(h));
@@ -567,11 +567,11 @@ for (let i = 0; i < N_BONE; i++) {
     const tInLeftLobe  = tClamped > 0.66 && tClamped < 0.80;
     const inSidePinkLobe = !isInterior && wallRatio > 0.66 &&
       ((tInRightLobe && sideSign > 0) || (tInLeftLobe && sideSign < 0));
-    const sidePink = inSidePinkLobe && Math.random() < 0.72;
+    const sidePink = inSidePinkLobe && Math.random() < 0.82;
     const randomGold = !sidePink && Math.random() < 0.08;
     if (sidePink) {
       spColorVars[i] = 0.97 + Math.random() * 0.02;     // → palette[6] 粉紫
-      bBaseA[i] *= 1.28;
+      bBaseA[i] *= 1.55;
     } else if (randomGold) {
       spColorVars[i] = 0.24 + Math.random() * 0.24;
       bBaseA[i] *= 1.14;
@@ -709,12 +709,12 @@ for (let vi = 0; vi < 13; vi++) {
       const isLeftRim  = !isVertFill && cosA < -VERT_OUTER * 0.34 && radialNorm > 0.68;
       const tInRightLobe = t > 0.20 && t < 0.34;
       const tInLeftLobe  = t > 0.66 && t < 0.80;
-      const sidePink = ((isRightRim && tInRightLobe) || (isLeftRim && tInLeftLobe)) && Math.random() < 0.72;
+      const sidePink = ((isRightRim && tInRightLobe) || (isLeftRim && tInLeftLobe)) && Math.random() < 0.82;
       const sideOlive = !sidePink && isRightRim && Math.random() < 0.10;
       const randomGold = !sidePink && !sideOlive && !(isRightRim || isLeftRim) && Math.random() < 0.08;
       if (sidePink) {
         spColorVars[gi] = 0.97 + Math.random() * 0.02;        // → palette[6] 粉紫
-        spAlphas[gi] *= 1.30;
+        spAlphas[gi] *= 1.55;
       } else if (sideOlive) {
         spColorVars[gi] = -0.96 + Math.random() * 0.03;       // → palette[5] olive
         spAlphas[gi] *= 1.18;
