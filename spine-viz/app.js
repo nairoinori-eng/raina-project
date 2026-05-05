@@ -1735,25 +1735,28 @@ for (const si of DRIFT_SEG_INDICES) {
       : rawT < 1.0
         ? 0.008 + (rawT - 0.5) * 0.012      // 0.008 → 0.014
         : 0.014 + (rawT - 1.0) * 0.008;     // 远处max≈0.046，仍可见
+    // 3D 圆锥扩散：围绕中心切线轴在垂面内 2D 高斯分布（perp 法线 + Z 轴）
+    // 360° 对称 → 任意视角看都是从中心轨迹弥散开的雾管
     const perpX = -tanY, perpY = tanX;
-    const spread = gaussRand() * spreadWidth;
+    const radInPerp = gaussRand() * spreadWidth;
+    const radInZ    = gaussRand() * spreadWidth;
 
-    const sx = px * VINE_X_SCALE + perpX * spread;
-    const sy = py * VINE_Y_SCALE + perpY * spread;
+    const sx = px * VINE_X_SCALE + perpX * radInPerp;
+    const sy = py * VINE_Y_SCALE + perpY * radInPerp;
     const spineX = getSpineXAtY(sy);
 
     const yNorm = Math.max(0, Math.min(1, (vineYMax - sy) / vineYRange));
 
-    // Z 衔接：交汇点 rawT≈0 严格匹配主藤 Z，之后指数快速衰减到 0（drift 是 2D 飘散）
+    // Z 衔接：交汇点 rawT≈0 严格匹配主藤 Z，之后指数快速衰减到 0
     const wrapR = 0.10;
-    const mainZ = Math.sin(yNorm * Math.PI * 2 * 2.5) * wrapR; // vi=0, vineFactor=1
-    const zBlend = Math.exp(-rawT * 8); // rawT=0→1, 0.1→0.45, 0.3→0.09, 0.5→0.02
+    const mainZ = Math.sin(yNorm * Math.PI * 2 * 2.5) * wrapR;
+    const zBlend = Math.exp(-rawT * 8);
 
     vnCurvedX[particleIdx]   = sx + spineX;
     vnCurvedY[particleIdx]   = sy;
     vnStraightX[particleIdx] = sx;
     vnStraightY[particleIdx] = sy;
-    vnZPos[particleIdx]      = mainZ * zBlend + gaussRand() * 0.01;
+    vnZPos[particleIdx]      = mainZ * zBlend + radInZ + gaussRand() * 0.005;
 
     vnParamT[particleIdx]    = yNorm;
     vnVineId[particleIdx]    = 0;
