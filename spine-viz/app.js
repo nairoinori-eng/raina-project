@@ -215,9 +215,9 @@ const fragmentShader = /* glsl */`
     else if (vColorVar <  0.2) c = uPalette[2];
     else if (vColorVar <  0.6) c = uPalette[3];
     else                       c = uPalette[4];
-    c = clamp(c, 0.0, 0.95);
+    c = clamp(c, 0.0, 1.0);
     float core  = exp(-d * d * 24.0);
-    float halo  = exp(-d * d * 10.0) * 0.12;
+    float halo  = exp(-d * d * 10.0) * 0.20;
     float alpha = (core + halo) * vAlpha * uAlphaBoost;
     gl_FragColor = vec4(c, alpha);
   }
@@ -317,7 +317,7 @@ const spineFragmentShader = /* glsl */`
     else if (vColorVar <  0.2) c = uPalette[2];
     else if (vColorVar <  0.6) c = uPalette[3];
     else                       c = uPalette[4];
-    c = clamp(c, 0.0, 0.95);
+    c = clamp(c, 0.0, 1.0);
     if (uSegmentHighlight > 0.0) {
       float thorZone = smoothstep(0.12, 0.28, vParamT)
                      * (1.0 - smoothstep(0.38, 0.52, vParamT));
@@ -692,7 +692,7 @@ const spineMat = new THREE.ShaderMaterial({
     uPalette:           { value: [
       new THREE.Color(0x11193A),  // [0] 4% 椎丸最暗（空腔）
       new THREE.Color(0x2D3374),  // [1] 9% 深冷紫（暗-灰过渡）
-      new THREE.Color(0x42306D),  // [2] 50% 中紫主色
+      new THREE.Color(0x5C4A85),  // [2] 50% 中紫主色
       new THREE.Color(0xB98B58),  // [3] 30% 金色（让金高光更明显）
       new THREE.Color(0xB98B58),  // [4] 6% 极亮金高光
     ] },
@@ -1016,7 +1016,7 @@ const diffuseMat = new THREE.ShaderMaterial({
     uPalette:    { value: [
       new THREE.Color(0x11193A),  // [0] 暗
       new THREE.Color(0x2D3374),  // [1] 暗-主
-      new THREE.Color(0x42306D),  // [2] 50% 主色
+      new THREE.Color(0x5C4A85),  // [2] 50% 主色
       new THREE.Color(0xB98B58),  // [3] 30% 金粒子
       new THREE.Color(0xB98B58),  // [4] 6% 极亮金
     ] },
@@ -2366,8 +2366,8 @@ const leafMat = new THREE.ShaderMaterial({
   fragmentShader, // 复用藤蔓的soft-circle fragment shader
   uniforms: {
     uPalette:   { value: [
-      new THREE.Color(0x42306D),  // [0] 叶面
-      new THREE.Color(0x42306D),  // [1]
+      new THREE.Color(0x5C4A85),  // [0] 叶面
+      new THREE.Color(0x5C4A85),  // [1]
       new THREE.Color(0xB98B58),  // [2] 脉根
       new THREE.Color(0x785B66),  // [3]
       new THREE.Color(0x785B66),  // [4] 脉尖
