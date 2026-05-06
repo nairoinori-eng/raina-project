@@ -1625,19 +1625,22 @@ for (let vi = 0; vi < vineData.length; vi++) {
 
       // 颜色渐变：顶部暖亮 → 底部深冷 + Z深度立体
       const yNormColor = (vineYMax - sy) / vineYRange;
-      // 6 段交替带（顶到底）：紫 → 金 → 蓝 → 金 → 紫 → 蓝；相邻段平滑插值
-      const VINE_BANDS = [-0.40, 0.40, -0.80, 0.40, -0.40, -0.80];
+      // 6 段交替带（顶到底）：相邻段平滑插值
+      // P1/P2 共用同一组 band（紫-金-蓝-金-紫-蓝），P3 单独一组多档金色
+      const VINE_BANDS    = [-0.40, 0.40, -0.80, 0.40, -0.40, -0.80];
+      const VINE_BANDS_P3 = [ 0.10, 0.40, -0.80, 0.75, -0.40,  0.40]; // 中金-主金-深蓝-奶白金-冰蓝-主金
       const fbi = yNormColor * (VINE_BANDS.length - 1);
       const bi0 = Math.max(0, Math.min(VINE_BANDS.length - 1, Math.floor(fbi)));
       const bi1 = Math.max(0, Math.min(VINE_BANDS.length - 1, bi0 + 1));
       const bfrac = fbi - bi0;
-      const gradient = VINE_BANDS[bi0] * (1 - bfrac) + VINE_BANDS[bi1] * bfrac;
+      const gradient   = VINE_BANDS[bi0]    * (1 - bfrac) + VINE_BANDS[bi1]    * bfrac;
+      const gradientP3 = VINE_BANDS_P3[bi0] * (1 - bfrac) + VINE_BANDS_P3[bi1] * bfrac;
       const z = vnZPos[particleIdx];
       const zBias = z > 0.03 ? 0.15 : z < -0.03 ? -0.15 : 0.0;
-      const cvBand = gradient + zBias + (Math.random() - 0.5) * 0.12;
-      vnColorVars[particleIdx]   = cvBand;
-      vnColorVarsP2[particleIdx] = cvBand;
-      vnColorVarsP3[particleIdx] = cvBand;
+      const noiseV = (Math.random() - 0.5) * 0.12;
+      vnColorVars[particleIdx]   = gradient   + zBias + noiseV;
+      vnColorVarsP2[particleIdx] = gradient   + zBias + noiseV;
+      vnColorVarsP3[particleIdx] = gradientP3 + zBias + noiseV;
 
       particleIdx++;
     }
@@ -1689,17 +1692,19 @@ ACCENT_VINES.forEach((accent, accentIdx) => {
     vnPhase[particleIdx]   = accent.phase;
     vnSizes[particleIdx]   = 0.022 + Math.random() * 0.006;
     vnAlphas[particleIdx]  = accent.alpha + Math.random() * 0.10;
-    // 辅藤也用同款 6 段交替带渐变（紫-金-蓝-金-紫-蓝）
-    const VINE_BANDS_AC = [-0.40, 0.40, -0.80, 0.40, -0.40, -0.80];
+    // 辅藤：P1/P2 用紫-金-蓝-金-紫-蓝；P3 用多档金色 band
+    const VINE_BANDS_AC    = [-0.40, 0.40, -0.80, 0.40, -0.40, -0.80];
+    const VINE_BANDS_AC_P3 = [ 0.10, 0.40, -0.80, 0.75, -0.40,  0.40];
     const fbiAc = yNorm * (VINE_BANDS_AC.length - 1);
     const ai0 = Math.max(0, Math.min(VINE_BANDS_AC.length - 1, Math.floor(fbiAc)));
     const ai1 = Math.max(0, Math.min(VINE_BANDS_AC.length - 1, ai0 + 1));
     const afrac = fbiAc - ai0;
-    const cvAc = VINE_BANDS_AC[ai0] * (1 - afrac) + VINE_BANDS_AC[ai1] * afrac
-               + (Math.random() - 0.5) * 0.10;
+    const noiseAc = (Math.random() - 0.5) * 0.10;
+    const cvAc   = VINE_BANDS_AC[ai0]    * (1 - afrac) + VINE_BANDS_AC[ai1]    * afrac + noiseAc;
+    const cvAcP3 = VINE_BANDS_AC_P3[ai0] * (1 - afrac) + VINE_BANDS_AC_P3[ai1] * afrac + noiseAc;
     vnColorVars[particleIdx]   = cvAc;
     vnColorVarsP2[particleIdx] = cvAc;
-    vnColorVarsP3[particleIdx] = cvAc;
+    vnColorVarsP3[particleIdx] = cvAcP3;
 
     particleIdx++;
   }
@@ -1805,14 +1810,16 @@ for (const si of DRIFT_SEG_INDICES) {
     cv1 = isSprinkle ? 0.40 : (isLeft ? -0.40 : -0.80);
     // P2: left=蓝(P2 pal[1])=-0.40, right=粉紫(P2 pal[0])=-0.80
     cv2 = isSprinkle ? 0.70 : (isLeft ? -0.40 : -0.80);
-    // P3：两侧都随机三色混合（深蓝 -0.8 / 冰蓝 -0.4 / 金 0.4）
+    // P3：两侧都随机混合多明度金色 + 蓝色（金色占主，蓝色少）
     if (isSprinkle) {
-      cv3 = 0.70; // 奶白
+      cv3 = 0.85; // 奶白金 pal[4]
     } else {
       const r3 = Math.random();
-      cv3 = r3 < 0.40 ? -0.80   // 40% 深蓝
-          : r3 < 0.75 ? -0.40   // 35% 冰蓝
-          :              0.40;  // 25% 金
+      cv3 = r3 < 0.20 ? -0.80   // 20% 深蓝 pal[0]
+          : r3 < 0.32 ? -0.40   // 12% 冰蓝 pal[1]
+          : r3 < 0.55 ? 0.10    // 23% 中明金 pal[2]
+          : r3 < 0.85 ? 0.40    // 30% 主金 pal[3]
+          :              0.75;  // 15% 奶白金 pal[4]
     }
 
     // rawT 0~0.4 与 mainColor 平滑衔接（mainColor 是按 yNorm 6 段，三阶段共用同一 vColorVar）
@@ -2086,8 +2093,11 @@ const VINE_PAL_P2 = [
   new THREE.Color(0x82A85F), new THREE.Color(0xE8DCC2),
 ];
 const VINE_PAL_P3 = [
-  new THREE.Color(0x404F7C), new THREE.Color(0x9FC4D5), new THREE.Color(0xB8C8D0),
-  new THREE.Color(0xC68A3E), new THREE.Color(0xF0E5D0),
+  new THREE.Color(0x404F7C),   // [0] 深蓝
+  new THREE.Color(0x9FC4D5),   // [1] 冰蓝
+  new THREE.Color(0xE5C588),   // [2] 中明金（替代灰蓝中间色）
+  new THREE.Color(0xC68A3E),   // [3] 主金
+  new THREE.Color(0xF0E5D0),   // [4] 奶白金高光
 ];
 
 const vineMat = new THREE.ShaderMaterial({
