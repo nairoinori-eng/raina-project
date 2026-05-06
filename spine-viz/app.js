@@ -1942,7 +1942,8 @@ const vineVertexShader = /* glsl */`
       sz = aSize * (1.0 + effectivePulse * pulseSize);
 
       vAlpha = alpha;
-      vColorVar = aColorVar + totalPulse * 0.5;
+      // 脉冲只影响 alpha/size（增亮高光），不再位移 vColorVar → 保留固有色不被换色
+      vColorVar = aColorVar;
     }
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
