@@ -2488,13 +2488,13 @@ for (const src of leafSources) {
   const leafOutX = onx * dotSign;
   const leafOutY = ony * dotSign;
 
-  // 分组：一组最多2片，避免同一处三片叶子堆叠
+  // 分组：50% 单片 / 50% 两片成对，避免同一处三片堆叠
   const groupRoll = Math.random();
-  const groupSize = groupRoll < 0.72 ? 1 : 2;
+  const groupSize = groupRoll < 0.50 ? 1 : 2;
 
   for (let g = 0; g < groupSize; g++) {
     // 叶柄位置：沿切线方向微偏（簇内分散）
-    const offsetAlongTangent = (g - (groupSize - 1) / 2) * 0.03;
+    const offsetAlongTangent = (g - (groupSize - 1) / 2) * 0.05;
     let sx = stemSX + tangentWorldX / outLen * offsetAlongTangent;
     const sy = stemSY + tangentWorldY / outLen * offsetAlongTangent;
     let cx = stemCX + tangentWorldX / outLen * offsetAlongTangent;
@@ -2527,7 +2527,8 @@ for (const src of leafSources) {
         break;
       }
     }
-    if (tooClose) continue;
+    // g>0 的成对叶子跳过全局距离检查（否则同对第二片会被自身的第一片挡掉）
+    if (g === 0 && tooClose) continue;
     placedXYs.push([sx, sy]);
     placedYs.push(sy);
 
