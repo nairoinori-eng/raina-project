@@ -1803,8 +1803,8 @@ for (const si of DRIFT_SEG_INDICES) {
     let cv1, cv2, cv3;
     // P1
     cv1 = isSprinkle ? 0.40 : (isLeft ? -0.40 : -0.80);
-    // P2
-    cv2 = isSprinkle ? 0.70 : (isLeft ? 0.40 : -0.80);
+    // P2: left=蓝(P2 pal[1])=-0.40, right=粉紫(P2 pal[0])=-0.80
+    cv2 = isSprinkle ? 0.70 : (isLeft ? -0.40 : -0.80);
     // P3：两侧都随机三色混合（深蓝 -0.8 / 冰蓝 -0.4 / 金 0.4）
     if (isSprinkle) {
       cv3 = 0.70; // 奶白
