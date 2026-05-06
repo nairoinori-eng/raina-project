@@ -2049,12 +2049,15 @@ const vineFragmentShader = /* glsl */`
   uniform float uAlphaBoost;
   varying float vAlpha;
   varying vec3 vColorVarTriple;
+  // 5 段连续插值：v∈[-1,+1] 映射到调色板 0~4 连续坐标，相邻段 mix 平滑过渡
   #define PICK_COLOR_VINE(pal, v, out) \
-    if      (v < -0.6) out = pal[0]; \
-    else if (v < -0.2) out = pal[1]; \
-    else if (v <  0.2) out = pal[2]; \
-    else if (v <  0.6) out = pal[3]; \
-    else               out = pal[4];
+    { \
+      float t = clamp((v + 1.0) * 2.0, 0.0, 4.0); \
+      if      (t < 1.0) out = mix(pal[0], pal[1], t); \
+      else if (t < 2.0) out = mix(pal[1], pal[2], t - 1.0); \
+      else if (t < 3.0) out = mix(pal[2], pal[3], t - 2.0); \
+      else              out = mix(pal[3], pal[4], t - 3.0); \
+    }
   void main() {
     float d = length(gl_PointCoord - vec2(0.5));
     if (d > 0.5) discard;
