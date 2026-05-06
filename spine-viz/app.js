@@ -3756,10 +3756,10 @@ function updateParticleVisibility() {
   const isExp   = currentMode === 'EXPERIENCE';
   const e = guideElapsed;
 
-  // 调色阶段：放出藤蔓，叶片/花仍隐藏
+  // 调色阶段：放出藤蔓 + 叶片，花仍隐藏
   vinePoints.visible   = true;
   spineHaloPoints.visible = isExp;
-  leafPoints.visible   = false;
+  leafPoints.visible   = true;
   flowerPoints.visible = false;
   pollenPoints.visible = false;
 
