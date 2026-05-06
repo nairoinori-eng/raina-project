@@ -2099,11 +2099,11 @@ const VINE_PAL_P2 = [
   new THREE.Color(0x82A85F), new THREE.Color(0xE8DCC2),
 ];
 const VINE_PAL_P3 = [
-  new THREE.Color(0x363F5E),   // [0] 深蓝（压暗）
-  new THREE.Color(0x82A8B8),   // [1] 冰蓝（压暗）
-  new THREE.Color(0xC4A876),   // [2] 中明金（压暗）
-  new THREE.Color(0xA87332),   // [3] 主金（压暗）
-  new THREE.Color(0xCFC2AA),   // [4] 奶白金高光（避免过曝）
+  new THREE.Color(0x2C334B),   // [0] 深蓝（再压暗）
+  new THREE.Color(0x6890A0),   // [1] 冰蓝
+  new THREE.Color(0xA48E5E),   // [2] 中金
+  new THREE.Color(0x8C5E26),   // [3] 主金
+  new THREE.Color(0xB0A48E),   // [4] 奶白金高光
 ];
 
 const vineMat = new THREE.ShaderMaterial({
@@ -2869,11 +2869,11 @@ const LEAF_PALETTE_MID = [
   new THREE.Color(0xD0C4B3),  // 米黄色叶尖/叶脉
 ];
 const LEAF_PALETTE_B = [
-  new THREE.Color(0x414860),  // 蓝叶暗部
-  new THREE.Color(0x9FC5D6),  // 蓝叶冰蓝
-  new THREE.Color(0xC6893E),  // 金叶主体
-  new THREE.Color(0xD9B56E),  // 浅金过渡
-  new THREE.Color(0xF0D7A2),  // 金叶亮边/叶脉
+  new THREE.Color(0x33384C),  // 蓝叶暗部（压暗）
+  new THREE.Color(0x7A9FAE),  // 蓝叶冰蓝（压暗）
+  new THREE.Color(0xA8732F),  // 金叶主体（压暗）
+  new THREE.Color(0xB89058),  // 浅金过渡（压暗）
+  new THREE.Color(0xC8B289),  // 金叶亮边/叶脉（避免过曝）
 ];
 
 const leafMat = new THREE.ShaderMaterial({
@@ -3240,11 +3240,11 @@ const FLOWER_PAL_P2 = [
   new THREE.Color(0xFFFFFF),  // [4] 纯白
 ];
 const FLOWER_PAL_P3 = [
-  new THREE.Color(0xB07C36),  // [0] 藏红花金（压暗）
-  new THREE.Color(0xC2A062),  // [1] 浅金（压暗）
-  new THREE.Color(0xB0CADD),  // [2] 浅蓝白（压暗）
-  new THREE.Color(0xCEDAE5),  // [3] 冰白（不再近纯白）
-  new THREE.Color(0xE5E8EE),  // [4] 高光（避免纯白过曝）
+  new THREE.Color(0x8C5E26),  // [0] 藏红花金（再压暗）
+  new THREE.Color(0xA0824A),  // [1] 浅金（再压暗）
+  new THREE.Color(0x90A8B8),  // [2] 浅蓝白（再压暗）
+  new THREE.Color(0xA8B5BE),  // [3] 冰白
+  new THREE.Color(0xBEC4CA),  // [4] 高光（不再亮）
 ];
 
 const flowerMat = new THREE.ShaderMaterial({
