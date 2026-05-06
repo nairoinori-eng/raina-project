@@ -1769,7 +1769,11 @@ for (const si of DRIFT_SEG_INDICES) {
     const zForBias = vnZPos[particleIdx];
     const zBias = zForBias > 0.03 ? 0.15 : zForBias < -0.03 ? -0.15 : 0.0;
     const mainColor  = mainGradient + zBias + (Math.random() - 0.5) * 0.12;
-    const driftColor = 0.1 + Math.random() * 0.2;
+    // 弥散色：紫/蓝主调 + 少量金点缀（40% 紫 / 40% 蓝 / 20% 金）
+    const dr = Math.random();
+    const driftColor = dr < 0.40 ? -0.40 + (Math.random() - 0.5) * 0.25   // 紫 (pal[1])
+                     : dr < 0.80 ? -0.75 + (Math.random() - 0.5) * 0.20   // 蓝 (pal[0])
+                     :              0.40 + (Math.random() - 0.5) * 0.25;  // 金 (pal[3])
     const colorBlend = Math.min(1.0, rawT * 0.7);  // rawT=0 → 0, rawT≥1.43 → 1
     vnColorVars[particleIdx] = mainColor * (1 - colorBlend) + driftColor * colorBlend;
     vnDriftT[particleIdx]    = rawT;
@@ -1987,11 +1991,11 @@ const vineMat = new THREE.ShaderMaterial({
   vertexShader: vineVertexShader, fragmentShader,
   uniforms: {
     uPalette:   { value: [
-      new THREE.Color(0x785B66),  // [0] 起点
-      new THREE.Color(0x2D3374),  // [1] 暗（脊柱后）
-      new THREE.Color(0x7B869D),  // [2] 亮1（脊柱前）
-      new THREE.Color(0x7B869D),  // [3] 亮1
-      new THREE.Color(0xB98B58),  // [4] 点缀
+      new THREE.Color(0x3D4382),  // [0] 深蓝（vColorVar < -0.6）  P1[1]
+      new THREE.Color(0x66548F),  // [1] 紫（-0.6 ~ -0.2）         P1[2]
+      new THREE.Color(0xB8A6D6),  // [2] 浅淡紫（-0.2 ~ 0.2 中间）  P1[4]
+      new THREE.Color(0xD79A42),  // [3] 金（0.2 ~ 0.6）           P1[3]
+      new THREE.Color(0xF0C26D),  // [4] 增亮金高光（> 0.6）
     ] },
     uColor:     { value: VINE_A_COLOR.clone() },
     uHighlight: { value: VINE_A_HL.clone() },
