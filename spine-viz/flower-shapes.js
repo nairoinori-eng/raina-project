@@ -13,8 +13,9 @@ export function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
   const PARTICLES_STAMEN = Math.floor(particlesPerFlower * 0.08);
   const PARTICLES_PETALS = particlesPerFlower - PARTICLES_STAMEN;
   const PER_PETAL = Math.floor(PARTICLES_PETALS / N_PETALS);
-  // 每瓣 65% 做描边（密实连续轮廓线，描边非常实）
-  const EDGE_RATIO = 0.65;
+  // 每瓣 50% 做描边：描边粒子绝对数（500*0.65 vs 650*0.50≈325）保持差不多，
+  // 但填充粒子数翻倍（500*0.35=175 → 650*0.50=325），覆盖力更强
+  const EDGE_RATIO = 0.50;
 
   const DEG = Math.PI / 180;
   const points = [];

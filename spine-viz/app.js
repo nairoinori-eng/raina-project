@@ -2970,7 +2970,7 @@ for (let i = 0; i < sortedLeaves.length && flowerPlaced < N_FLOWER_TARGET; i++) 
 }
 
 // ── 生成花朵粒子 ──
-const FLOWER_PARTICLES_PER = 900;
+const FLOWER_PARTICLES_PER = 1300;
 for (const fl of flowerInstances) {
   fl.template = generateFlowerTemplate(FLOWER_PARTICLES_PER, fl.seed);
   fl.particleCount = fl.template.length;
@@ -3838,7 +3838,7 @@ function updateParticleVisibility() {
   spineHaloPoints.visible = isExp;
   leafPoints.visible   = true;
   flowerPoints.visible = true;
-  pollenPoints.visible = false;
+  pollenPoints.visible = true;
 
   // GUIDE 时间窗口才显示（边界扩 0.5s 留 alpha 淡入淡出 buffer）
   ribPoints.visible   = isGuide && e >= 22.0 && e <= 32.0;
