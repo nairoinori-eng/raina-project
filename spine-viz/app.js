@@ -2531,23 +2531,12 @@ for (const src of leafSources) {
     placedXYs.push([sx, sy]);
     placedYs.push(sy);
 
-    // 叶子朝向角度：(leafOutX, leafOutY) 是叶尖指向
-    const angle = Math.atan2(leafOutY, leafOutX) - Math.PI / 2;
-
-    // 重力感 + 朝外夹紧：永远朝远离脊柱的方向
-    const side = sideBias;
-    // 右侧：角度在 [-π/2, 0]（下到右水平）
-    // 左侧：角度在 [-π, -π/2]（下到左水平）
-    const centerWorldAngle = side > 0 ? -Math.PI * 0.28 : -Math.PI * 0.72;
-    let worldTipAngle = centerWorldAngle + (Math.random() - 0.5) * Math.PI * 0.35;
+    // 叶子朝向角度：直接取(leafOutX, leafOutY) 的世界角=自然朝外方向，加少量随机散射
+    // 不再强制下半象限"颓废下垂"，让每片叶子按其所在藤段的法线扇形朝外
+    const worldOutAngle = Math.atan2(leafOutY, leafOutX);
+    let worldTipAngle = worldOutAngle + (Math.random() - 0.5) * Math.PI * 0.28;
     const clusterAngleOffset = (g - (groupSize - 1) / 2) * 0.20;
     worldTipAngle += clusterAngleOffset;
-    // 夹紧到朝外下半象限
-    if (side > 0) {
-      worldTipAngle = Math.max(-Math.PI * 0.5, Math.min(-0.05, worldTipAngle));
-    } else {
-      worldTipAngle = Math.max(-Math.PI + 0.05, Math.min(-Math.PI * 0.5, worldTipAngle));
-    }
     const finalAngle = worldTipAngle - Math.PI / 2;
 
     // 大小：每片都略有不同，差距明显但小叶不要过多
