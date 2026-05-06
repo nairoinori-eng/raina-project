@@ -24,8 +24,8 @@ export function generateFlowerTemplate(particlesPerFlower = 500, seed = 42) {
     const bloomAngle = pi * 72 * DEG - 90 * DEG;
     const layer = pi < 2 ? 0 : pi < 4 ? 1 : 2;
 
-    // BLOOM：胖圆花瓣
-    const bloom = { cx: Math.cos(bloomAngle) * 0.28, cy: Math.sin(bloomAngle) * 0.28, rx: 0.24, ry: 0.24, angle: bloomAngle };
+    // BLOOM：胖圆花瓣（半径 0.28 让相邻花瓣稍微 overlap，外轮廓更圆，但每瓣描边仍保留）
+    const bloom = { cx: Math.cos(bloomAngle) * 0.26, cy: Math.sin(bloomAngle) * 0.26, rx: 0.28, ry: 0.28, angle: bloomAngle };
 
     // BUD：花苞大小 ≈ 一片花瓣（直径 ~0.48）
     let bud;

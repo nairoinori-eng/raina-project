@@ -3019,17 +3019,7 @@ for (const fl of flowerInstances) {
 
   for (let p = 0; p < fl.particleCount; p++) {
     const pt = fl.template[p];
-
-    // 描边粒子投影到统一圆形外轮廓（半径 0.48，模板坐标空间），
-    // 花朵剪影从 5 瓣花变成接近正圆
-    let bloomSrc = pt.bloomPos;
-    if (pt.isEdge) {
-      const ax = pt.bloomPos[0], ay = pt.bloomPos[1];
-      const ang = Math.atan2(ay, ax);
-      const unifiedR = 0.48 + (Math.random() - 0.5) * 0.04;
-      bloomSrc = [Math.cos(ang) * unifiedR, Math.sin(ang) * unifiedR, pt.bloomPos[2]];
-    }
-    const bloom = transform3D(bloomSrc);
+    const bloom = transform3D(pt.bloomPos);
 
     const i3 = flIdx * 3;
     flBloomPos[i3] = bloom[0]; flBloomPos[i3+1] = bloom[1]; flBloomPos[i3+2] = bloom[2] + fl.flowerZ;
