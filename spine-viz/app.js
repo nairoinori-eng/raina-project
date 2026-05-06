@@ -1623,7 +1623,10 @@ for (let vi = 0; vi < vineData.length; vi++) {
 
       // 颜色渐变：顶部暖亮 → 底部深冷 + Z深度立体
       const yNormColor = (vineYMax - sy) / vineYRange;
-      const gradient = 0.5 - yNormColor * 2.5; // 顶 +0.5 金 → 中紫窄带 → 底 -2.0 深蓝
+      // 6 段交替带（顶到底）：紫 → 金 → 蓝 → 金 → 紫 → 蓝
+      const VINE_BANDS = [-0.40, 0.40, -0.80, 0.40, -0.40, -0.80];
+      const bandIdx = Math.min(VINE_BANDS.length - 1, Math.floor(yNormColor * VINE_BANDS.length));
+      const gradient = VINE_BANDS[bandIdx];
       const z = vnZPos[particleIdx];
       const zBias = z > 0.03 ? 0.15 : z < -0.03 ? -0.15 : 0.0;
       vnColorVars[particleIdx] = gradient + zBias + (Math.random() - 0.5) * 0.12;
@@ -1764,18 +1767,16 @@ for (const si of DRIFT_SEG_INDICES) {
     vnAlphas[particleIdx]    = fadeAlpha;
     vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
 
-    // 颜色：根部继承主藤渐变（金/紫），渐变到冷紫飘散
-    const mainGradient = 0.5 - yNorm * 2.5;
-    const zForBias = vnZPos[particleIdx];
-    const zBias = zForBias > 0.03 ? 0.15 : zForBias < -0.03 ? -0.15 : 0.0;
-    const mainColor  = mainGradient + zBias + (Math.random() - 0.5) * 0.12;
-    // 弥散色：蓝主调 + 少紫 + 点缀金（25% 紫 / 55% 蓝 / 20% 金）
-    const dr = Math.random();
-    const driftColor = dr < 0.25 ? -0.40 + (Math.random() - 0.5) * 0.25   // 紫 (pal[1])
-                     : dr < 0.80 ? -0.80 + (Math.random() - 0.5) * 0.20   // 蓝 (pal[0])
-                     :              0.40 + (Math.random() - 0.5) * 0.25;  // 金 (pal[3])
-    const colorBlend = Math.min(1.0, rawT * 0.7);  // rawT=0 → 0, rawT≥1.43 → 1
-    vnColorVars[particleIdx] = mainColor * (1 - colorBlend) + driftColor * colorBlend;
+    // 颜色：按距离分区（近紫 / 中蓝 / 远蓝+金），rawT 0~0.3 与主藤色平滑衔接
+    const VINE_BANDS_D = [-0.40, 0.40, -0.80, 0.40, -0.40, -0.80];
+    const bandIdxD = Math.min(VINE_BANDS_D.length - 1, Math.floor(yNorm * VINE_BANDS_D.length));
+    const mainColor = VINE_BANDS_D[bandIdxD] + (Math.random() - 0.5) * 0.10;
+    const zoneColor = rawT < 0.3 ? -0.40                                          // 近端紫
+                    : rawT < 1.5 ? -0.80                                          // 中段蓝
+                    : (Math.random() < 0.70 ? -0.80 : 0.40);                      // 远端 70%蓝/30%金
+    // 0~0.3 内从 mainColor 平滑过渡到 zoneColor，之后完全用 zoneColor
+    const continuityBlend = Math.min(1.0, rawT / 0.3);
+    vnColorVars[particleIdx] = mainColor * (1 - continuityBlend) + zoneColor * continuityBlend + (Math.random() - 0.5) * 0.10;
     vnDriftT[particleIdx]    = rawT;
 
     particleIdx++;
