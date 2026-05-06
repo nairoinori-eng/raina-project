@@ -1004,7 +1004,8 @@ const ribMat = new THREE.ShaderMaterial({
     uniform vec2  uRibVertebra[${N_RIBS_PER_SIDE}];
     uniform float uVertOuter[${N_RIBS_PER_SIDE}];   // 每根肋骨对应椎体的外径
     uniform float uActive;
-    uniform float uGrowth;  // 0=未长出, 1=长完（按 aPathT 从近脊柱端往外推进）
+    uniform float uGrowthRight;  // 右侧生长进度
+    uniform float uGrowthLeft;   // 左侧生长进度
     varying float vAlpha;
     varying float vColorVar;
     varying float vPathT;
@@ -1054,8 +1055,9 @@ const ribMat = new THREE.ShaderMaterial({
 
       vColorVar = aColorVar;
       vPathT = aPathT;
-      // 生长遮罩：粒子的 aPathT 小于 uGrowth 才可见，边缘柔化
-      float growMask = 1.0 - smoothstep(uGrowth, uGrowth + 0.08, aPathT);
+      // 左右独立生长：根据 aSide 选用对应的 uGrowth
+      float myGrowth = (aSide > 0.0) ? uGrowthRight : uGrowthLeft;
+      float growMask = 1.0 - smoothstep(myGrowth, myGrowth + 0.08, aPathT);
       vAlpha = uActive * growMask;
 
       vec4 mv = modelViewMatrix * vec4(pos2D, z, 1.0);
@@ -1083,7 +1085,8 @@ const ribMat = new THREE.ShaderMaterial({
   `,
   uniforms: {
     uActive:       { value: 0 },
-    uGrowth:       { value: 0 },
+    uGrowthRight:  { value: 0 },
+    uGrowthLeft:   { value: 0 },
     uRibVertebra:  { value: Array.from({length: N_RIBS_PER_SIDE}, (_, i) =>
                        new THREE.Vector2(ribVertebraXY[i*2], ribVertebraXY[i*2+1])) },
     uVertOuter:    { value: Array.from(ribVertOuter) },
@@ -3560,7 +3563,7 @@ spineGroup.add(flowPoints);
 // - 尖刺粒子（30%）：吸气时径向延伸出去，形成拖尾
 // - 高频径向震荡 + 角度抖动 让圆有"活气" + "震荡感"
 // 不放在 spineGroup，独立于脊柱旋转。位置在屏幕中央 + 略前置。
-const PACER_PCOUNT = 5000;
+const PACER_PCOUNT = 14000;
 const pacerGeo = new THREE.BufferGeometry();
 const pacerPosArr    = new Float32Array(PACER_PCOUNT * 3);
 const pacerAngleArr  = new Float32Array(PACER_PCOUNT);
@@ -3603,12 +3606,12 @@ const pacerMat = new THREE.ShaderMaterial({
     varying float vRadF;
     varying float vSpike;
     void main() {
-      // 整体缩放：呼气时 0.65 倍，吸气时 1.10 倍
-      float scale = 0.65 + uBreathe * 0.45;
+      // 整体缩放：扩张程度大幅减少（0.92~1.00 之间）
+      float scale = 0.92 + uBreathe * 0.08;
       // 基础半径分布
       float baseR = 0.18 + aRadF * 0.42;  // 0.18~0.60
-      // 尖刺延伸：吸气越深，尖刺越长
-      float spikeBoost = aSpike * uBreathe * 0.55;
+      // 尖刺延伸：大幅减小
+      float spikeBoost = aSpike * uBreathe * 0.18;
       float radius = (baseR + spikeBoost) * scale;
       // 高频径向震荡（边缘更明显） — 震荡感
       float vibe = sin(uTime * 4.5 + aAngle * 7.0 + aSeed * 9.0) * 0.022 * aRadF;
@@ -3740,19 +3743,25 @@ function enterExperience() {
   spineMat.uniforms.uFormation.value  = 1.0;
   spineMat.uniforms.uGuideAlpha.value = 1.0;
   spineMat.uniforms.uSegmentHighlight.value = 0.0;
-  vineMat.uniforms.uFormation.value   = 1.0;
-  // 显式同步呼吸/blend 初值，避免与 GUIDE 末帧值跳变
+  spineMat.uniforms.uBlend.value      = 0;       // 弯曲态，与 GUIDE 末帧一致
+  vineMat.uniforms.uFormation.value   = 0;       // 0 起，由 update loop 渐入到 1
+  vineMat.uniforms.uBlend.value       = 0;
+  spineHaloMat.uniforms.uBlend.value  = 0;
+  // 显式同步呼吸/blend/旋转初值，避免与 GUIDE 末帧值跳变
   spineMat.uniforms.uBreathe.value       = 0;
   spineMat.uniforms.uBreatheExpand.value = 1.0;
   smoothBlend = 0;
   targetBlend = 0;
+  // 旋转初值同步：GUIDE 末帧用了 lerp 跟踪，EXP 用直接赋值，强制对齐避免跳变
+  if (!branchEditMode) spineGroup.rotation.y = Math.sin(time * 0.52) * 0.35;
   leafPoints.visible = true;
-  diffusePoints.visible = true;        // EXPERIENCE 期才显示弥散流
+  diffusePoints.visible = true;
   comparisonMat.opacity = 0;
   flowMat.uniforms.uActive.value = 0;
   pacerMat.uniforms.uActive.value = 0;
   ribMat.uniforms.uActive.value = 0;
-  ribMat.uniforms.uGrowth.value = 0;
+  ribMat.uniforms.uGrowthRight.value = 0;
+  ribMat.uniforms.uGrowthLeft.value = 0;
   updateDebugUI();
   console.log('[raina] 呼吸体验阶段开始');
 }
@@ -4129,11 +4138,16 @@ function updateGuide(t) {
   else if (guideElapsed >= 30 && guideElapsed < 31.5) ribActive = 1 - (guideElapsed - 30) / 1.5;
   ribMat.uniforms.uActive.value = ribActive;
 
-  // 肋骨生长动画（2s 内从近脊柱端 aPathT=0 推进到 aPathT=1 远端）
-  let ribGrowth = 0;
-  if (guideElapsed >= 22.5 && guideElapsed < 24.5) ribGrowth = (guideElapsed - 22.5) / 2.0;
-  else if (guideElapsed >= 24.5) ribGrowth = 1.0;
-  ribMat.uniforms.uGrowth.value = ribGrowth;
+  // 肋骨生长动画：右侧先长（22.5~24s），左侧后长（27.5~29s），与字幕错开
+  let ribGrowthRight = 0;
+  if (guideElapsed >= 22.5 && guideElapsed < 24.0) ribGrowthRight = (guideElapsed - 22.5) / 1.5;
+  else if (guideElapsed >= 24.0) ribGrowthRight = 1.0;
+  ribMat.uniforms.uGrowthRight.value = ribGrowthRight;
+
+  let ribGrowthLeft = 0;
+  if (guideElapsed >= 27.5 && guideElapsed < 29.0) ribGrowthLeft = (guideElapsed - 27.5) / 1.5;
+  else if (guideElapsed >= 29.0) ribGrowthLeft = 1.0;
+  ribMat.uniforms.uGrowthLeft.value = ribGrowthLeft;
 
   // 脊柱旋转：全程保持轻摆动（移除"病理段冻结"，新脚本无此概念）
   if (!branchEditMode) {
@@ -4312,7 +4326,11 @@ function updateExperience(t) {
   diffuseMat.uniforms.uAccent2.value.copy(ac2Color);
 
   // 藤蔓
-  vineMat.uniforms.uFormation.value = 1.0;
+  // EXP 前 1s 内 vine/leaf/flower 渐入，避免从 GUIDE 切过来时藤蔓花叶突现
+  const expFadeIn = Math.min(1, (t - experienceStartTime) / 1.0);
+  vineMat.uniforms.uFormation.value = expFadeIn;
+  leafMat.uniforms.uAlphaBoost.value   = expFadeIn;
+  flowerMat.uniforms.uAlphaBoost.value = 1.5 * expFadeIn;
   for (let v = 0; v < N_VINES; v++) {
     if (!vineGrowTriggered[v] && smoothBlend >= VINE_GROW_THRESHOLDS[v]) {
       vineGrowTriggered[v] = true;
