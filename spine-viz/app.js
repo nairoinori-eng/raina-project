@@ -2011,11 +2011,11 @@ const vineMat = new THREE.ShaderMaterial({
   vertexShader: vineVertexShader, fragmentShader,
   uniforms: {
     uPalette:   { value: [
-      new THREE.Color(0x3D4382),  // [0] 深蓝（vColorVar < -0.6）  P1[1]
-      new THREE.Color(0x66548F),  // [1] 紫（-0.6 ~ -0.2）         P1[2]
-      new THREE.Color(0xB8A6D6),  // [2] 浅淡紫（-0.2 ~ 0.2 中间）  P1[4]
-      new THREE.Color(0xD79A42),  // [3] 金（0.2 ~ 0.6）           P1[3]
-      new THREE.Color(0xF0C26D),  // [4] 增亮金高光（> 0.6）
+      new THREE.Color(0x3D4382),  // [0] 深蓝
+      new THREE.Color(0x66548F),  // [1] 紫
+      new THREE.Color(0xB8A6D6),  // [2] 浅淡紫
+      new THREE.Color(0xC8A878),  // [3] 淡金（饱和度调低）
+      new THREE.Color(0xE0CFA0),  // [4] 淡金高光
     ] },
     uColor:     { value: VINE_A_COLOR.clone() },
     uHighlight: { value: VINE_A_HL.clone() },
