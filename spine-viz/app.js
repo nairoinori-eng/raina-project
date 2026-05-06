@@ -3582,8 +3582,8 @@ for (let i = 0; i < PACER_PCOUNT; i++) {
     pacerRadFArr[i]  = 0.85 + Math.random() * 0.20;  // 0.85~1.05 基础
     pacerSpikeArr[i] = 0.35 + Math.random() * 0.65;  // 延伸幅度
   } else {
-    // 核心粒子：仅环形（半径 0.55~1.0），中间留空
-    pacerRadFArr[i]  = 0.55 + Math.sqrt(Math.random()) * 0.45;  // 0.55~1.0
+    // 核心粒子：环形（半径 0.30~1.0），中间留小一点空心
+    pacerRadFArr[i]  = 0.30 + Math.sqrt(Math.random()) * 0.70;  // 0.30~1.0
     pacerSpikeArr[i] = 0;
   }
 }
@@ -3610,8 +3610,8 @@ const pacerMat = new THREE.ShaderMaterial({
     void main() {
       // 整体缩放：扩张程度大幅减少（0.92~1.00 之间）
       float scale = 0.92 + uBreathe * 0.08;
-      // 基础半径分布
-      float baseR = 0.18 + aRadF * 0.42;  // 0.18~0.60
+      // 基础半径分布（整体缩小）
+      float baseR = 0.12 + aRadF * 0.30;  // 0.12~0.42
       // 尖刺延伸：大幅减小
       float spikeBoost = aSpike * uBreathe * 0.18;
       float radius = (baseR + spikeBoost) * scale;
