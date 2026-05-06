@@ -3055,9 +3055,9 @@ for (const fl of flowerInstances) {
     const lineSizeMult = (isEdge || isStamen) ? Math.sqrt(sizeMult) : sizeMult;
     flSizes[flIdx] = baseSize * lineSizeMult;
 
-    // additive blending 下用亮描边（发光轮廓） + 中等填充
-    const layerAlpha = isStamen ? 0.90
-      : isEdge ? 0.75 + Math.random() * 0.15  // 描边亮（发光轮廓线）
+    // 描边更实（按叶子逻辑：alpha 拉到接近 1）+ 中等填充
+    const layerAlpha = isStamen ? 0.92
+      : isEdge ? 0.96 + Math.random() * 0.04  // 描边接近不透明，更实
       : pt.petalIndex < 2 ? 0.35 + Math.random() * 0.10
       : pt.petalIndex < 4 ? 0.40 + Math.random() * 0.10
       : 0.50 + Math.random() * 0.10;
