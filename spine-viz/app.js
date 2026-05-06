@@ -2669,8 +2669,13 @@ for (const leaf of leafInstances) {
     const jx = (Math.random() - 0.5) * jitter;
     const jy = (Math.random() - 0.5) * jitter;
 
-    // 取消形变（无 curl/bend）+ 取消翻转（widthSquash 强制 1.0，正面朝摄像机）
-    const lx = (pt.x + jx) * leaf.scale;
+    // 卷曲：沿叶片长度方向的 x 偏移（S 弯）
+    // S 弯卷曲 + 整体弯折（叶尖偏向一侧，二次方）
+    const curlX = Math.sin(pt.y * 3.0) * leaf.curlStrength
+                + pt.y * pt.y * leaf.bendStrength;
+
+    // 模板坐标 + 卷曲 + 抖动，x 再乘宽度压缩（模拟倾斜）
+    const lx = (pt.x * leaf.widthSquash + curlX + jx) * leaf.scale;
     const ly = (pt.y + jy) * leaf.scale;
 
     // 旋转到世界方向
@@ -2795,8 +2800,15 @@ const leafVertexShader = /* glsl */`
     stemPos.x += swayX;
     stemPos.y += swayY;
 
-    // 取消叶身飘动形变
-    vec2 leafSway = vec2(0.0);
+    // 3. 叶身局部摇曳（加强上下飘动）
+    float leafSwayAmp = yInLeaf * yInLeaf * 0.06; // 放大
+    float leafPhase = leafIdx * 1.37;
+    // Y 方向主导（上下飘），X 方向次之
+    vec2 leafSway = vec2(
+      sin(uTime * 0.8 + leafPhase) * leafSwayAmp * 0.5,
+      sin(uTime * 1.3 + leafPhase * 1.6) * leafSwayAmp * 1.2
+      + sin(uTime * 2.2 + leafPhase * 0.7) * leafSwayAmp * 0.4
+    );
 
     // 4. 分组触发式生长：粒子从叶柄→叶尖逐步显现（不缩放）
     float myGrowth = aGrowGroup < 0.5 ? uLeafGrowths.x
