@@ -2695,10 +2695,13 @@ for (const leaf of leafInstances) {
 
     // 粒子大小：叶脉/描边用更多小粒子形成实线，内部保持柔和
     let baseSize;
-    if (pt.isVein) baseSize = 0.024 + Math.random() * 0.007;
-    else if (pt.isEdge) baseSize = 0.026 + Math.random() * 0.008;
+    if (pt.isVein) baseSize = 0.026 + Math.random() * 0.008;
+    else if (pt.isEdge) baseSize = 0.032 + Math.random() * 0.010;
     else baseSize = 0.022 + Math.random() * 0.010;
-    lfSizes[lfIdx] = baseSize * sizeMult;
+    // 描边/叶脉用 sqrt(sizeMult) 缩放：保证小叶描边仍可见
+    // 内部粒子按线性缩放
+    const lineSizeMult = (pt.isVein || pt.isEdge) ? Math.sqrt(sizeMult) : sizeMult;
+    lfSizes[lfIdx] = baseSize * lineSizeMult;
 
     // alpha：线条粒子更稳定，靠密度形成实感而不是靠大光斑
     lfAlphas[lfIdx] = pt.isEdge ? 0.96 + Math.random() * 0.04
