@@ -10,7 +10,8 @@
  */
 
 // 各分组的统一淡出时间
-const GROUP_ENDS = { A: 22.5, A2: 33, B: 47, D: 83 };
+// A2 多停 1s 让"我们便如此共生"驻留更久
+const GROUP_ENDS = { A: 22.5, A2: 34, B: 47, D: 83 };
 
 // ── 文字时间表 ──
 const TEXT_SCHEDULE = [
@@ -20,7 +21,7 @@ const TEXT_SCHEDULE = [
   { text: '统计说，每一百人中，我们这样的会有两个。',          start: 9.5,  group: 'A' },
   // 数字"标签"锚定到脊柱凸起点 + 科技风指引线（先后出现，留到"陆地"句结束 22.5s 一起淡出）
   { text: '胸椎右凸 <span class="hl-warm">28</span> 度', start: 13.5, end: 22.5, anchor: 'thoracic', side: 'right', leader: true },
-  { text: '腰椎左凸 <span class="hl-warm">18</span> 度', start: 15.5, end: 22.5, anchor: 'lumbar',   side: 'left',  leader: true },
+  { text: '腰椎左凸 <span class="hl-cool">18</span> 度', start: 15.5, end: 22.5, anchor: 'lumbar',   side: 'left',  leader: true },
   { text: '数字标定了弯折的弧度。',                          start: 17.5, group: 'A' },
   { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 19.5, group: 'A' },
   // 22.5s group A 整体淡出
@@ -28,8 +29,8 @@ const TEXT_SCHEDULE = [
   { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 27.5, end: 31.5, anchor: 'ribLeft',  side: 'left'  },
   { text: '我们便如此共生。',                                start: 31.5, group: 'A2' },
 
-  // ─── 段 2a/b · 学法引入 (33-47s) - 堆叠 group B ───
-  { text: '但呼吸，是身体里仍能调动的事。',                    start: 33,   group: 'B' },
+  // ─── 段 2a/b · 学法引入 (34-47s) - 堆叠 group B（前推 1s 让 A2 驻留 + 1s 停顿）───
+  { text: '但呼吸，是身体里仍能调动的事。',                    start: 34,   group: 'B' },
   { text: '有一种呼吸——它不让气息均匀地涨满胸腔，',           start: 36,   group: 'B' },
   { text: '而是有方向地，专门送往凹陷的那一侧。',              start: 39.5, group: 'B' },
   { text: '让被挤压的肋骨，从内部，一次次轻轻推开。',          start: 42.5, group: 'B' },
@@ -220,6 +221,8 @@ export class IntroOverlays {
       this.$countdown.style.opacity = rem < 0.4 ? Math.max(0, rem / 0.4) : '';
     } else {
       this.$countdown.classList.remove('vis');
+      this.$countdown.style.opacity = '';     // 清掉 inline opacity，否则残留 0.x 不会消失
+      this.$countdown.innerHTML = '';
       this._lastCdText = null;
     }
   }

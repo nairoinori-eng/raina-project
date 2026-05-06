@@ -252,8 +252,9 @@ body {
 /* 高亮数据颜色 */
 .hl-o { color: #ff6840; font-weight: 500; letter-spacing: 0.05em; }
 .hl-c { color: #20e0c0; font-weight: 500; letter-spacing: 0.05em; }
-/* 段 1 数字高亮：淡暖金，比正文略显眼但不破坏文学感 */
-.hl-warm { color: #e8c878; font-weight: 400; }
+/* 段 1 数字高亮：用脊柱阶段一调色板的两个色（淡金 / 淡紫），更和谐 */
+.hl-warm { color: #d8b878; font-weight: 400; }   /* 暖：淡金（脊柱 P1 主金的淡化） */
+.hl-cool { color: #b8a6d6; font-weight: 400; }   /* 冷：淡紫（脊柱 P1 lavender） */
 
 /* 锚定文字的"科技风指引线"：开口圆 + 渐变细线，仅 anchor-r / anchor-l 类用 */
 .anchor-r,

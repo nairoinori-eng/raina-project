@@ -1004,6 +1004,7 @@ const ribMat = new THREE.ShaderMaterial({
     uniform vec2  uRibVertebra[${N_RIBS_PER_SIDE}];
     uniform float uVertOuter[${N_RIBS_PER_SIDE}];   // 每根肋骨对应椎体的外径
     uniform float uActive;
+    uniform float uGrowth;  // 0=未长出, 1=长完（按 aPathT 从近脊柱端往外推进）
     varying float vAlpha;
     varying float vColorVar;
     varying float vPathT;
@@ -1053,7 +1054,9 @@ const ribMat = new THREE.ShaderMaterial({
 
       vColorVar = aColorVar;
       vPathT = aPathT;
-      vAlpha = uActive;
+      // 生长遮罩：粒子的 aPathT 小于 uGrowth 才可见，边缘柔化
+      float growMask = 1.0 - smoothstep(uGrowth, uGrowth + 0.08, aPathT);
+      vAlpha = uActive * growMask;
 
       vec4 mv = modelViewMatrix * vec4(pos2D, z, 1.0);
       gl_PointSize = 0.085 * (300.0 / -mv.z);
@@ -1080,6 +1083,7 @@ const ribMat = new THREE.ShaderMaterial({
   `,
   uniforms: {
     uActive:       { value: 0 },
+    uGrowth:       { value: 0 },
     uRibVertebra:  { value: Array.from({length: N_RIBS_PER_SIDE}, (_, i) =>
                        new THREE.Vector2(ribVertebraXY[i*2], ribVertebraXY[i*2+1])) },
     uVertOuter:    { value: Array.from(ribVertOuter) },
@@ -3390,7 +3394,7 @@ for (let i = 0; i < N_AMB; i++) {
   ambOrbitR[i]   = 0.04  + Math.random() * 0.18;
   ambOrbitSpd[i] = 0.04  + Math.random() * 0.12;
   ambOrbitPh[i]  = Math.random() * Math.PI * 2;
-  ambCVars[i]    = (Math.random() - 0.5) * 0.15;
+  ambCVars[i]    = (Math.random() - 0.5) * 1.9; // 散布到全 palette 范围 (-0.95~+0.95)
 }
 
 const ambGeo = new THREE.BufferGeometry();
@@ -3407,11 +3411,11 @@ const ambMat = new THREE.ShaderMaterial({
     uAccent1:    { value: new THREE.Color(0x18102e) },
     uAccent2:    { value: new THREE.Color(0x18102e) },
     uPalette:    { value: [
-      new THREE.Color(0x11193A),  // 远景星尘全部用暗紫，阶段一统一
-      new THREE.Color(0x11193A),
-      new THREE.Color(0x11193A),
-      new THREE.Color(0x11193A),
-      new THREE.Color(0x11193A),
+      new THREE.Color(0x252B4A),  // 深蓝（暗色版 P1[1]）
+      new THREE.Color(0x3F354B),  // 紫（暗色版 P1[2]）
+      new THREE.Color(0x141B36),  // 深紫主基色
+      new THREE.Color(0x564028),  // 暗金（暗色版 P1[3]）
+      new THREE.Color(0x4A4F62),  // 银蓝高光（保留低亮度）
     ] },
     uAlphaBoost: { value: 1.0 },
   },
@@ -3737,12 +3741,18 @@ function enterExperience() {
   spineMat.uniforms.uGuideAlpha.value = 1.0;
   spineMat.uniforms.uSegmentHighlight.value = 0.0;
   vineMat.uniforms.uFormation.value   = 1.0;
+  // 显式同步呼吸/blend 初值，避免与 GUIDE 末帧值跳变
+  spineMat.uniforms.uBreathe.value       = 0;
+  spineMat.uniforms.uBreatheExpand.value = 1.0;
+  smoothBlend = 0;
+  targetBlend = 0;
   leafPoints.visible = true;
   diffusePoints.visible = true;        // EXPERIENCE 期才显示弥散流
   comparisonMat.opacity = 0;
   flowMat.uniforms.uActive.value = 0;
   pacerMat.uniforms.uActive.value = 0;
   ribMat.uniforms.uActive.value = 0;
+  ribMat.uniforms.uGrowth.value = 0;
   updateDebugUI();
   console.log('[raina] 呼吸体验阶段开始');
 }
@@ -3857,7 +3867,7 @@ function updateCamera(t) {
     breathStrength = Math.min(1, (t - experienceStartTime) / 2);
   }
   const br = breatheCurve(t);
-  const breathR = br * breathStrength * 0.3;  // 推拉幅度（保证脊柱不溢出屏幕）
+  const breathR = br * breathStrength * 0.15;  // 推拉幅度（吸气放大幅度减小）
 
   // 3) 维度 1：线性平移（仅 IDLE 漂移，GUIDE/EXPERIENCE 镜头静止）
   let offX = 0, offY = 0, offZ = 0;
@@ -3876,7 +3886,7 @@ function updateCamera(t) {
 
   // 5) 维度 3：FOV 耦合（仅 EXPERIENCE 才调 updateProjectionMatrix，IDLE/GUIDE 省开销）
   if (currentMode === 'EXPERIENCE' && breathStrength > 0) {
-    camera.fov = 60 - br * breathStrength * 1.2;
+    camera.fov = 60 - br * breathStrength * 0.6;
     camera.updateProjectionMatrix();
   } else if (camera.fov !== 60) {
     camera.fov = 60;
@@ -4119,6 +4129,12 @@ function updateGuide(t) {
   else if (guideElapsed >= 30 && guideElapsed < 31.5) ribActive = 1 - (guideElapsed - 30) / 1.5;
   ribMat.uniforms.uActive.value = ribActive;
 
+  // 肋骨生长动画（2s 内从近脊柱端 aPathT=0 推进到 aPathT=1 远端）
+  let ribGrowth = 0;
+  if (guideElapsed >= 22.5 && guideElapsed < 24.5) ribGrowth = (guideElapsed - 22.5) / 2.0;
+  else if (guideElapsed >= 24.5) ribGrowth = 1.0;
+  ribMat.uniforms.uGrowth.value = ribGrowth;
+
   // 脊柱旋转：全程保持轻摆动（移除"病理段冻结"，新脚本无此概念）
   if (!branchEditMode) {
     const rotTarget = Math.sin(t * 0.52) * 0.35;
@@ -4254,7 +4270,7 @@ function updateExperience(t) {
 
   const breathe       = breatheCurve(t);
   // 呼吸脉动随 blend 微增（不夸张）
-  const expandAmt = 0.15 + smoothBlend * 0.10; // 0.15→0.25
+  const expandAmt = 0.10 + smoothBlend * 0.06; // 0.10→0.16（呼吸环扩张减小）
   const breatheExpand = 1 + breathe * expandAmt;
 
   if (!branchEditMode) spineGroup.rotation.y = Math.sin(t * 0.52) * 0.35;
@@ -4786,7 +4802,14 @@ canvas.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
-  if (e.code === 'Space') { e.preventDefault(); startGuide(); }
+  if (e.code === 'Space') {
+    e.preventDefault();
+    startGuide();
+    // 空格启动时自动播 BGM（IDLE → GUIDE 切换）
+    if (bgmAudio && bgmAudio.paused) {
+      bgmAudio.play().catch(() => {});
+    }
+  }
   if (e.key === 'p' || e.key === 'P') togglePause();
   if (e.key === 'r' || e.key === 'R') { if (!branchEditMode) resetToIdle(); }
   if (e.key === 'd' || e.key === 'D') debugPanel.classList.toggle('hidden');
