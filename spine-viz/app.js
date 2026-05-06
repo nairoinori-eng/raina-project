@@ -180,6 +180,12 @@ function lerpMid(out, A, MID, B, t) {
   else         out.lerpColors(MID, B, (t - 0.5) * 2);
 }
 
+function lerpPaletteMid(outPalette, A, MID, B, t) {
+  for (let i = 0; i < outPalette.length; i++) {
+    lerpMid(outPalette[i], A[i], MID[i], B[i], t);
+  }
+}
+
 /** 不对称"拉长停留"：0~holdA 保持 0（紫色停留），1-holdB~1 保持 1（金色停留）。
  *  紫色 hold 更长（观众看得多），金色 hold 更短（过渡占大头）。 */
 function remapDwellAsym(t, holdA, holdB) {
@@ -2709,21 +2715,20 @@ for (const leaf of leafInstances) {
     lfAlphas[lfIdx] = pt.isEdge ? 0.96 + Math.random() * 0.04
       : (pt.isVein ? 0.84 + Math.random() * 0.10 : 0.40 + Math.random() * 0.10);
 
-    // 色系驱动 colorVar
-    // 叶脉保持深绿（negative small），普通粒子按yNorm渐变到色系色
+    // 色系驱动 colorVar：0=暖/金叶，1/2=冷蓝叶
     const tipGrad = pt.yNorm;
+    const warmLeaf = leaf.colorType === 0;
     let cv;
     if (pt.isVein) {
-      cv = -0.1 + (Math.random() - 0.5) * 0.1;
-    } else if (leaf.colorType === 0) {
-      // 绿→金：colorVar正值（→highlight）
-      cv = tipGrad * 0.7 + (Math.random() - 0.5) * 0.1;
-    } else if (leaf.colorType === 1) {
-      // 绿→紫：colorVar负值 > -0.5（→accent1）
-      cv = -tipGrad * 0.4 + (Math.random() - 0.5) * 0.08;
+      cv = warmLeaf
+        ? 0.30 + tipGrad * 0.20 + (Math.random() - 0.5) * 0.08
+        : -0.42 + tipGrad * 0.16 + (Math.random() - 0.5) * 0.08;
+    } else if (warmLeaf) {
+      // 暖叶：阶段二橄榄绿→米黄，阶段三金色层次
+      cv = 0.10 + tipGrad * 0.70 + (Math.random() - 0.5) * 0.10;
     } else {
-      // 绿→粉：colorVar < -0.5（→accent2）
-      cv = -0.55 - tipGrad * 0.4 + (Math.random() - 0.5) * 0.08;
+      // 冷叶：阶段二/三保持蓝色系，根部深、叶尖亮
+      cv = -0.72 + tipGrad * 0.42 + (Math.random() - 0.5) * 0.08;
     }
     lfColorVars[lfIdx] = cv;
 
@@ -2856,17 +2861,33 @@ const LEAF_B_HL    = new THREE.Color(0xF0E5D0);  // 米白叶脉
 const LEAF_B_AC1   = new THREE.Color(0xC68A3E);  // 藏红花金
 const LEAF_B_AC2   = new THREE.Color(0x6BAFD5);  // 鲜明冰川蓝
 
+const LEAF_PALETTE_A = [
+  new THREE.Color(0x2D3374),  // 冷叶暗紫蓝
+  new THREE.Color(0x5C4A85),  // 冷叶中紫
+  new THREE.Color(0xB98B58),  // 暖叶金色根部/叶脉
+  new THREE.Color(0x785B66),  // 暖叶紫粉过渡
+  new THREE.Color(0xC5B8DA),  // 暖叶浅紫亮边
+];
+const LEAF_PALETTE_MID = [
+  new THREE.Color(0x2D4252),  // 蓝叶暗部
+  new THREE.Color(0x5B87AA),  // 蓝叶主体
+  new THREE.Color(0x696E5D),  // 橄榄绿叶面
+  new THREE.Color(0x8BA8A4),  // 淡绿过渡
+  new THREE.Color(0xD0C4B3),  // 米黄色叶尖/叶脉
+];
+const LEAF_PALETTE_B = [
+  new THREE.Color(0x414860),  // 蓝叶暗部
+  new THREE.Color(0x9FC5D6),  // 蓝叶冰蓝
+  new THREE.Color(0xC6893E),  // 金叶主体
+  new THREE.Color(0xD9B56E),  // 浅金过渡
+  new THREE.Color(0xF0D7A2),  // 金叶亮边/叶脉
+];
+
 const leafMat = new THREE.ShaderMaterial({
   vertexShader: leafVertexShader,
   fragmentShader, // 复用藤蔓的soft-circle fragment shader
   uniforms: {
-    uPalette:   { value: [
-      new THREE.Color(0x5C4A85),  // [0] 叶面
-      new THREE.Color(0x5C4A85),  // [1]
-      new THREE.Color(0xB98B58),  // [2] 脉根
-      new THREE.Color(0x785B66),  // [3]
-      new THREE.Color(0x785B66),  // [4] 脉尖
-    ] },
+    uPalette:   { value: LEAF_PALETTE_A.map(c => c.clone()) },
     uColor:     { value: LEAF_A_COLOR.clone() },
     uHighlight: { value: LEAF_A_HL.clone() },
     uAccent1:   { value: LEAF_A_AC1.clone() },
@@ -4266,7 +4287,8 @@ function updateExperience(t) {
   );
   leafMat.uniforms.uBlend.value = smoothBlend;
   leafMat.uniforms.uTime.value  = t;
-  // 叶子配色跟随 colorBlend（同骨骼），中点用嫩翠保饱和度
+  // 叶子配色跟随三阶段 palette：P2=橄榄米黄/蓝，P3=金/蓝
+  lerpPaletteMid(leafMat.uniforms.uPalette.value, LEAF_PALETTE_A, LEAF_PALETTE_MID, LEAF_PALETTE_B, colorBlend);
   lerpMid(leafMat.uniforms.uColor    .value, LEAF_A_COLOR, LEAF_MID_COLOR, LEAF_B_COLOR, colorBlend);
   lerpMid(leafMat.uniforms.uHighlight.value, LEAF_A_HL,    LEAF_MID_HL,    LEAF_B_HL,    colorBlend);
   lerpMid(leafMat.uniforms.uAccent1  .value, LEAF_A_AC1,   LEAF_MID_AC1,   LEAF_B_AC1,   colorBlend);
