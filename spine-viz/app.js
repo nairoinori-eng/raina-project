@@ -2700,14 +2700,14 @@ for (const leaf of leafInstances) {
 
     // 粒子大小：叶脉/描边用更多小粒子形成实线，内部保持柔和
     let baseSize;
-    if (pt.isVein) baseSize = 0.018 + Math.random() * 0.006;
-    else if (pt.isEdge) baseSize = 0.017 + Math.random() * 0.006;
+    if (pt.isVein) baseSize = 0.024 + Math.random() * 0.007;
+    else if (pt.isEdge) baseSize = 0.026 + Math.random() * 0.008;
     else baseSize = 0.022 + Math.random() * 0.010;
     lfSizes[lfIdx] = baseSize * sizeMult;
 
     // alpha：线条粒子更稳定，靠密度形成实感而不是靠大光斑
-    lfAlphas[lfIdx] = pt.isEdge ? 0.88 + Math.random() * 0.08
-      : (pt.isVein ? 0.74 : 0.40) + Math.random() * 0.10;
+    lfAlphas[lfIdx] = pt.isEdge ? 0.96 + Math.random() * 0.04
+      : (pt.isVein ? 0.84 + Math.random() * 0.10 : 0.40 + Math.random() * 0.10);
 
     // 色系驱动 colorVar
     // 叶脉保持深绿（negative small），普通粒子按yNorm渐变到色系色
