@@ -2323,8 +2323,8 @@ function walkVineForLeaves(vineId, sourceArr, maxLeaves) {
   }
 }
 
-walkVineForLeaves(0, leafSources, 24); // 主藤
-walkVineForLeaves(1, leafSources, 10); // 辅藤A
+walkVineForLeaves(0, leafSources, 18); // 主藤
+walkVineForLeaves(1, leafSources, 7);  // 辅藤A
 // walkVineForLeaves(2, leafSources, 3);  // 辅藤B（已关闭）
 
 // 主藤下部大弯曲（seg 11）强制放 2 片叶子
