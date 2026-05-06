@@ -1623,7 +1623,7 @@ for (let vi = 0; vi < vineData.length; vi++) {
 
       // 颜色渐变：顶部暖亮 → 底部深冷 + Z深度立体
       const yNormColor = (vineYMax - sy) / vineYRange;
-      const gradient = 0.4 - yNormColor * 0.9; // +0.4(顶/高光) → -0.5(底/冷调)
+      const gradient = 0.5 - yNormColor * 2.5; // 顶 +0.5 金 → 中紫窄带 → 底 -2.0 深蓝
       const z = vnZPos[particleIdx];
       const zBias = z > 0.03 ? 0.15 : z < -0.03 ? -0.15 : 0.0;
       vnColorVars[particleIdx] = gradient + zBias + (Math.random() - 0.5) * 0.12;
@@ -1765,14 +1765,14 @@ for (const si of DRIFT_SEG_INDICES) {
     vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
 
     // 颜色：根部继承主藤渐变（金/紫），渐变到冷紫飘散
-    const mainGradient = 0.4 - yNorm * 0.9;
+    const mainGradient = 0.5 - yNorm * 2.5;
     const zForBias = vnZPos[particleIdx];
     const zBias = zForBias > 0.03 ? 0.15 : zForBias < -0.03 ? -0.15 : 0.0;
     const mainColor  = mainGradient + zBias + (Math.random() - 0.5) * 0.12;
-    // 弥散色：紫/蓝主调 + 少量金点缀（40% 紫 / 40% 蓝 / 20% 金）
+    // 弥散色：蓝主调 + 少紫 + 点缀金（25% 紫 / 55% 蓝 / 20% 金）
     const dr = Math.random();
-    const driftColor = dr < 0.40 ? -0.40 + (Math.random() - 0.5) * 0.25   // 紫 (pal[1])
-                     : dr < 0.80 ? -0.75 + (Math.random() - 0.5) * 0.20   // 蓝 (pal[0])
+    const driftColor = dr < 0.25 ? -0.40 + (Math.random() - 0.5) * 0.25   // 紫 (pal[1])
+                     : dr < 0.80 ? -0.80 + (Math.random() - 0.5) * 0.20   // 蓝 (pal[0])
                      :              0.40 + (Math.random() - 0.5) * 0.25;  // 金 (pal[3])
     const colorBlend = Math.min(1.0, rawT * 0.7);  // rawT=0 → 0, rawT≥1.43 → 1
     vnColorVars[particleIdx] = mainColor * (1 - colorBlend) + driftColor * colorBlend;
