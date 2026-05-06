@@ -1411,7 +1411,7 @@ const N_VINES = 3; // vineId 0=主藤蔓, 1/2=点缀藤蔓（依次生长）
 // ── 点缀藤蔓配置（薄、细、装饰性）──
 // 螺旋缠绕：x=R*sin(θ), z=R*cos(θ)，永远在骨骼外圈
 const ACCENT_VINES = [
-  { radius: 0.34, freq: 2.5, phase: Math.PI * 0.35, ppv: 6000, width: 0.007, alpha: 0.85 },
+  { radius: 0.34, freq: 2.5, phase: Math.PI * 0.35, ppv: 6000, width: 0.009, alpha: 0.85 },
   { radius: 0.26, freq: 3.5, phase: Math.PI * 1.30, ppv: 0, width: 0.010, alpha: 0.80 },  // 暂关
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
@@ -1471,7 +1471,7 @@ function getSpineXAtY(y) {
 // ── 预计算曲线和弧长 ──
 const VINE_X_SCALE = 1.5;  // 藤蔓横向扩展，拉开与脊柱的距离
 const VINE_Y_SCALE = 1.35; // 藤蔓纵向拉伸，覆盖到脊柱尖端
-const VINE_WIDTHS = [0.007, 0.003, 0.002];
+const VINE_WIDTHS = [0.009, 0.004, 0.0025];
 const VINE_GROW_THRESHOLDS = [0.05, 0.10, 0.15];
 const VINE_GROW_DURATION = 2.0;
 
@@ -1785,15 +1785,16 @@ for (const si of DRIFT_SEG_INDICES) {
     const dfrac = fbiD - di0;
     const mainColor = VINE_BANDS_D[di0] * (1 - dfrac) + VINE_BANDS_D[di1] * dfrac
                     + (Math.random() - 0.5) * 0.08;
-    // 颜色不分区：近端紫 + 紫蓝过渡，之后整段蓝主调随机散少量金
+    // 颜色全程随机混合（避免内紫外蓝分层）：根部强制紫保持与主藤衔接，
+    // 其余全段随机抽（紫/蓝/金按比例混在一起，不分径向带）
     let zoneColor;
-    if (rawT < 0.5) {
-      zoneColor = -0.40;                                            // 近端紫
-    } else if (rawT < 1.0) {
-      const tt = (rawT - 0.5) / 0.5;
-      zoneColor = -0.40 + tt * (-0.40);                             // 紫 → 蓝
+    if (rawT < 0.3) {
+      zoneColor = -0.40;                                            // 强制根部紫
     } else {
-      zoneColor = Math.random() < 0.10 ? 0.40 : -0.80;              // 蓝主调 90% + 金 10%（不分区，全程随机散点）
+      const r = Math.random();
+      zoneColor = r < 0.20 ? -0.40                                  // 紫 20%
+                : r < 0.92 ? -0.80                                  // 蓝 72%
+                :            0.40;                                  // 金 8%
     }
     // rawT 0~0.4 与 mainColor 平滑衔接
     const continuityBlend = Math.min(1.0, rawT / 0.4);
