@@ -2317,8 +2317,8 @@ function walkVineForLeaves(vineId, sourceArr, maxLeaves) {
   }
 }
 
-walkVineForLeaves(0, leafSources, 12); // 主藤
-walkVineForLeaves(1, leafSources, 4);  // 辅藤A
+walkVineForLeaves(0, leafSources, 16); // 主藤
+walkVineForLeaves(1, leafSources, 6);  // 辅藤A
 // walkVineForLeaves(2, leafSources, 3);  // 辅藤B（已关闭）
 
 // 主藤下部大弯曲（seg 11）强制放 2 片叶子
@@ -2482,9 +2482,9 @@ for (const src of leafSources) {
   const leafOutX = onx * dotSign;
   const leafOutY = ony * dotSign;
 
-  // 分组：一组最多3片
+  // 分组：一组最多2片，避免同一处三片叶子堆叠
   const groupRoll = Math.random();
-  const groupSize = groupRoll < 0.60 ? 1 : groupRoll < 0.85 ? 2 : 3;
+  const groupSize = groupRoll < 0.72 ? 1 : 2;
 
   for (let g = 0; g < groupSize; g++) {
     // 叶柄位置：沿切线方向微偏（簇内分散）
@@ -2586,9 +2586,9 @@ for (const src of leafSources) {
       bendStrength,
     });
 
-    // 叠加组合叶：30%的概率再加1-2片叠在同一位置，角度明显错开
-    if (Math.random() < 0.30) {
-      const extraCount = 1 + (Math.random() < 0.3 ? 1 : 0); // 大多只加1片，少数加2片
+    // 少量叠加组合叶：只允许补1片，避免同一位置出现三片以上
+    if (groupSize === 1 && Math.random() < 0.10) {
+      const extraCount = 1;
       for (let ex = 0; ex < extraCount; ex++) {
         // 角度错开 ±0.4~0.8 rad（清晰可辨是两片）
         const extraAngleOffset = (Math.random() < 0.5 ? 1 : -1) * (0.4 + Math.random() * 0.4);
@@ -2632,11 +2632,12 @@ const N_LEAVES = leafInstances.length;
 // 与原公式的上限持平，质感保留。
 const MIN_SCALE = 0.08, MAX_SCALE = 0.24;
 const LEAF_MAX_PARTICLES = 2600;
+const LEAF_MIN_PARTICLES = 420;
 const LEAF_DENSITY = LEAF_MAX_PARTICLES / (LEAF_REF_AREA * MAX_SCALE * MAX_SCALE);
 for (const leaf of leafInstances) {
   const t = LEAF_TEMPLATES[leaf.templateIdx];
   const worldArea = t.area * leaf.scale * leaf.scale;
-  leaf.particleCount = Math.max(150, Math.round(LEAF_DENSITY * worldArea));
+  leaf.particleCount = Math.max(LEAF_MIN_PARTICLES, Math.round(LEAF_DENSITY * worldArea));
 }
 const N_LEAF_TOTAL = leafInstances.reduce((s, l) => s + l.particleCount, 0);
 
@@ -2658,8 +2659,8 @@ for (const leaf of leafInstances) {
   const template = LEAF_TEMPLATES[leaf.templateIdx];
   const cosA = Math.cos(leaf.angle);
   const sinA = Math.sin(leaf.angle);
-  // 粒子大小乘数：大叶 1.0，小叶（MIN_SCALE/MAX_SCALE = 0.33）
-  const sizeMult = leaf.scale / LEAF_SIZE_REF_SCALE;
+  // 粒子大小乘数：小叶保留最低线宽，避免描边/叶脉看不清
+  const sizeMult = Math.max(0.62, leaf.scale / LEAF_SIZE_REF_SCALE);
 
   for (let p = 0; p < leaf.particleCount; p++) {
     const pt = template.points[p % template.points.length];
