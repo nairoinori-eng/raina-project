@@ -1411,7 +1411,7 @@ const N_VINES = 3; // vineId 0=主藤蔓, 1/2=点缀藤蔓（依次生长）
 // ── 点缀藤蔓配置（薄、细、装饰性）──
 // 螺旋缠绕：x=R*sin(θ), z=R*cos(θ)，永远在骨骼外圈
 const ACCENT_VINES = [
-  { radius: 0.34, freq: 2.5, phase: Math.PI * 0.35, ppv: 15000, width: 0.012, alpha: 0.85 },
+  { radius: 0.34, freq: 2.5, phase: Math.PI * 0.35, ppv: 6000, width: 0.007, alpha: 0.85 },
   { radius: 0.26, freq: 3.5, phase: Math.PI * 1.30, ppv: 0, width: 0.010, alpha: 0.80 },  // 暂关
 ];
 const ACCENT_TOTAL = ACCENT_VINES.reduce((s, a) => s + a.ppv, 0);
@@ -1471,7 +1471,7 @@ function getSpineXAtY(y) {
 // ── 预计算曲线和弧长 ──
 const VINE_X_SCALE = 1.5;  // 藤蔓横向扩展，拉开与脊柱的距离
 const VINE_Y_SCALE = 1.35; // 藤蔓纵向拉伸，覆盖到脊柱尖端
-const VINE_WIDTHS = [0.012, 0.005, 0.003];
+const VINE_WIDTHS = [0.007, 0.003, 0.002];
 const VINE_GROW_THRESHOLDS = [0.05, 0.10, 0.15];
 const VINE_GROW_DURATION = 2.0;
 
@@ -1498,7 +1498,7 @@ const vineData = VINE_ALL_SEGMENTS.map((segments) => {
 });
 
 // 按弧长比例分配粒子（目标 >= 21000）
-const VINE_TARGET_TOTAL = 60000;
+const VINE_TARGET_TOTAL = 25000;
 const totalArcLen = vineData.reduce((s, vd) =>
   s + vd.lengths.reduce((a, b) => a + b, 0), 0);
 
@@ -1785,16 +1785,15 @@ for (const si of DRIFT_SEG_INDICES) {
     const dfrac = fbiD - di0;
     const mainColor = VINE_BANDS_D[di0] * (1 - dfrac) + VINE_BANDS_D[di1] * dfrac
                     + (Math.random() - 0.5) * 0.08;
+    // 颜色不分区：近端紫 + 紫蓝过渡，之后整段蓝主调随机散少量金
     let zoneColor;
     if (rawT < 0.5) {
-      zoneColor = -0.40;                                          // 近端紫
+      zoneColor = -0.40;                                            // 近端紫
     } else if (rawT < 1.0) {
       const tt = (rawT - 0.5) / 0.5;
-      zoneColor = -0.40 + tt * (-0.40);                           // 紫 → 蓝 平滑
-    } else if (rawT < 2.5) {
-      zoneColor = -0.80;                                          // 中段蓝
+      zoneColor = -0.40 + tt * (-0.40);                             // 紫 → 蓝
     } else {
-      zoneColor = Math.random() < 0.70 ? -0.80 : 0.40;            // 远端 70%蓝/30%金
+      zoneColor = Math.random() < 0.10 ? 0.40 : -0.80;              // 蓝主调 90% + 金 10%（不分区，全程随机散点）
     }
     // rawT 0~0.4 与 mainColor 平滑衔接
     const continuityBlend = Math.min(1.0, rawT / 0.4);
