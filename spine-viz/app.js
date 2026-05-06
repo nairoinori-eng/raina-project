@@ -3019,7 +3019,17 @@ for (const fl of flowerInstances) {
 
   for (let p = 0; p < fl.particleCount; p++) {
     const pt = fl.template[p];
-    const bloom = transform3D(pt.bloomPos);
+
+    // 描边粒子投影到统一圆形外轮廓（半径 0.48，模板坐标空间），
+    // 花朵剪影从 5 瓣花变成接近正圆
+    let bloomSrc = pt.bloomPos;
+    if (pt.isEdge) {
+      const ax = pt.bloomPos[0], ay = pt.bloomPos[1];
+      const ang = Math.atan2(ay, ax);
+      const unifiedR = 0.48 + (Math.random() - 0.5) * 0.04;
+      bloomSrc = [Math.cos(ang) * unifiedR, Math.sin(ang) * unifiedR, pt.bloomPos[2]];
+    }
+    const bloom = transform3D(bloomSrc);
 
     const i3 = flIdx * 3;
     flBloomPos[i3] = bloom[0]; flBloomPos[i3+1] = bloom[1]; flBloomPos[i3+2] = bloom[2] + fl.flowerZ;
@@ -3036,10 +3046,14 @@ for (const fl of flowerInstances) {
 
     const isStamen = pt.petalIndex === 5;
     const isEdge = pt.isEdge;
-    const baseSize = isStamen ? 0.016 + Math.random() * 0.005
-      : isEdge ? 0.015 + Math.random() * 0.004  // 描边稍大更连续
+    // 描边粒子放大到与叶子描边同级别，确保剪影线明显
+    const baseSize = isStamen ? 0.020 + Math.random() * 0.006
+      : isEdge ? 0.026 + Math.random() * 0.008  // 描边大幅增粗（按叶子描边逻辑）
       : 0.017 + Math.random() * 0.005;
-    flSizes[flIdx] = baseSize * (fl.scale / 0.08);
+    // 描边/花蕊用 sqrt 缩放：保证小花描边仍可见；填充粒子线性
+    const sizeMult = fl.scale / 0.08;
+    const lineSizeMult = (isEdge || isStamen) ? Math.sqrt(sizeMult) : sizeMult;
+    flSizes[flIdx] = baseSize * lineSizeMult;
 
     // additive blending 下用亮描边（发光轮廓） + 中等填充
     const layerAlpha = isStamen ? 0.90
@@ -3775,7 +3789,7 @@ function updateParticleVisibility() {
   vinePoints.visible   = true;
   spineHaloPoints.visible = isExp;
   leafPoints.visible   = true;
-  flowerPoints.visible = false;
+  flowerPoints.visible = true;
   pollenPoints.visible = false;
 
   // GUIDE 时间窗口才显示（边界扩 0.5s 留 alpha 淡入淡出 buffer）
