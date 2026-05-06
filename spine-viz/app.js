@@ -2187,9 +2187,9 @@ function sampleLeafTemplate(shape) {
   const leafHeight = maxY - minY;
 
   const points = [];
-  // 70%填充点 + 叶脉点 + 轮廓点
+  // 填充点 + 高密度叶脉点 + 高密度轮廓点
   // 1. 内部填充（随机采样 + 拒绝法）
-  const targetFill = Math.floor(PARTICLES_PER_LEAF * 0.65);
+  const targetFill = Math.floor(PARTICLES_PER_LEAF * 0.50);
   let tries = 0;
   while (points.length < targetFill && tries < 5000) {
     tries++;
@@ -2203,7 +2203,7 @@ function sampleLeafTemplate(shape) {
   }
   // 2. 叶脉点（有 veins 数据）
   if (veins && veins.length > 0) {
-    const nVeins = Math.floor(PARTICLES_PER_LEAF * 0.20);
+    const nVeins = Math.floor(PARTICLES_PER_LEAF * 0.27);
     for (let i = 0; i < nVeins; i++) {
       const v = veins[Math.floor(Math.random() * veins.length)];
       const yNorm = (v[1] - minY) / leafHeight;
@@ -2664,8 +2664,8 @@ for (const leaf of leafInstances) {
   for (let p = 0; p < leaf.particleCount; p++) {
     const pt = template.points[p % template.points.length];
 
-    // 粒子级随机抖动（大幅增加）
-    const jitter = 0.08;
+    // 粒子级随机抖动：叶脉/描边更贴合模板，避免线条发虚
+    const jitter = pt.isVein ? 0.018 : (pt.isEdge ? 0.014 : 0.08);
     const jx = (Math.random() - 0.5) * jitter;
     const jy = (Math.random() - 0.5) * jitter;
 
@@ -2697,16 +2697,16 @@ for (const leaf of leafInstances) {
     // 按 leafParamT 分 4 组：0-0.25→0, 0.25-0.5→1, 0.5-0.75→2, 0.75-1→3
     lfGrowGroup[lfIdx] = Math.min(3, Math.floor(leaf.leafParamT * 4));
 
-    // 粒子大小：叶脉亮，边缘稍大，内部中等；整体乘 sizeMult 让小叶子等比缩小
+    // 粒子大小：叶脉/描边用更多小粒子形成实线，内部保持柔和
     let baseSize;
-    if (pt.isVein) baseSize = 0.028 + Math.random() * 0.008;
-    else if (pt.isEdge) baseSize = 0.030 + Math.random() * 0.008;
+    if (pt.isVein) baseSize = 0.018 + Math.random() * 0.006;
+    else if (pt.isEdge) baseSize = 0.017 + Math.random() * 0.006;
     else baseSize = 0.022 + Math.random() * 0.010;
     lfSizes[lfIdx] = baseSize * sizeMult;
 
-    // alpha：叶脉更亮
-    lfAlphas[lfIdx] = pt.isEdge ? 0.90 + Math.random() * 0.10  // 边缘高亮描边
-      : (pt.isVein ? 0.65 : 0.40) + Math.random() * 0.10;
+    // alpha：线条粒子更稳定，靠密度形成实感而不是靠大光斑
+    lfAlphas[lfIdx] = pt.isEdge ? 0.88 + Math.random() * 0.08
+      : (pt.isVein ? 0.74 : 0.40) + Math.random() * 0.10;
 
     // 色系驱动 colorVar
     // 叶脉保持深绿（negative small），普通粒子按yNorm渐变到色系色
