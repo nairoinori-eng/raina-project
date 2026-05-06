@@ -2099,11 +2099,11 @@ const VINE_PAL_P2 = [
   new THREE.Color(0x82A85F), new THREE.Color(0xE8DCC2),
 ];
 const VINE_PAL_P3 = [
-  new THREE.Color(0x404F7C),   // [0] 深蓝
-  new THREE.Color(0x9FC4D5),   // [1] 冰蓝
-  new THREE.Color(0xE5C588),   // [2] 中明金（替代灰蓝中间色）
-  new THREE.Color(0xC68A3E),   // [3] 主金
-  new THREE.Color(0xF0E5D0),   // [4] 奶白金高光
+  new THREE.Color(0x363F5E),   // [0] 深蓝（压暗）
+  new THREE.Color(0x82A8B8),   // [1] 冰蓝（压暗）
+  new THREE.Color(0xC4A876),   // [2] 中明金（压暗）
+  new THREE.Color(0xA87332),   // [3] 主金（压暗）
+  new THREE.Color(0xCFC2AA),   // [4] 奶白金高光（避免过曝）
 ];
 
 const vineMat = new THREE.ShaderMaterial({
@@ -3240,11 +3240,11 @@ const FLOWER_PAL_P2 = [
   new THREE.Color(0xFFFFFF),  // [4] 纯白
 ];
 const FLOWER_PAL_P3 = [
-  new THREE.Color(0xC68A3E),  // [0] 藏红花金
-  new THREE.Color(0xD9B56E),  // [1] 浅金
-  new THREE.Color(0xC8DEEC),  // [2] 浅蓝白
-  new THREE.Color(0xEFF5FB),  // [3] 冰白
-  new THREE.Color(0xFFFFFF),  // [4] 纯白
+  new THREE.Color(0xB07C36),  // [0] 藏红花金（压暗）
+  new THREE.Color(0xC2A062),  // [1] 浅金（压暗）
+  new THREE.Color(0xB0CADD),  // [2] 浅蓝白（压暗）
+  new THREE.Color(0xCEDAE5),  // [3] 冰白（不再近纯白）
+  new THREE.Color(0xE5E8EE),  // [4] 高光（避免纯白过曝）
 ];
 
 const flowerMat = new THREE.ShaderMaterial({
@@ -3283,8 +3283,8 @@ spineGroup.add(flowerPoints);
 // ============================================================
 // 9c. 花粉弥散（花蕊释放粒子，缓慢飘向远方）
 // ============================================================
-// 每朵花花粉数量不同（8~18）
-const pollenPerFlower = flowerInstances.map(() => 35 + Math.floor(Math.random() * 20));
+// 每朵花花粉数量（增多）
+const pollenPerFlower = flowerInstances.map(() => 70 + Math.floor(Math.random() * 30));
 const pollenFlowerStart = []; // 每朵花花粉起始索引
 let N_POLLEN = 0;
 for (let fi = 0; fi < flowerInstances.length; fi++) {
@@ -3324,7 +3324,7 @@ for (let fi = 0; fi < flowerInstances.length; fi++) {
     pollenPhase[idx] = Math.random() * Math.PI * 2;
     pollenParamT[idx] = host.stemParamT;
     pollenHostVine[idx] = host.hostVineId;
-    pollenSizes[idx] = 0.028 + Math.random() * 0.010;
+    pollenSizes[idx] = 0.044 + Math.random() * 0.018;
     pollenCVars[idx] = 0.50 + Math.random() * 0.30; // 暖白偏金
     pollenAlphas[idx] = 0;
     pollenPos[idx * 3] = host.stemCX;
@@ -4423,20 +4423,20 @@ function updateExperience(t) {
     ox += ox * spreadAmt * spreadW;
     const oy = pollenOriginCY[i] + (pollenOriginSY[i] - pollenOriginCY[i]) * lb;
 
-    // 缓慢飘动：横向朝外 + 微微上升 + 正弦摇摆
+    // 缓慢飘动：横向朝外 + 微微上升 + 正弦摇摆（加远飘散距离）
     const dir = pollenDriftDir[i];
-    const driftX = dir * life * life * 2.5; // 飘到屏幕边缘（±2.5）
-    const driftY = life * 0.40 + Math.sin(t * 0.4 + pollenPhase[i]) * 0.05;
-    const swayX = Math.sin(t * 0.25 + pollenPhase[i] * 2) * 0.04 * life;
+    const driftX = dir * life * life * 4.2; // 飘得更远（±4.2）
+    const driftY = life * 0.65 + Math.sin(t * 0.4 + pollenPhase[i]) * 0.06;
+    const swayX = Math.sin(t * 0.25 + pollenPhase[i] * 2) * 0.05 * life;
 
     pp[i * 3]     = ox + driftX + swayX;
     pp[i * 3 + 1] = oy + driftY;
     pp[i * 3 + 2] = 0.08;
 
-    // alpha：淡入 → 稳定 → 淡出
+    // alpha：淡入 → 稳定 → 淡出（整体提亮）
     const fadeIn  = Math.min(1, life * 4);
-    const fadeOut = Math.max(0, 1 - (life - 0.80) * 5.0); // 80% 才开始淡出
-    pa[i] = 0.55 * fadeIn * fadeOut;
+    const fadeOut = Math.max(0, 1 - (life - 0.80) * 5.0);
+    pa[i] = 0.90 * fadeIn * fadeOut;
   }
   pollenGeo.attributes.position.needsUpdate = true;
   pollenGeo.attributes.aAlpha.needsUpdate = true;
