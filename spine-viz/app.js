@@ -2960,7 +2960,7 @@ for (let i = 0; i < sortedLeaves.length && flowerPlaced < N_FLOWER_TARGET; i++) 
 
   const flowerSeed = 100 + i * 7;
   const groupIdx = Math.min(3, Math.floor(i / Math.ceil(N_FLOWER_TARGET / 4)));
-  const colorType = Math.floor(Math.random() * 3);
+  const colorType = Math.random() < 0.5 ? 0 : 1; // 0=A 浅蓝白渐变 / 1=B 金色渐变
 
   flowerInstances.push({
     hostLeaf: host, scale, angle: flowerAngle,
@@ -3045,26 +3045,28 @@ for (const fl of flowerInstances) {
     const lineSizeMult = (isEdge || isStamen) ? Math.sqrt(sizeMult) : sizeMult;
     flSizes[flIdx] = baseSize * lineSizeMult;
 
-    // 描边更实（按叶子逻辑：alpha 拉到接近 1）+ 中等填充
-    const layerAlpha = isStamen ? 0.92
-      : isEdge ? 0.96 + Math.random() * 0.04  // 描边接近不透明，更实
-      : pt.petalIndex < 2 ? 0.35 + Math.random() * 0.10
-      : pt.petalIndex < 4 ? 0.40 + Math.random() * 0.10
-      : 0.50 + Math.random() * 0.10;
+    // 亮度梯队：花蕊最亮 > 描边很亮 > 填充有亮度（用户明确指令）
+    const layerAlpha = isStamen ? 0.96 + Math.random() * 0.04                         // 花蕊最亮
+      : isEdge      ? 0.94 + Math.random() * 0.06                                     // 描边很亮（更实）
+      : 0.62 + Math.random() * 0.12;                                                  // 填充有一定亮度（提升）
     flAlphas[flIdx] = layerAlpha;
 
-    // 颜色：白→淡紫→薰衣草，大部分偏浅，底部才有明显紫
-    const distNorm = flDistFromCenter[flIdx];
-    // purpleAmount: 顶→0(白), 底→用平方让大部分偏浅
-    const rawT = host.stemParamT;
-    const purpleAmount = rawT * rawT * 0.70; // 平方曲线，上3/4几乎是白
+    // 颜色：A 型(colorType=0) 浅蓝白 → 白渐变；B 型(colorType=1) 金 → 浅蓝白渐变
+    // 全部三阶段共用同一组 cv 分布，由 P1/P2/P3 调色板切换实际色相
+    const distNorm = flDistFromCenter[flIdx]; // 0=花心, 1=花瓣尖端
+    const isTypeA = fl.colorType === 0;
     let cv;
     if (isStamen) {
-      cv = 0.75 + Math.random() * 0.15;
+      cv = 0.95 + Math.random() * 0.04;                              // pal[4] 高光
     } else if (isEdge) {
-      cv = -(purpleAmount * 0.7 + Math.random() * 0.06);
+      cv = isTypeA
+        ? 0.85 + (Math.random() - 0.5) * 0.10                        // A 描边 pal[4] 白
+        : 0.20 + (Math.random() - 0.5) * 0.10;                       // B 描边 pal[2] 浅蓝白
     } else {
-      cv = -(purpleAmount + (Math.random() - 0.5) * 0.08);
+      // 填充按 distNorm 渐变
+      cv = isTypeA
+        ? 0.10 + distNorm * 0.80 + (Math.random() - 0.5) * 0.08      // A: pal[2] 浅蓝白 → pal[4] 白
+        : -0.85 + distNorm * 1.10 + (Math.random() - 0.5) * 0.08;    // B: pal[0] 金 → pal[2] 浅蓝白
     }
     flColorVars[flIdx] = cv;
     flIdx++;
@@ -3186,17 +3188,72 @@ const FLOWER_B_HL    = new THREE.Color(0xC68A3E);  // 藏红花金（花蕊）
 const FLOWER_B_AC1   = new THREE.Color(0x6BAFD5);  // 鲜明冰川蓝
 const FLOWER_B_AC2   = new THREE.Color(0x2D3050);  // 深靛蓝
 
+// 花朵 fragment shader：5 段 palette × 3 阶段加权混合（同 vine 架构）
+const flowerFragmentShader = /* glsl */`
+  uniform vec3 uPaletteP1[5];
+  uniform vec3 uPaletteP2[5];
+  uniform vec3 uPaletteP3[5];
+  uniform float uPhase;
+  uniform float uAlphaBoost;
+  varying float vAlpha;
+  varying float vColorVar;
+  #define PICK_COLOR_FLOWER(pal, v, out) \
+    { \
+      float t = clamp((v + 1.0) * 2.0, 0.0, 4.0); \
+      if      (t < 1.0) out = mix(pal[0], pal[1], t); \
+      else if (t < 2.0) out = mix(pal[1], pal[2], t - 1.0); \
+      else if (t < 3.0) out = mix(pal[2], pal[3], t - 2.0); \
+      else              out = mix(pal[3], pal[4], t - 3.0); \
+    }
+  void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    float w1 = clamp(1.0 - uPhase, 0.0, 1.0);
+    float w3 = clamp(uPhase - 1.0, 0.0, 1.0);
+    float w2 = 1.0 - w1 - w3;
+    vec3 c1, c2, c3;
+    PICK_COLOR_FLOWER(uPaletteP1, vColorVar, c1)
+    PICK_COLOR_FLOWER(uPaletteP2, vColorVar, c2)
+    PICK_COLOR_FLOWER(uPaletteP3, vColorVar, c3)
+    vec3 c = c1 * w1 + c2 * w2 + c3 * w3;
+    c = clamp(c, 0.0, 1.0);
+    float core  = exp(-d * d * 24.0);
+    float halo  = exp(-d * d * 10.0) * 0.20;
+    float alpha = (core + halo) * vAlpha * uAlphaBoost;
+    gl_FragColor = vec4(c, alpha);
+  }
+`;
+
+// 花朵三阶段 palette（5 段：B 型用 pal[0..2] 金→浅蓝白；A 型用 pal[2..4] 浅蓝白→白）
+const FLOWER_PAL_P1 = [
+  new THREE.Color(0xD2A86A),  // [0] 金
+  new THREE.Color(0xE5C588),  // [1] 浅金
+  new THREE.Color(0xC8DEEC),  // [2] 浅蓝白
+  new THREE.Color(0xE8F2FA),  // [3] 近白蓝
+  new THREE.Color(0xFFFFFF),  // [4] 纯白
+];
+const FLOWER_PAL_P2 = [
+  new THREE.Color(0xE8DCC2),  // [0] 米白
+  new THREE.Color(0xEEE3D0),  // [1] 米白偏暖
+  new THREE.Color(0xF6ECD8),  // [2] 暖米白
+  new THREE.Color(0xFAF3E8),  // [3] 近白
+  new THREE.Color(0xFFFFFF),  // [4] 纯白
+];
+const FLOWER_PAL_P3 = [
+  new THREE.Color(0xC68A3E),  // [0] 藏红花金
+  new THREE.Color(0xD9B56E),  // [1] 浅金
+  new THREE.Color(0xC8DEEC),  // [2] 浅蓝白
+  new THREE.Color(0xEFF5FB),  // [3] 冰白
+  new THREE.Color(0xFFFFFF),  // [4] 纯白
+];
+
 const flowerMat = new THREE.ShaderMaterial({
   vertexShader: flowerVertexShader,
-  fragmentShader,
+  fragmentShader: flowerFragmentShader,
   uniforms: {
-    uPalette:   { value: [
-      new THREE.Color(0x7C889E),  // [0] 花A
-      new THREE.Color(0x7C889E),  // [1] 花A
-      new THREE.Color(0x7C889E),  // [2] 花A
-      new THREE.Color(0x7C889E),  // [3] 花A
-      new THREE.Color(0xB98B58),  // [4] 花B
-    ] },
+    uPaletteP1: { value: FLOWER_PAL_P1 },
+    uPaletteP2: { value: FLOWER_PAL_P2 },
+    uPaletteP3: { value: FLOWER_PAL_P3 },
     uColor:     { value: FLOWER_A_COLOR.clone() },
     uHighlight: { value: FLOWER_A_HL.clone() },
     uAccent1:   { value: FLOWER_A_AC1.clone() },
@@ -3204,6 +3261,7 @@ const flowerMat = new THREE.ShaderMaterial({
     uAlphaBoost: { value: 1.5 },
     uBlend: { value: 0.0 },
     uTime:  { value: 0.0 },
+    uPhase: { value: 0.0 },
     uFlowerGrowths: { value: new THREE.Vector4(0, 0, 0, 0) },
   },
   transparent: true,
@@ -3994,6 +4052,7 @@ function updateIdle(t) {
   spineMat.uniforms.uPhase.value      = 0.0;     // IDLE = 阶段一
   spineHaloMat.uniforms.uPhase.value  = 0.0;
   vineMat.uniforms.uPhase.value       = 0.0;
+  flowerMat.uniforms.uPhase.value     = 0.0;
   spineMat.uniforms.uBreatheExpand.value = 1.0;
   spineMat.uniforms.uBreathe.value    = 0.0;
   spineMat.uniforms.uTime.value       = t;
@@ -4080,6 +4139,7 @@ function updateGuide(t) {
   spineMat.uniforms.uPhase.value = 0.0;          // GUIDE 全程阶段一
   spineHaloMat.uniforms.uPhase.value = 0.0;
   vineMat.uniforms.uPhase.value = 0.0;
+  flowerMat.uniforms.uPhase.value = 0.0;
 
   // 颜色全程保持紫色（DARK 系），跟 IDLE 一致，避免凝聚时变金色突兀
   spineMat.uniforms.uColor.value.copy(COLOR_DARK);
@@ -4221,6 +4281,7 @@ function updateExperience(t) {
   spineMat.uniforms.uPhase.value     = phaseProg;
   spineHaloMat.uniforms.uPhase.value = phaseProg;
   vineMat.uniforms.uPhase.value      = phaseProg;
+  flowerMat.uniforms.uPhase.value    = phaseProg;
   const blendColor = getBlendColor(colorBlend);
   const hlColor    = getHighlightColor(colorBlend);
   const ac1Color   = getAccent1Color(colorBlend);
