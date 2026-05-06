@@ -1623,10 +1623,13 @@ for (let vi = 0; vi < vineData.length; vi++) {
 
       // 颜色渐变：顶部暖亮 → 底部深冷 + Z深度立体
       const yNormColor = (vineYMax - sy) / vineYRange;
-      // 6 段交替带（顶到底）：紫 → 金 → 蓝 → 金 → 紫 → 蓝
+      // 6 段交替带（顶到底）：紫 → 金 → 蓝 → 金 → 紫 → 蓝；相邻段平滑插值
       const VINE_BANDS = [-0.40, 0.40, -0.80, 0.40, -0.40, -0.80];
-      const bandIdx = Math.min(VINE_BANDS.length - 1, Math.floor(yNormColor * VINE_BANDS.length));
-      const gradient = VINE_BANDS[bandIdx];
+      const fbi = yNormColor * (VINE_BANDS.length - 1);
+      const bi0 = Math.max(0, Math.min(VINE_BANDS.length - 1, Math.floor(fbi)));
+      const bi1 = Math.max(0, Math.min(VINE_BANDS.length - 1, bi0 + 1));
+      const bfrac = fbi - bi0;
+      const gradient = VINE_BANDS[bi0] * (1 - bfrac) + VINE_BANDS[bi1] * bfrac;
       const z = vnZPos[particleIdx];
       const zBias = z > 0.03 ? 0.15 : z < -0.03 ? -0.15 : 0.0;
       vnColorVars[particleIdx] = gradient + zBias + (Math.random() - 0.5) * 0.12;
@@ -1681,7 +1684,14 @@ ACCENT_VINES.forEach((accent, accentIdx) => {
     vnPhase[particleIdx]   = accent.phase;
     vnSizes[particleIdx]   = 0.022 + Math.random() * 0.006;
     vnAlphas[particleIdx]  = accent.alpha + Math.random() * 0.10;
-    vnColorVars[particleIdx] = (Math.random() - 0.5) * 0.15;
+    // 辅藤也用同款 6 段交替带渐变（紫-金-蓝-金-紫-蓝）
+    const VINE_BANDS_AC = [-0.40, 0.40, -0.80, 0.40, -0.40, -0.80];
+    const fbiAc = yNorm * (VINE_BANDS_AC.length - 1);
+    const ai0 = Math.max(0, Math.min(VINE_BANDS_AC.length - 1, Math.floor(fbiAc)));
+    const ai1 = Math.max(0, Math.min(VINE_BANDS_AC.length - 1, ai0 + 1));
+    const afrac = fbiAc - ai0;
+    vnColorVars[particleIdx] = VINE_BANDS_AC[ai0] * (1 - afrac) + VINE_BANDS_AC[ai1] * afrac
+                             + (Math.random() - 0.5) * 0.10;
 
     particleIdx++;
   }
@@ -1767,16 +1777,28 @@ for (const si of DRIFT_SEG_INDICES) {
     vnAlphas[particleIdx]    = fadeAlpha;
     vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
 
-    // 颜色：按距离分区（近紫 / 中蓝 / 远蓝+金），rawT 0~0.3 与主藤色平滑衔接
+    // 颜色：按 rawT 分区平滑过渡（近紫 → 紫蓝 → 中蓝 → 远端蓝+金 mix）
     const VINE_BANDS_D = [-0.40, 0.40, -0.80, 0.40, -0.40, -0.80];
-    const bandIdxD = Math.min(VINE_BANDS_D.length - 1, Math.floor(yNorm * VINE_BANDS_D.length));
-    const mainColor = VINE_BANDS_D[bandIdxD] + (Math.random() - 0.5) * 0.10;
-    const zoneColor = rawT < 0.3 ? -0.40                                          // 近端紫
-                    : rawT < 1.5 ? -0.80                                          // 中段蓝
-                    : (Math.random() < 0.70 ? -0.80 : 0.40);                      // 远端 70%蓝/30%金
-    // 0~0.3 内从 mainColor 平滑过渡到 zoneColor，之后完全用 zoneColor
-    const continuityBlend = Math.min(1.0, rawT / 0.3);
-    vnColorVars[particleIdx] = mainColor * (1 - continuityBlend) + zoneColor * continuityBlend + (Math.random() - 0.5) * 0.10;
+    const fbiD = yNorm * (VINE_BANDS_D.length - 1);
+    const di0 = Math.max(0, Math.min(VINE_BANDS_D.length - 1, Math.floor(fbiD)));
+    const di1 = Math.max(0, Math.min(VINE_BANDS_D.length - 1, di0 + 1));
+    const dfrac = fbiD - di0;
+    const mainColor = VINE_BANDS_D[di0] * (1 - dfrac) + VINE_BANDS_D[di1] * dfrac
+                    + (Math.random() - 0.5) * 0.08;
+    let zoneColor;
+    if (rawT < 0.5) {
+      zoneColor = -0.40;                                          // 近端紫
+    } else if (rawT < 1.0) {
+      const tt = (rawT - 0.5) / 0.5;
+      zoneColor = -0.40 + tt * (-0.40);                           // 紫 → 蓝 平滑
+    } else if (rawT < 2.5) {
+      zoneColor = -0.80;                                          // 中段蓝
+    } else {
+      zoneColor = Math.random() < 0.70 ? -0.80 : 0.40;            // 远端 70%蓝/30%金
+    }
+    // rawT 0~0.4 与 mainColor 平滑衔接
+    const continuityBlend = Math.min(1.0, rawT / 0.4);
+    vnColorVars[particleIdx] = mainColor * (1 - continuityBlend) + zoneColor * continuityBlend + (Math.random() - 0.5) * 0.08;
     vnDriftT[particleIdx]    = rawT;
 
     particleIdx++;
@@ -1936,8 +1958,8 @@ const vineVertexShader = /* glsl */`
 
       float effectivePulse = totalPulse * depthFade;
       // 主藤脉冲 boost 压低（alpha/size 膨胀是"亮"的主因，不是颜色）
-      float pulseAlpha = (aVineId < 0.5) ? 0.08 : 0.45;
-      float pulseSize  = (aVineId < 0.5) ? 0.08 : 0.5;
+      float pulseAlpha = (aVineId < 0.5) ? 0.05 : 0.20;
+      float pulseSize  = (aVineId < 0.5) ? 0.05 : 0.25;
       alpha = aAlpha * visible * endFade * depthFade * (0.65 + effectivePulse * pulseAlpha);
       alpha *= uFormation;  // hide vines during intro
       sz = aSize * (1.0 + effectivePulse * pulseSize);
