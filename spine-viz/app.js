@@ -1555,7 +1555,9 @@ const vnParamT    = new Float32Array(N_VINE_TOTAL);
 const vnVineId    = new Float32Array(N_VINE_TOTAL);
 const vnSizes     = new Float32Array(N_VINE_TOTAL);
 const vnAlphas    = new Float32Array(N_VINE_TOTAL);
-const vnColorVars = new Float32Array(N_VINE_TOTAL);
+const vnColorVars   = new Float32Array(N_VINE_TOTAL); // P1 (legacy, also used for backwards compat)
+const vnColorVarsP2 = new Float32Array(N_VINE_TOTAL); // P2
+const vnColorVarsP3 = new Float32Array(N_VINE_TOTAL); // P3
 const vnPhase     = new Float32Array(N_VINE_TOTAL);
 // 弥散粒子的"远端度"：0=分支根部/普通藤蔓，1=分支尖端，>1 飘出尖端到屏幕边缘（最大 5）
 const vnDriftT    = new Float32Array(N_VINE_TOTAL);
@@ -1632,7 +1634,10 @@ for (let vi = 0; vi < vineData.length; vi++) {
       const gradient = VINE_BANDS[bi0] * (1 - bfrac) + VINE_BANDS[bi1] * bfrac;
       const z = vnZPos[particleIdx];
       const zBias = z > 0.03 ? 0.15 : z < -0.03 ? -0.15 : 0.0;
-      vnColorVars[particleIdx] = gradient + zBias + (Math.random() - 0.5) * 0.12;
+      const cvBand = gradient + zBias + (Math.random() - 0.5) * 0.12;
+      vnColorVars[particleIdx]   = cvBand;
+      vnColorVarsP2[particleIdx] = cvBand;
+      vnColorVarsP3[particleIdx] = cvBand;
 
       particleIdx++;
     }
@@ -1690,8 +1695,11 @@ ACCENT_VINES.forEach((accent, accentIdx) => {
     const ai0 = Math.max(0, Math.min(VINE_BANDS_AC.length - 1, Math.floor(fbiAc)));
     const ai1 = Math.max(0, Math.min(VINE_BANDS_AC.length - 1, ai0 + 1));
     const afrac = fbiAc - ai0;
-    vnColorVars[particleIdx] = VINE_BANDS_AC[ai0] * (1 - afrac) + VINE_BANDS_AC[ai1] * afrac
-                             + (Math.random() - 0.5) * 0.10;
+    const cvAc = VINE_BANDS_AC[ai0] * (1 - afrac) + VINE_BANDS_AC[ai1] * afrac
+               + (Math.random() - 0.5) * 0.10;
+    vnColorVars[particleIdx]   = cvAc;
+    vnColorVarsP2[particleIdx] = cvAc;
+    vnColorVarsP3[particleIdx] = cvAc;
 
     particleIdx++;
   }
@@ -1784,17 +1792,35 @@ for (const si of DRIFT_SEG_INDICES) {
     const dfrac = fbiD - di0;
     const mainColor = VINE_BANDS_D[di0] * (1 - dfrac) + VINE_BANDS_D[di1] * dfrac
                     + (Math.random() - 0.5) * 0.08;
-    // 左侧 drift 用紫，右侧用蓝；远端少量金点缀
-    const baseColor = sideBias > 0 ? -0.80 : -0.40;  // 右(sideBias>0)蓝 / 左紫
-    let zoneColor;
-    if (rawT < 1.8) {
-      zoneColor = baseColor;                                        // 近~中段全是本侧主色
+    // ====== 三阶段独立的 drift 色 ======
+    // 每个阶段都有"左侧主色 / 右侧主色 / 远端 sprinkle 色"三种 vColorVar
+    // P1 left=紫(-0.4) right=蓝(-0.8) sprinkle=金(0.4)
+    // P2 left=蓝(0.4) right=粉紫(-0.8) sprinkle=米白(0.7)
+    // P3 left/right 都随机 mix {-0.8深蓝, -0.4冰蓝, 0.4金} sprinkle=奶白(0.7)
+    const isSprinkle = rawT >= 1.8 && Math.random() < 0.10;
+    const isLeft = sideBias < 0;
+
+    let cv1, cv2, cv3;
+    // P1
+    cv1 = isSprinkle ? 0.40 : (isLeft ? -0.40 : -0.80);
+    // P2
+    cv2 = isSprinkle ? 0.70 : (isLeft ? 0.40 : -0.80);
+    // P3：两侧都随机三色混合（深蓝 -0.8 / 冰蓝 -0.4 / 金 0.4）
+    if (isSprinkle) {
+      cv3 = 0.70; // 奶白
     } else {
-      zoneColor = Math.random() < 0.10 ? 0.40 : baseColor;          // 远端 90%主色 + 10%金
+      const r3 = Math.random();
+      cv3 = r3 < 0.40 ? -0.80   // 40% 深蓝
+          : r3 < 0.75 ? -0.40   // 35% 冰蓝
+          :              0.40;  // 25% 金
     }
-    // rawT 0~0.4 与 mainColor 平滑衔接
+
+    // rawT 0~0.4 与 mainColor 平滑衔接（mainColor 是按 yNorm 6 段，三阶段共用同一 vColorVar）
     const continuityBlend = Math.min(1.0, rawT / 0.4);
-    vnColorVars[particleIdx] = mainColor * (1 - continuityBlend) + zoneColor * continuityBlend + (Math.random() - 0.5) * 0.08;
+    const noise = (Math.random() - 0.5) * 0.08;
+    vnColorVars[particleIdx]   = mainColor * (1 - continuityBlend) + cv1 * continuityBlend + noise;
+    vnColorVarsP2[particleIdx] = mainColor * (1 - continuityBlend) + cv2 * continuityBlend + noise;
+    vnColorVarsP3[particleIdx] = mainColor * (1 - continuityBlend) + cv3 * continuityBlend + noise;
     vnDriftT[particleIdx]    = rawT;
 
     particleIdx++;
@@ -1813,7 +1839,14 @@ const vineGeo = new THREE.BufferGeometry();
 vineGeo.setAttribute('position',   new THREE.BufferAttribute(vnPositions, 3));
 vineGeo.setAttribute('aSize',      new THREE.BufferAttribute(vnSizes, 1));
 vineGeo.setAttribute('aAlpha',     new THREE.BufferAttribute(vnAlphas, 1));
-vineGeo.setAttribute('aColorVar',  new THREE.BufferAttribute(vnColorVars, 1));
+// 三阶段 vColorVar 打包成 vec3 attribute
+const vnColorVarTriple = new Float32Array(N_VINE_TOTAL * 3);
+for (let i = 0; i < N_VINE_TOTAL; i++) {
+  vnColorVarTriple[i * 3]     = vnColorVars[i];
+  vnColorVarTriple[i * 3 + 1] = vnColorVarsP2[i];
+  vnColorVarTriple[i * 3 + 2] = vnColorVarsP3[i];
+}
+vineGeo.setAttribute('aColorVarTriple', new THREE.BufferAttribute(vnColorVarTriple, 3));
 
 const vnGpuCurvedPos   = new Float32Array(N_VINE_TOTAL * 2);
 const vnGpuStraightPos = new Float32Array(N_VINE_TOTAL * 2);
@@ -1841,7 +1874,7 @@ const vineVertexShader = /* glsl */`
   attribute float aVinePhase;
   attribute float aSize;
   attribute float aAlpha;
-  attribute float aColorVar;
+  attribute vec3 aColorVarTriple; // (P1, P2, P3) per particle
   attribute float aDriftT;
 
   uniform float uBlend;
@@ -1854,7 +1887,7 @@ const vineVertexShader = /* glsl */`
   uniform float uFormation;  // hide vines during intro (0=hidden, 1=visible)
 
   varying float vAlpha;
-  varying float vColorVar;
+  varying vec3 vColorVarTriple;
 
   // 查骨骼曲线中心 X（按 y 线性插值 33 个 catmull-rom 采样点）。
   // 按 y 降序存储（C7 最高 → S1 最低）。累加器写法避免 loop 里 return。
@@ -1903,8 +1936,8 @@ const vineVertexShader = /* glsl */`
         swayX += sin(uTime * 0.42 - lag + aVinePhase * 1.3)        * 0.045 * driftDist;
         swayY += cos(uTime * 0.55 - lag + aVinePhase * 0.9)        * 0.030 * driftDist;
         // 慢速大漂浮（低频拖尾扇形）
-        swayX += sin(uTime * 0.13 - lag * 1.6 + aColorVar * 5.0)   * 0.070 * driftDist;
-        swayY += sin(uTime * 0.17 - lag * 1.6 + aColorVar * 3.2)   * 0.045 * driftDist;
+        swayX += sin(uTime * 0.13 - lag * 1.6 + aColorVarTriple.x * 5.0)   * 0.070 * driftDist;
+        swayY += sin(uTime * 0.17 - lag * 1.6 + aColorVarTriple.x * 3.2)   * 0.045 * driftDist;
       }
 
       pos2d.x += swayX;
@@ -1962,7 +1995,7 @@ const vineVertexShader = /* glsl */`
 
       vAlpha = alpha;
       // 脉冲只影响 alpha/size（增亮高光），不再位移 vColorVar → 保留固有色不被换色
-      vColorVar = aColorVar;
+      vColorVarTriple = aColorVarTriple;
     }
 
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
@@ -2007,16 +2040,59 @@ const SPINE_YS_FLAT = new Array(SPINE_SAMPLE_N);
   }
 }
 
+// 藤蔓 fragment shader：5 段 palette × 3 阶段加权混合
+const vineFragmentShader = /* glsl */`
+  uniform vec3 uPaletteP1[5];
+  uniform vec3 uPaletteP2[5];
+  uniform vec3 uPaletteP3[5];
+  uniform float uPhase;
+  uniform float uAlphaBoost;
+  varying float vAlpha;
+  varying vec3 vColorVarTriple;
+  #define PICK_COLOR_VINE(pal, v, out) \
+    if      (v < -0.6) out = pal[0]; \
+    else if (v < -0.2) out = pal[1]; \
+    else if (v <  0.2) out = pal[2]; \
+    else if (v <  0.6) out = pal[3]; \
+    else               out = pal[4];
+  void main() {
+    float d = length(gl_PointCoord - vec2(0.5));
+    if (d > 0.5) discard;
+    float w1 = clamp(1.0 - uPhase, 0.0, 1.0);
+    float w3 = clamp(uPhase - 1.0, 0.0, 1.0);
+    float w2 = 1.0 - w1 - w3;
+    vec3 c1, c2, c3;
+    PICK_COLOR_VINE(uPaletteP1, vColorVarTriple.x, c1)
+    PICK_COLOR_VINE(uPaletteP2, vColorVarTriple.y, c2)
+    PICK_COLOR_VINE(uPaletteP3, vColorVarTriple.z, c3)
+    vec3 c = c1 * w1 + c2 * w2 + c3 * w3;
+    c = clamp(c, 0.0, 1.0);
+    float core  = exp(-d * d * 24.0);
+    float halo  = exp(-d * d * 10.0) * 0.20;
+    float alpha = (core + halo) * vAlpha * uAlphaBoost;
+    gl_FragColor = vec4(c, alpha);
+  }
+`;
+
+const VINE_PAL_P1 = [
+  new THREE.Color(0x3D4382), new THREE.Color(0x66548F), new THREE.Color(0xB8A6D6),
+  new THREE.Color(0xC8A878), new THREE.Color(0xE0CFA0),
+];
+const VINE_PAL_P2 = [
+  new THREE.Color(0xA867A0), new THREE.Color(0x3A5A95), new THREE.Color(0x9099C8),
+  new THREE.Color(0x82A85F), new THREE.Color(0xE8DCC2),
+];
+const VINE_PAL_P3 = [
+  new THREE.Color(0x404F7C), new THREE.Color(0x9FC4D5), new THREE.Color(0xB8C8D0),
+  new THREE.Color(0xC68A3E), new THREE.Color(0xF0E5D0),
+];
+
 const vineMat = new THREE.ShaderMaterial({
-  vertexShader: vineVertexShader, fragmentShader,
+  vertexShader: vineVertexShader, fragmentShader: vineFragmentShader,
   uniforms: {
-    uPalette:   { value: [
-      new THREE.Color(0x3D4382),  // [0] 深蓝
-      new THREE.Color(0x66548F),  // [1] 紫
-      new THREE.Color(0xB8A6D6),  // [2] 浅淡紫
-      new THREE.Color(0xC8A878),  // [3] 淡金（饱和度调低）
-      new THREE.Color(0xE0CFA0),  // [4] 淡金高光
-    ] },
+    uPaletteP1:  { value: VINE_PAL_P1 },
+    uPaletteP2:  { value: VINE_PAL_P2 },
+    uPaletteP3:  { value: VINE_PAL_P3 },
     uColor:     { value: VINE_A_COLOR.clone() },
     uHighlight: { value: VINE_A_HL.clone() },
     uAccent1:   { value: VINE_A_AC1.clone() },
@@ -2030,6 +2106,7 @@ const vineMat = new THREE.ShaderMaterial({
     uSpineHalfW: { value: 0.18 },
     uSpineRotY:  { value: 0.0 },
     uFormation:  { value: 0.0 },
+    uPhase:      { value: 0.0 },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -3884,6 +3961,7 @@ function updateIdle(t) {
   spineMat.uniforms.uBlend.value      = 0.0;
   spineMat.uniforms.uPhase.value      = 0.0;     // IDLE = 阶段一
   spineHaloMat.uniforms.uPhase.value  = 0.0;
+  vineMat.uniforms.uPhase.value       = 0.0;
   spineMat.uniforms.uBreatheExpand.value = 1.0;
   spineMat.uniforms.uBreathe.value    = 0.0;
   spineMat.uniforms.uTime.value       = t;
@@ -3969,6 +4047,7 @@ function updateGuide(t) {
   spineMat.uniforms.uBlend.value = guideBlend;
   spineMat.uniforms.uPhase.value = 0.0;          // GUIDE 全程阶段一
   spineHaloMat.uniforms.uPhase.value = 0.0;
+  vineMat.uniforms.uPhase.value = 0.0;
 
   // 颜色全程保持紫色（DARK 系），跟 IDLE 一致，避免凝聚时变金色突兀
   spineMat.uniforms.uColor.value.copy(COLOR_DARK);
@@ -4109,6 +4188,7 @@ function updateExperience(t) {
   const phaseProg = colorBlend * 2;
   spineMat.uniforms.uPhase.value     = phaseProg;
   spineHaloMat.uniforms.uPhase.value = phaseProg;
+  vineMat.uniforms.uPhase.value      = phaseProg;
   const blendColor = getBlendColor(colorBlend);
   const hlColor    = getHighlightColor(colorBlend);
   const ac1Color   = getAccent1Color(colorBlend);
