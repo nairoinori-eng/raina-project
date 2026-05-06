@@ -1769,12 +1769,11 @@ for (const si of DRIFT_SEG_INDICES) {
     vnVineId[particleIdx]    = 0;
     vnPhase[particleIdx]     = Math.random() * 3.0;
 
-    // 两端 alpha 软淡入淡出，消除圆柱端面带来的"矩形"硬边
-    // rawT=0 处 alpha=0（融入主藤看不见硬边）→ rawT=0.4 达到峰值 → rawT=5 平滑到 0
-    const fadeAlpha = rawT < 0.4 ? rawT * 1.5                       // 0 → 0.60
-                    : rawT < 2.0 ? 0.60 - (rawT - 0.4) * 0.06       // 0.60 → 0.50
-                    : Math.max(0, 0.50 - (rawT - 2.0) * 0.167);     // 0.50 → 0 at rawT=5
-    vnAlphas[particleIdx]    = fadeAlpha;
+    // 两端 alpha 软淡入淡出（×1.5 提亮整体 drift 颜色）
+    const baseFade  = rawT < 0.4 ? rawT * 1.5
+                    : rawT < 2.0 ? 0.60 - (rawT - 0.4) * 0.06
+                    : Math.max(0, 0.50 - (rawT - 2.0) * 0.167);
+    vnAlphas[particleIdx]    = baseFade * 1.5;
     vnSizes[particleIdx]     = 0.042 + Math.random() * 0.012;
 
     // 颜色：按 rawT 分区平滑过渡（近紫 → 紫蓝 → 中蓝 → 远端蓝+金 mix）
