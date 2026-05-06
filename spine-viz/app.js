@@ -1056,8 +1056,10 @@ const ribMat = new THREE.ShaderMaterial({
       vColorVar = aColorVar;
       vPathT = aPathT;
       // 左右独立生长：根据 aSide 选用对应的 uGrowth
+      // effGrowth 映射到 [-0.1, 1.0]，确保 uGrowth=0 时 aPathT=0 也完全隐藏
       float myGrowth = (aSide > 0.0) ? uGrowthRight : uGrowthLeft;
-      float growMask = 1.0 - smoothstep(myGrowth, myGrowth + 0.08, aPathT);
+      float effGrowth = myGrowth * 1.1 - 0.1;
+      float growMask = 1.0 - smoothstep(effGrowth, effGrowth + 0.08, aPathT);
       vAlpha = uActive * growMask;
 
       vec4 mv = modelViewMatrix * vec4(pos2D, z, 1.0);
@@ -3577,11 +3579,11 @@ for (let i = 0; i < PACER_PCOUNT; i++) {
   const isSpike = Math.random() < 0.30;
   if (isSpike) {
     // 尖刺粒子：边缘附近，吸气时延伸出去
-    pacerRadFArr[i]  = 0.65 + Math.random() * 0.40;  // 0.65~1.05 基础
-    pacerSpikeArr[i] = 0.35 + Math.random() * 0.65;  // 0.35~1.00 延伸幅度
+    pacerRadFArr[i]  = 0.85 + Math.random() * 0.20;  // 0.85~1.05 基础
+    pacerSpikeArr[i] = 0.35 + Math.random() * 0.65;  // 延伸幅度
   } else {
-    // 核心粒子：填满圆盘，sqrt 分布让粒子按面积均匀分布
-    pacerRadFArr[i]  = Math.sqrt(Math.random()) * 0.95;  // 0~0.95
+    // 核心粒子：仅环形（半径 0.55~1.0），中间留空
+    pacerRadFArr[i]  = 0.55 + Math.sqrt(Math.random()) * 0.45;  // 0.55~1.0
     pacerSpikeArr[i] = 0;
   }
 }

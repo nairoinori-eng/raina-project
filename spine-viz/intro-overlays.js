@@ -10,8 +10,8 @@
  */
 
 // 各分组的统一淡出时间
-// A2 多停 1s 让"我们便如此共生"驻留更久
-const GROUP_ENDS = { A: 22.5, A2: 34, B: 47, D: 83 };
+// A2 等"峡谷"完全消失后才出"共生"
+const GROUP_ENDS = { A: 22.5, A2: 35.5, B: 47, D: 83 };
 
 // ── 文字时间表 ──
 const TEXT_SCHEDULE = [
@@ -29,10 +29,10 @@ const TEXT_SCHEDULE = [
   { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 24,   end: 28,   anchor: 'ribRight', side: 'right' },
   // 左侧肋骨后长出再出字幕（生长 27.5~29s，字幕 29~33s）
   { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 29,   end: 33,   anchor: 'ribLeft',  side: 'left'  },
-  { text: '我们便如此共生。',                                start: 31.5, group: 'A2' },
+  { text: '我们便如此共生。',                                start: 33.5, group: 'A2' },
 
-  // ─── 段 2a/b · 学法引入 (34-47s) - 堆叠 group B（前推 1s 让 A2 驻留 + 1s 停顿）───
-  { text: '但呼吸，是身体里仍能调动的事。',                    start: 34,   group: 'B' },
+  // ─── 段 2a/b · 学法引入 (36-47s) - 堆叠 group B（共生 0.5s gap 后开始）───
+  { text: '但呼吸，是身体里仍能调动的事。',                    start: 36,   group: 'B' },
   { text: '有一种呼吸——它不让气息均匀地涨满胸腔，',           start: 36,   group: 'B' },
   { text: '而是有方向地，专门送往凹陷的那一侧。',              start: 39.5, group: 'B' },
   { text: '让被挤压的肋骨，从内部，一次次轻轻推开。',          start: 42.5, group: 'B' },
