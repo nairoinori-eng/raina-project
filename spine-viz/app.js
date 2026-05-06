@@ -1785,16 +1785,13 @@ for (const si of DRIFT_SEG_INDICES) {
     const dfrac = fbiD - di0;
     const mainColor = VINE_BANDS_D[di0] * (1 - dfrac) + VINE_BANDS_D[di1] * dfrac
                     + (Math.random() - 0.5) * 0.08;
-    // 颜色全程随机混合（避免内紫外蓝分层）：根部强制紫保持与主藤衔接，
-    // 其余全段随机抽（紫/蓝/金按比例混在一起，不分径向带）
+    // 左侧 drift 用紫，右侧用蓝；远端少量金点缀
+    const baseColor = sideBias > 0 ? -0.80 : -0.40;  // 右(sideBias>0)蓝 / 左紫
     let zoneColor;
-    if (rawT < 0.3) {
-      zoneColor = -0.40;                                            // 强制根部紫
+    if (rawT < 1.8) {
+      zoneColor = baseColor;                                        // 近~中段全是本侧主色
     } else {
-      const r = Math.random();
-      zoneColor = r < 0.20 ? -0.40                                  // 紫 20%
-                : r < 0.92 ? -0.80                                  // 蓝 72%
-                :            0.40;                                  // 金 8%
+      zoneColor = Math.random() < 0.10 ? 0.40 : baseColor;          // 远端 90%主色 + 10%金
     }
     // rawT 0~0.4 与 mainColor 平滑衔接
     const continuityBlend = Math.min(1.0, rawT / 0.4);
