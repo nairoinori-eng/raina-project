@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="800" viewBox="0 0 1200 800">
+  <defs>
+    <style>
+      .board{fill:#e8f3ea;stroke:#1f5d3a;stroke-width:4}
+      .hole{fill:#fff;stroke:#1f5d3a;stroke-width:3}
+      .nano{fill:#d7e8ff;stroke:#1e4f91;stroke-width:3}
+      .jst{fill:#fff7d6;stroke:#9b6b00;stroke-width:3}
+      .res{fill:#f7e0c2;stroke:#9b4f00;stroke-width:2}
+      .q{fill:#e7dcff;stroke:#5d3bb0;stroke-width:2}
+      .dio{fill:#f0f0f0;stroke:#333;stroke-width:2}
+      .label{font-family:"Microsoft YaHei",Arial,sans-serif;font-size:24px;fill:#111;font-weight:700}
+      .small{font-family:"Microsoft YaHei",Arial,sans-serif;font-size:18px;fill:#222}
+      .pin{fill:#333}
+      .sig{stroke:#2b78e4;stroke-width:4;fill:none}
+      .pwr{stroke:#e06666;stroke-width:5;fill:none}
+      .gnd{stroke:#666;stroke-width:5;fill:none}
+      .motor{stroke:#8e44ad;stroke-width:4;fill:none}
+      .note{font-family:"Microsoft YaHei",Arial,sans-serif;font-size:20px;fill:#333}
+    </style>
+  </defs>
+
+  <rect x="80" y="60" width="1040" height="660" rx="28" class="board"/>
+  <text x="600" y="112" text-anchor="middle" class="label">RAINA VEST HUB v1.0 顶视布局示意</text>
+  <text x="600" y="145" text-anchor="middle" class="small">Arduino Nano 背心中转控制板：传感器/马达长线通过 JST 插入</text>
+
+  <circle cx="125" cy="105" r="16" class="hole"/>
+  <circle cx="1075" cy="105" r="16" class="hole"/>
+  <circle cx="125" cy="675" r="16" class="hole"/>
+  <circle cx="1075" cy="675" r="16" class="hole"/>
+  <text x="118" y="735" class="small">四角 M3 固定孔</text>
+
+  <rect x="455" y="205" width="290" height="390" rx="16" class="nano"/>
+  <text x="600" y="250" text-anchor="middle" class="label">Arduino Nano</text>
+  <text x="600" y="285" text-anchor="middle" class="small">USB 口朝上/外侧</text>
+  <text x="498" y="335" class="small">A0 ← S1</text>
+  <text x="498" y="370" class="small">A1 ← S2</text>
+  <text x="498" y="405" class="small">A2 ← S3</text>
+  <text x="498" y="440" class="small">A3 ← S4</text>
+  <text x="628" y="335" class="small">D5 → M1</text>
+  <text x="628" y="370" class="small">D6 → M2</text>
+  <text x="538" y="520" class="small">5V / GND 公共母线</text>
+
+  <g id="sensor-connectors">
+    <rect x="150" y="210" width="210" height="68" rx="8" class="jst"/>
+    <text x="255" y="252" text-anchor="middle" class="label">J1 S1 左胸</text>
+    <text x="255" y="275" text-anchor="middle" class="small">1:5V  2:A0</text>
+
+    <rect x="150" y="305" width="210" height="68" rx="8" class="jst"/>
+    <text x="255" y="347" text-anchor="middle" class="label">J2 S2 右胸</text>
+    <text x="255" y="370" text-anchor="middle" class="small">1:5V  2:A1</text>
+
+    <rect x="150" y="400" width="210" height="68" rx="8" class="jst"/>
+    <text x="255" y="442" text-anchor="middle" class="label">J3 S3 左腰</text>
+    <text x="255" y="465" text-anchor="middle" class="small">1:5V  2:A2</text>
+
+    <rect x="150" y="495" width="210" height="68" rx="8" class="jst"/>
+    <text x="255" y="537" text-anchor="middle" class="label">J4 S4 右腰</text>
+    <text x="255" y="560" text-anchor="middle" class="small">1:5V  2:A3</text>
+  </g>
+
+  <g id="fsr-resistors">
+    <rect x="385" y="218" width="70" height="25" rx="10" class="res"/><text x="420" y="238" text-anchor="middle" class="small">R1 10K</text>
+    <rect x="385" y="313" width="70" height="25" rx="10" class="res"/><text x="420" y="333" text-anchor="middle" class="small">R2 10K</text>
+    <rect x="385" y="408" width="70" height="25" rx="10" class="res"/><text x="420" y="428" text-anchor="middle" class="small">R3 10K</text>
+    <rect x="385" y="503" width="70" height="25" rx="10" class="res"/><text x="420" y="523" text-anchor="middle" class="small">R4 10K</text>
+    <text x="420" y="595" text-anchor="middle" class="small">R1-R4：A0-A3 下拉到 GND</text>
+  </g>
+
+  <g id="motor-connectors">
+    <rect x="840" y="255" width="210" height="78" rx="8" class="jst"/>
+    <text x="945" y="295" text-anchor="middle" class="label">J5 M1 左胸马达</text>
+    <text x="945" y="320" text-anchor="middle" class="small">1:+  2:GND</text>
+
+    <rect x="840" y="465" width="210" height="78" rx="8" class="jst"/>
+    <text x="945" y="505" text-anchor="middle" class="label">J6 M2 右腰马达</text>
+    <text x="945" y="530" text-anchor="middle" class="small">1:+  2:GND</text>
+  </g>
+
+  <g id="drivers">
+    <rect x="765" y="255" width="42" height="58" rx="8" class="q"/><text x="786" y="292" text-anchor="middle" class="small">Q1</text>
+    <rect x="765" y="465" width="42" height="58" rx="8" class="q"/><text x="786" y="502" text-anchor="middle" class="small">Q2</text>
+
+    <rect x="702" y="245" width="55" height="22" rx="9" class="res"/><text x="730" y="263" text-anchor="middle" class="small">R5 1K</text>
+    <rect x="702" y="288" width="55" height="22" rx="9" class="res"/><text x="730" y="306" text-anchor="middle" class="small">R6 10K</text>
+
+    <rect x="702" y="455" width="55" height="22" rx="9" class="res"/><text x="730" y="473" text-anchor="middle" class="small">R7 1K</text>
+    <rect x="702" y="498" width="55" height="22" rx="9" class="res"/><text x="730" y="516" text-anchor="middle" class="small">R8 10K</text>
+
+    <rect x="820" y="350" width="68" height="24" rx="8" class="dio"/><text x="854" y="369" text-anchor="middle" class="small">D1</text>
+    <rect x="820" y="560" width="68" height="24" rx="8" class="dio"/><text x="854" y="579" text-anchor="middle" class="small">D2</text>
+    <text x="850" y="620" text-anchor="middle" class="small">D1/D2：马达保护二极管</text>
+  </g>
+
+  <path d="M360 244 C410 244,420 335,455 335" class="sig"/>
+  <path d="M360 339 C410 339,420 370,455 370" class="sig"/>
+  <path d="M360 434 C410 434,420 405,455 405" class="sig"/>
+  <path d="M360 529 C410 529,420 440,455 440" class="sig"/>
+
+  <path d="M745 335 C785 335,785 284,840 284" class="motor"/>
+  <path d="M745 370 C785 370,785 494,840 494" class="motor"/>
+
+  <path d="M150 175 H1050" class="pwr"/>
+  <text x="1010" y="168" class="small">5V 母线</text>
+  <path d="M150 640 H1050" class="gnd"/>
+  <text x="1010" y="665" class="small">GND 母线</text>
+
+  <text x="255" y="635" text-anchor="middle" class="note">左侧：4 个 FSR 传感器接口</text>
+  <text x="945" y="635" text-anchor="middle" class="note">右侧：2 个马达接口和 S9012 驱动</text>
+
+  <rect x="145" y="730" width="910" height="48" rx="12" fill="#fff" stroke="#ccc"/>
+  <text x="600" y="762" text-anchor="middle" class="note">线材建议：FSR 用 28AWG 硅胶软线，马达用 26AWG 硅胶软线；每个模块用 JST 2P 可插拔连接</text>
+</svg>
