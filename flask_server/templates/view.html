@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAINA 海报</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --card: rgba(18, 24, 42, 0.9);
+      --line: rgba(255, 255, 255, 0.1);
+      --text: #edf2ff;
+      --muted: #99a9d2;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        radial-gradient(circle at top, rgba(87, 116, 200, 0.2), transparent 40%),
+        linear-gradient(180deg, #060a12, #0e1730 60%, #070b14);
+      color: var(--text);
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+    }
+    .wrap {
+      width: min(100%, 520px);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 20px;
+      box-shadow: 0 16px 60px rgba(0, 0, 0, 0.35);
+    }
+    img {
+      width: 100%;
+      border-radius: 18px;
+      display: block;
+    }
+    h1 { margin: 0 0 10px; font-size: 24px; }
+    p {
+      color: var(--muted);
+      line-height: 1.6;
+      margin: 12px 0 0;
+    }
+  </style>
+</head>
+<body>
+  <main class="wrap">
+    <h1>你的专属海报</h1>
+    <img src="{{ image_url }}" alt="poster {{ name }}" />
+    <p>长按图片即可保存。返回大屏后，按按钮可以开始下一位体验者的流程。</p>
+  </main>
+</body>
+</html>

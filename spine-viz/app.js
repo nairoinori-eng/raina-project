@@ -266,6 +266,8 @@ const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerH
 camera.position.set(0, 0, 5);
 camera.lookAt(0, 0, 0);
 
+let idleVoiceViz = null;
+
 
 // ============================================================
 // 6. Shader（逐粒子颜色偏移）
@@ -328,6 +330,19 @@ const spineVertexShader = /* glsl */`
   uniform float uTime;
   uniform float uFormation;
   uniform float uGuideAlpha;
+  uniform float uVoiceMode;
+  uniform float uVoiceStrength;
+  uniform float uVoiceLevel;
+  uniform float uVoiceReplyMorph;
+  uniform float uVoiceReturning;
+  uniform vec4 uVoiceBand0;
+  uniform vec4 uVoiceBand1;
+  uniform vec4 uVoiceBand2;
+  uniform vec4 uVoiceBand3;
+  uniform vec4 uVoiceBand4;
+  uniform vec4 uVoiceBand5;
+  uniform vec4 uVoiceBand6;
+  uniform vec4 uVoiceBand7;
   varying float vAlpha1;
   varying float vAlpha2;
   varying float vAlpha3;
@@ -336,7 +351,43 @@ const spineVertexShader = /* glsl */`
   varying float vColorVar3;
   varying float vParamT;
   varying float vIdleness;
+  varying float vVoiceTextT;
+  float voiceBand(float idx) {
+    if (idx < 1.0) return uVoiceBand0.x;
+    if (idx < 2.0) return uVoiceBand0.y;
+    if (idx < 3.0) return uVoiceBand0.z;
+    if (idx < 4.0) return uVoiceBand0.w;
+    if (idx < 5.0) return uVoiceBand1.x;
+    if (idx < 6.0) return uVoiceBand1.y;
+    if (idx < 7.0) return uVoiceBand1.z;
+    if (idx < 8.0) return uVoiceBand1.w;
+    if (idx < 9.0) return uVoiceBand2.x;
+    if (idx < 10.0) return uVoiceBand2.y;
+    if (idx < 11.0) return uVoiceBand2.z;
+    if (idx < 12.0) return uVoiceBand2.w;
+    if (idx < 13.0) return uVoiceBand3.x;
+    if (idx < 14.0) return uVoiceBand3.y;
+    if (idx < 15.0) return uVoiceBand3.z;
+    if (idx < 16.0) return uVoiceBand3.w;
+    if (idx < 17.0) return uVoiceBand4.x;
+    if (idx < 18.0) return uVoiceBand4.y;
+    if (idx < 19.0) return uVoiceBand4.z;
+    if (idx < 20.0) return uVoiceBand4.w;
+    if (idx < 21.0) return uVoiceBand5.x;
+    if (idx < 22.0) return uVoiceBand5.y;
+    if (idx < 23.0) return uVoiceBand5.z;
+    if (idx < 24.0) return uVoiceBand5.w;
+    if (idx < 25.0) return uVoiceBand6.x;
+    if (idx < 26.0) return uVoiceBand6.y;
+    if (idx < 27.0) return uVoiceBand6.z;
+    if (idx < 28.0) return uVoiceBand6.w;
+    if (idx < 29.0) return uVoiceBand7.x;
+    if (idx < 30.0) return uVoiceBand7.y;
+    if (idx < 31.0) return uVoiceBand7.z;
+    return uVoiceBand7.w;
+  }
   void main() {
+    vVoiceTextT = 0.0;
     // ── Formed position (normal spine) ──
     float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
     vec2 center = mix(aCurvedPos, aStraightPos, lb);
@@ -382,6 +433,70 @@ const spineVertexShader = /* glsl */`
     float a2 = mix(idleAlpha, formedA2, pFormation) * uGuideAlpha;
     float a3 = mix(idleAlpha, formedA3, pFormation) * uGuideAlpha;
 
+    float voiceSeed = fract(aPhase * 17.13 + aParamT * 19.71 + aColorVarPack.x * 3.91);
+    float voiceSelect = 1.0 - step(0.38, voiceSeed);
+    float replyBgDim = smoothstep(0.25, 0.95, uVoiceReplyMorph);
+    float bgDim = mix(1.0, mix(0.58, 0.40, replyBgDim), uVoiceStrength * (1.0 - voiceSelect) * (1.0 - pFormation));
+    a1 *= bgDim;
+    a2 *= bgDim;
+    a3 *= bgDim;
+    float voiceMix = uVoiceStrength * voiceSelect * (1.0 - pFormation);
+    if (voiceMix > 0.001) {
+      float seed = voiceSeed;
+      float sA = fract(seed * 91.7 + aParamT * 31.1 + aPhase * 5.3);
+      float sB = fract(seed * 47.3 + aParamT * 17.9 + aColorVarPack.x * 13.1);
+      float sC = fract(seed * 22.9 + aPhase * 9.7);
+      vec3 voicePos = scatterPos;
+      float voiceAlpha = idleAlpha;
+      float voiceSize = size;
+      float u = sA;
+      float bars = 96.0;
+      float barId = floor(u * bars);
+      float barU = (barId + 0.5) / bars;
+      float side = sB < 0.5 ? -1.0 : 1.0;
+      float rib = abs(sB * 2.0 - 1.0);
+      float barSeed = fract(sin(barId * 41.173 + 8.31) * 43758.5453);
+      float lineFade = smoothstep(0.0, 0.08, barU) * (1.0 - smoothstep(0.94, 1.0, barU));
+      float peakA = exp(-pow((barU - 0.20) / 0.045, 2.0));
+      float peakB = exp(-pow((barU - 0.39) / 0.095, 2.0));
+      float peakC = exp(-pow((barU - 0.62) / 0.055, 2.0));
+      float peakD = exp(-pow((barU - 0.82) / 0.115, 2.0));
+      float pulse = sin(uTime * (1.2 + barSeed * 0.9) + barSeed * 6.283) * 0.5 + 0.5;
+      float realBand = voiceBand(mod(barId, 32.0));
+      float env = (0.035 + peakA * 0.20 + peakB * 0.90 + peakC * 0.32 + peakD * 1.12)
+                * (0.34 + pulse * 0.10 + uVoiceLevel * 0.42 + realBand * 1.35);
+      float contrast = pow(clamp(env, 0.0, 1.35), 1.28);
+      float lineHeight = (0.030 + contrast * 0.96) * lineFade;
+      float centerGlow = exp(-pow(sB * 2.0 - 1.0, 2.0) * 14.0);
+      vec3 linePos = vec3(
+        -1.55 + barU * 5.80 + (sC - 0.5) * 0.003,
+        -0.06 + side * rib * lineHeight,
+        (sC - 0.5) * 0.045
+      );
+
+      float slow = sin(u * 6.283 * 1.28 + uTime * 0.36);
+      float detail = sin(u * 6.283 * 3.35 - uTime * 0.25 + 1.4) * 0.32;
+      float body = clamp(0.30 + (slow * 0.5 + 0.5) * 0.44 + detail * 0.18, 0.18, 0.92);
+
+      float replyT = smoothstep(0.0, 1.0, uVoiceReplyMorph);
+      voicePos = mix(linePos, position, replyT);
+
+      float lineAlpha = (0.13 + centerGlow * 0.30 + realBand * 0.22 + contrast * 0.18) * lineFade;
+      float textNormalizeT = smoothstep(0.08, 0.70, replyT);
+      float easedVoice = smoothstep(0.0, 1.0, voiceMix);
+      vVoiceTextT = max(vVoiceTextT, textNormalizeT * easedVoice);
+      float textAlpha = 1.0;
+      voiceAlpha = mix(lineAlpha, textAlpha, textNormalizeT);
+      float lineSize = 0.007 + centerGlow * 0.007 + sC * 0.006;
+      float textSize = 0.014;
+      voiceSize = mix(max(size, lineSize), textSize, textNormalizeT);
+      pos = mix(pos, voicePos, easedVoice);
+      size = mix(size, voiceSize, easedVoice);
+      a1 = mix(a1, voiceAlpha, easedVoice);
+      a2 = mix(a2, voiceAlpha, easedVoice);
+      a3 = mix(a3, voiceAlpha, easedVoice);
+    }
+
     vAlpha1 = a1;
     vAlpha2 = a2;
     vAlpha3 = a3;
@@ -390,6 +505,7 @@ const spineVertexShader = /* glsl */`
     vColorVar3 = aColorVarPack.z;
     vParamT = aParamT;
     vIdleness = 1.0 - pFormation;
+    vVoiceTextT = max(vVoiceTextT, 0.0);
     vec4 mv = modelViewMatrix * vec4(pos, 1.0);
     gl_PointSize = size * (300.0 / -mv.z);
     gl_Position = projectionMatrix * mv;
@@ -412,6 +528,7 @@ const spineFragmentShader = /* glsl */`
   varying float vColorVar3;
   varying float vParamT;
   varying float vIdleness;
+  varying float vVoiceTextT;
   #define PICK_COLOR(pal, v, out) \
     if      (v >  0.95) out = pal[6]; \
     else if (v < -0.92) out = pal[5]; \
@@ -434,6 +551,8 @@ const spineFragmentShader = /* glsl */`
     vec3 c = c1 * w1 + c2 * w2 + c3 * w3;
     float vAlpha = vAlpha1 * w1 + vAlpha2 * w2 + vAlpha3 * w3;
     c = clamp(c, 0.0, 1.0);
+    vec3 textCol = vec3(1.0, 0.98, 1.0);
+    c = mix(c, textCol, smoothstep(0.02, 0.55, vVoiceTextT));
     if (uSegmentHighlight > 0.0) {
       float thorZone = smoothstep(0.12, 0.28, vParamT)
                      * (1.0 - smoothstep(0.38, 0.52, vParamT));
@@ -920,6 +1039,19 @@ const spineMat = new THREE.ShaderMaterial({
     uFormation:         { value: 0.0 },   // 0=scattered, 1=formed
     uGuideAlpha:        { value: 1.0 },   // overall alpha (0 during teaching)
     uSegmentHighlight:  { value: 0.0 },   // 0=normal, 1=thoracic/lumbar highlight
+    uVoiceMode:         { value: 0.0 },
+    uVoiceStrength:     { value: 0.0 },
+    uVoiceLevel:        { value: 0.0 },
+    uVoiceReplyMorph:   { value: 1.0 },
+    uVoiceReturning:    { value: 0.0 },
+    uVoiceBand0:        { value: new THREE.Vector4() },
+    uVoiceBand1:        { value: new THREE.Vector4() },
+    uVoiceBand2:        { value: new THREE.Vector4() },
+    uVoiceBand3:        { value: new THREE.Vector4() },
+    uVoiceBand4:        { value: new THREE.Vector4() },
+    uVoiceBand5:        { value: new THREE.Vector4() },
+    uVoiceBand6:        { value: new THREE.Vector4() },
+    uVoiceBand7:        { value: new THREE.Vector4() },
   },
   transparent: true,
   blending:    THREE.AdditiveBlending,
@@ -928,6 +1060,275 @@ const spineMat = new THREE.ShaderMaterial({
 const spinePoints = new THREE.Points(spineGeo, spineMat);
 spinePoints.frustumCulled = false;
 spineGroup.add(spinePoints);
+
+class SpineVoiceController {
+  constructor() {
+    this.level = 0;
+    this.mode = 'idle';
+    this.strength = 0;
+    this.targetStrength = 0;
+    this.replyUntil = 0;
+    this.replyMorph = 1;
+    this.returning = false;
+    this.textCanvas = document.createElement('canvas');
+    this.textCanvas.width = 1600;
+    this.textCanvas.height = 620;
+    this.textCtx = this.textCanvas.getContext('2d', { willReadFrequently: true });
+    this.targetAttr = spineGeo.attributes.position;
+    this.lineCount = 0;
+    this.replySamples = null;
+  }
+
+  isActive() {
+    return this.mode !== 'idle' || this.strength > 0.015 || this.targetStrength > 0.015;
+  }
+
+  setLevel(level) {
+    this.level = Math.max(0, Math.min(1, level));
+    spineMat.uniforms.uVoiceLevel.value = this.level;
+  }
+
+  showReply(text, nowSec = time, options = {}) {
+    const cleanText = String(text || '').trim();
+    this.mode = 'reply';
+    this.returning = false;
+    const defaultDuration = Math.max(3.6, Math.min(5.8, 3.0 + cleanText.length * 0.045));
+    this.replyUntil = nowSec + (Number.isFinite(options.durationSec) ? options.durationSec : defaultDuration);
+    this.replyMorph = 0;
+    this.targetStrength = 1;
+    spineMat.uniforms.uVoiceMode.value = 3;
+    spineMat.uniforms.uVoiceReplyMorph.value = 0;
+    spineMat.uniforms.uVoiceReturning.value = 0;
+    this._buildTextTargets(cleanText);
+    return this.replyUntil - nowSec;
+  }
+
+  clearReply() {
+    if (this.mode === 'reply' && !this.returning) {
+      this.mode = 'returning';
+      this.returning = true;
+      this.replyUntil = 0;
+      this.targetStrength = 1;
+      this._clearVisibleAnswerCanvas();
+      overlays.setAIReply();
+      spineMat.uniforms.uVoiceMode.value = 3;
+      spineMat.uniforms.uVoiceReturning.value = 1;
+      return;
+    }
+    this._finishReplyReturn();
+  }
+
+  _finishReplyReturn() {
+    this.mode = 'idle';
+    this.returning = false;
+    this.replyUntil = 0;
+    this.targetStrength = 0;
+    this.replySamples = null;
+    this.replyMorph = 0;
+    this._clearVisibleAnswerCanvas();
+    overlays.setAIReply();
+    spineMat.uniforms.uVoiceMode.value = 0;
+    spineMat.uniforms.uVoiceReplyMorph.value = 0;
+    spineMat.uniforms.uVoiceReturning.value = 0;
+  }
+
+  _getVisibleAnswerCanvas() {
+    return document.querySelector('.intro-answer-canvas');
+  }
+
+  _clearVisibleAnswerCanvas() {
+    const canvas = this._getVisibleAnswerCanvas();
+    const ctx = canvas?.getContext('2d');
+    if (!canvas || !ctx) return;
+    canvas.style.opacity = '0';
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  _setVisibleAnswerOpacity(value) {
+    const canvas = this._getVisibleAnswerCanvas();
+    if (!canvas || this.mode === 'returning') return;
+    canvas.style.opacity = String(Math.max(0, Math.min(1, value)));
+  }
+
+  _wrapText(text, maxWidth, font) {
+    const cleaned = String(text || '').replace(/\s+/g, '');
+    if (!cleaned) return [];
+    const lines = [];
+    let line = '';
+    const ctx = this.textCtx;
+    ctx.font = font;
+    for (const ch of cleaned) {
+      const next = line + ch;
+      if (ctx.measureText(next).width > maxWidth && line) {
+        lines.push(line);
+        line = ch;
+      } else {
+        line = next;
+      }
+    }
+    if (line) lines.push(line);
+    return lines;
+  }
+
+  _getAnswerRect() {
+    const el = document.querySelector('.intro-answer-field');
+    if (!el) return null;
+    const rect = el.getBoundingClientRect();
+    if (!rect.width || !rect.height) return null;
+    return { el, rect };
+  }
+
+  _screenPointToSpineLocal(px, py) {
+    camera.updateMatrixWorld();
+    spineGroup.updateMatrixWorld();
+    const ndc = new THREE.Vector3(
+      (px / window.innerWidth) * 2 - 1,
+      -(py / window.innerHeight) * 2 + 1,
+      0
+    );
+    ndc.unproject(camera);
+    const dir = ndc.sub(camera.position).normalize();
+    const dist = -camera.position.z / dir.z;
+    const world = camera.position.clone().add(dir.multiplyScalar(dist));
+    return spineGroup.worldToLocal(world);
+  }
+
+  _syncReplyTargetsToAnswerRect() {
+    if (!this.replySamples || !this.replySamples.length) return;
+    const target = this._getAnswerRect();
+    if (!target) return;
+    const { rect } = target;
+    const tl = this._screenPointToSpineLocal(rect.left, rect.top);
+    const tr = this._screenPointToSpineLocal(rect.right, rect.top);
+    const bl = this._screenPointToSpineLocal(rect.left, rect.bottom);
+    const br = this._screenPointToSpineLocal(rect.right, rect.bottom);
+    const arr = this.targetAttr.array;
+    for (let i = 0; i < N_SPINE; i++) {
+      const sample = this.replySamples[(i * 17 + Math.floor(gpuPhase[i] * this.replySamples.length)) % this.replySamples.length];
+      const u = sample.u;
+      const v = sample.v;
+      const invU = 1 - u;
+      const topX = tl.x * invU + tr.x * u;
+      const topY = tl.y * invU + tr.y * u;
+      const topZ = tl.z * invU + tr.z * u;
+      const botX = bl.x * invU + br.x * u;
+      const botY = bl.y * invU + br.y * u;
+      const botZ = bl.z * invU + br.z * u;
+      const invV = 1 - v;
+      const j = i * 3;
+      const jitterA = gpuPhase[i] - 0.5;
+      const jitterB = gpuPhase[(i + 17) % N_SPINE] - 0.5;
+      arr[j] = topX * invV + botX * v + jitterA * 0.00025;
+      arr[j + 1] = topY * invV + botY * v + jitterB * 0.00025;
+      arr[j + 2] = topZ * invV + botZ * v + (jitterA + jitterB) * 0.0035;
+    }
+    this.targetAttr.needsUpdate = true;
+  }
+
+  _buildTextTargets(text) {
+    const target = this._getAnswerRect();
+    if (!target) return;
+    const { el, rect } = target;
+    const visibleCanvas = this._getVisibleAnswerCanvas();
+    const style = window.getComputedStyle(el);
+    const dpr = Math.min(3, window.devicePixelRatio || 1);
+    const canvas = this.textCanvas;
+    const ctx = this.textCtx;
+    canvas.width = Math.max(1, Math.ceil(rect.width * dpr));
+    canvas.height = Math.max(1, Math.ceil(rect.height * dpr));
+    if (visibleCanvas) {
+      visibleCanvas.width = canvas.width;
+      visibleCanvas.height = canvas.height;
+      visibleCanvas.style.opacity = '0';
+    }
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = 'rgba(255,255,255,1)';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'middle';
+    const fontSize = parseFloat(style.fontSize || '48') * dpr;
+    const lineHeightRaw = parseFloat(style.lineHeight);
+    const lineHeight = Number.isFinite(lineHeightRaw) ? lineHeightRaw * dpr : fontSize * 1.38;
+    const fontWeight = style.fontWeight || '800';
+    const fontFamily = style.fontFamily || '"Songti SC", "Noto Serif SC", serif';
+    const font = `${fontWeight} ${fontSize}px ${fontFamily}`;
+    ctx.font = font;
+    const padX = Math.max(14 * dpr, fontSize * 0.14);
+    const lines = this._wrapText(text, canvas.width - padX * 2, font);
+    this.lineCount = lines.length;
+    const blockH = Math.max(1, lines.length) * lineHeight;
+    const startY = canvas.height * 0.5 - blockH * 0.5 + lineHeight * 0.5;
+    lines.forEach((line, idx) => ctx.fillText(line, canvas.width - padX, startY + idx * lineHeight));
+
+    if (visibleCanvas) {
+      const visibleCtx = visibleCanvas.getContext('2d');
+      if (visibleCtx) {
+        visibleCtx.clearRect(0, 0, visibleCanvas.width, visibleCanvas.height);
+        visibleCtx.save();
+        visibleCtx.globalAlpha = 0.26;
+        visibleCtx.drawImage(canvas, 0, 0);
+        visibleCtx.globalCompositeOperation = 'source-in';
+        visibleCtx.fillStyle = 'rgba(228, 224, 244, 1)';
+        visibleCtx.fillRect(0, 0, visibleCanvas.width, visibleCanvas.height);
+        visibleCtx.restore();
+      }
+    }
+
+    const image = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+    const samples = [];
+    const step = Math.max(1, Math.round(dpr * 0.85));
+    for (let y = 0; y < canvas.height; y += step) {
+      for (let x = 0; x < canvas.width; x += step) {
+        const alpha = image[(y * canvas.width + x) * 4 + 3];
+        if (alpha > 18) samples.push({ u: x / canvas.width, v: y / canvas.height });
+      }
+    }
+    if (!samples.length) return;
+    this.replySamples = samples;
+    this._syncReplyTargetsToAnswerRect();
+  }
+
+  update(t, { visible, listening, streaming } = {}) {
+    const active = visible && currentMode === 'IDLE' && (!voiceTriggered || this.mode === 'reply' || this.mode === 'returning');
+    if (!active) {
+      this.targetStrength = 0;
+    } else if (this.mode === 'returning') {
+      this.targetStrength = 1;
+      spineMat.uniforms.uVoiceMode.value = 3;
+    } else if (this.mode === 'reply' && t < this.replyUntil) {
+      this.targetStrength = 1;
+      spineMat.uniforms.uVoiceMode.value = 3;
+    } else if (listening || streaming) {
+      this.mode = 'wave';
+      this.targetStrength = 1.0;
+      spineMat.uniforms.uVoiceMode.value = 1;
+    } else {
+      this.mode = 'idle';
+      this.targetStrength = 0;
+      spineMat.uniforms.uVoiceMode.value = 0;
+    }
+
+    if (this.mode === 'reply' && t >= this.replyUntil) this.clearReply();
+    this.strength += (this.targetStrength - this.strength) * 0.055;
+    if (this.mode === 'reply') this.replyMorph = Math.min(1, this.replyMorph + 0.026);
+    else if (this.mode === 'returning') this.replyMorph += (0 - this.replyMorph) * 0.010;
+    else this.replyMorph += (0 - this.replyMorph) * 0.16;
+    spineMat.uniforms.uVoiceStrength.value = this.strength;
+    spineMat.uniforms.uVoiceLevel.value = this.level;
+    spineMat.uniforms.uVoiceReplyMorph.value = this.replyMorph;
+    spineMat.uniforms.uVoiceReturning.value = this.mode === 'returning' ? 1 : 0;
+    if (this.mode === 'reply') this._setVisibleAnswerOpacity(this.replyMorph);
+    if (this.mode === 'returning') {
+      this._setVisibleAnswerOpacity(this.replyMorph);
+      if (this.replyMorph < 0.025) this._finishReplyReturn();
+    }
+    if (this.mode === 'reply') {
+      bloomPass.strength = Math.max(bloomPass.strength, 0.42 + this.strength * 0.35);
+    }
+    if ((this.mode === 'reply' || this.mode === 'returning') && this.replySamples) this._syncReplyTargetsToAnswerRect();
+  }
+}
+
+idleVoiceViz = new SpineVoiceController();
 
 // ============================================================
 // 7b. 肋骨粒子（仅段 1 后段 22.5-31.5s 显示，配合"穹窿/峡谷"文字）
@@ -1006,6 +1407,11 @@ const ribMat = new THREE.ShaderMaterial({
     uniform float uActive;
     uniform float uGrowthRight;  // 右侧生长进度
     uniform float uGrowthLeft;   // 左侧生长进度
+    uniform float uBreathOpenLeft; // 施罗斯教学段：左侧凹陷肋骨随呼吸外展
+    uniform float uRibOpenRight;  // 穹窿段：右侧从正常 morph 到撑开
+    uniform float uRibCloseLeft;  // 峡谷段：左侧从正常 morph 到紧缩
+    uniform float uRightVisible;
+    uniform float uLeftVisible;
     varying float vAlpha;
     varying float vColorVar;
     varying float vPathT;
@@ -1013,28 +1419,40 @@ const ribMat = new THREE.ShaderMaterial({
       int idx = int(aRibIdx);
       vec2 vert = uRibVertebra[idx];
       float vOuter = uVertOuter[idx];
+      float idxNorm = aRibIdx / 5.0;  // 0=最上, 1=最下（6 根肋骨）
 
       // 不对称横向延展（侧弯关键，加长版本，更明显的骨骼感）：
       //   右侧凸 → 肋骨被推得更外更舒展（lateral 2.20~2.55）
       //   左侧凹 → 肋骨更挤更短（lateral 1.30~1.54）
-      float lateral = (aSide > 0.0)
-        ? (2.20 + aRibIdx * 0.060)
-        : (1.30 + aRibIdx * 0.040);
+      float lateralNormal = 1.48 + aRibIdx * 0.045;
+      float lateralCollapsed = 1.30 + aRibIdx * 0.040;
+      float openFanT = max(uRibOpenRight * step(0.0, aSide), uBreathOpenLeft * step(aSide, 0.0));
+      float fanEdgeBias = abs(idxNorm - 0.5);
+      float lateralOpen = lateralNormal + 0.42 + fanEdgeBias * 0.28;
+      float lateralLeftBase = mix(lateralNormal, lateralCollapsed, uRibCloseLeft);
+      float lateralBase = (aSide > 0.0) ? lateralNormal : lateralLeftBase;
+      float lateral = mix(lateralBase, lateralOpen, openFanT);
 
       // 起点：椎体最外缘（用 vertOuter，不是硬编码常量）
       vec2 vertEdge = vec2(vert.x + aSide * vOuter, vert.y);
 
-      // 弧形路径（贝塞尔）+ 不对称扇形：
-      //   凸侧（右）：扇形大开（最上水平→最下陡下，远端 Y 跨度大）
+      // 弧形路径（贝塞尔）+ 扇形角度 morph：
+      //   凸侧（右）：以脊柱端为锚点，远端上下分散，像扇骨打开
       //   凹侧（左）：反扇形漏斗（最上陡下→最下缓，远端 Y 聚拢到中间）
       vec2 start = vertEdge;
-      float idxNorm = aRibIdx / 5.0;  // 0=最上, 1=最下（6 根肋骨）
-      float archUp = (aSide > 0.0)
-        ? mix(0.40, 0.05, idxNorm)   // 凸侧最上高拱→最下扁平
-        : mix(0.10, 0.40, idxNorm);  // 凹侧反向：最上扁平→最下高拱（漏斗对称）
-      float archDown = (aSide > 0.0)
-        ? (0.05 + idxNorm * 0.80)    // 凸侧 0.05~0.85（扇形展开）
-        : mix(0.85, 0.20, idxNorm);  // 凹侧 0.85~0.20（反扇形聚拢）
+      float archUpCollapsed = mix(0.10, 0.40, idxNorm); // 凹侧反向：最上扁平→最下高拱
+      float archDownCollapsed = mix(0.85, 0.20, idxNorm); // 凹侧远端聚拢
+      float archUpNormal = mix(0.18, 0.15, idxNorm);
+      float archDownNormal = 0.20 + idxNorm * 0.32;
+      float archUpLeftBase = mix(archUpNormal, archUpCollapsed, uRibCloseLeft);
+      float archDownLeftBase = mix(archDownNormal, archDownCollapsed, uRibCloseLeft);
+      float fanY = (0.5 - idxNorm) * 0.70;
+      float archUpOpen = archUpNormal + fanY * 0.22 + fanEdgeBias * 0.07;
+      float archDownOpen = max(0.04, archDownNormal - fanY);
+      float archUpBase = (aSide > 0.0) ? archUpNormal : archUpLeftBase;
+      float archDownBase = (aSide > 0.0) ? archDownNormal : archDownLeftBase;
+      float archUp = mix(archUpBase, archUpOpen, openFanT);
+      float archDown = mix(archDownBase, archDownOpen, openFanT);
       vec2 ctrl  = vec2(vertEdge.x + lateral * 0.55 * aSide, vert.y + archUp);
       vec2 endPt = vec2(vertEdge.x + lateral * aSide,        vert.y - archDown);
       vec2 ab = mix(start, ctrl, aPathT);
@@ -1060,10 +1478,14 @@ const ribMat = new THREE.ShaderMaterial({
       float myGrowth = (aSide > 0.0) ? uGrowthRight : uGrowthLeft;
       float effGrowth = myGrowth * 1.1 - 0.1;
       float growMask = 1.0 - smoothstep(effGrowth, effGrowth + 0.08, aPathT);
-      vAlpha = uActive * growMask;
+      float sideVisible = (aSide > 0.0) ? uRightVisible : uLeftVisible;
+      float morphEmphasis = 1.0 + uRibOpenRight * step(0.0, aSide) * 0.45
+                          + uRibCloseLeft * step(aSide, 0.0) * 0.20
+                          + uBreathOpenLeft * step(aSide, 0.0) * 0.25;
+      vAlpha = uActive * growMask * sideVisible * morphEmphasis;
 
       vec4 mv = modelViewMatrix * vec4(pos2D, z, 1.0);
-      gl_PointSize = 0.085 * (300.0 / -mv.z);
+      gl_PointSize = 0.085 * morphEmphasis * (300.0 / -mv.z);
       gl_Position = projectionMatrix * mv;
     }
   `,
@@ -1089,6 +1511,11 @@ const ribMat = new THREE.ShaderMaterial({
     uActive:       { value: 0 },
     uGrowthRight:  { value: 0 },
     uGrowthLeft:   { value: 0 },
+    uBreathOpenLeft:{ value: 0 },
+    uRibOpenRight: { value: 0 },
+    uRibCloseLeft: { value: 0 },
+    uRightVisible: { value: 1 },
+    uLeftVisible:  { value: 1 },
     uRibVertebra:  { value: Array.from({length: N_RIBS_PER_SIDE}, (_, i) =>
                        new THREE.Vector2(ribVertebraXY[i*2], ribVertebraXY[i*2+1])) },
     uVertOuter:    { value: Array.from(ribVertOuter) },
@@ -1932,12 +2359,16 @@ const vineVertexShader = /* glsl */`
     vec3 pos;
 
     {
-      float lb = clamp((uBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
+      // Drift clouds should stay organic while the main vine/spine straightens.
+      // Root-side particles still follow enough to stay attached; far particles keep their baked curve.
+      float driftShapeLock = smoothstep(0.35, 2.60, aDriftT);
+      float shapeBlend = mix(uBlend, uBlend * 0.18, driftShapeLock);
+      float lb = clamp((shapeBlend - (1.0 - aParamT) * 0.28) / 0.72, 0.0, 1.0);
       vec2 pos2d = mix(aCurvedPos, aStraightPos, lb);
 
       // blend 高时仅主藤有机外扩
       if (aVineId < 0.5) {
-        float spreadBlend = smoothstep(0.5, 1.0, uBlend) * 0.60;
+        float spreadBlend = smoothstep(0.5, 1.0, uBlend) * 0.60 * (1.0 - driftShapeLock * 0.88);
         float spreadWave = 0.4 + 0.6 * sin(aParamT * 3.14159 * 2.5);
         pos2d.x += pos2d.x * spreadBlend * spreadWave;
       }
@@ -1986,7 +2417,7 @@ const vineVertexShader = /* glsl */`
 
       // 遮挡判定：考虑 spineGroup 的 Y 轴旋转，把 (local x, local z) 转到世界空间再比较。
       // 骨骼是竖直柱（local z 恒 0），只受 uBlend 混合影响 local x。
-      float spineCxLocal = mix(spineCenterXCurved(pos2d.y), 0.0, uBlend);
+      float spineCxLocal = mix(spineCenterXCurved(pos2d.y), 0.0, shapeBlend);
       float cy = cos(uSpineRotY);
       float sy = sin(uSpineRotY);
       // 粒子世界 (x, z)
@@ -2163,7 +2594,7 @@ const vineGrowProgress  = [0, 0, 0];
 //
 
 // ── 叶子形状数据预处理：采样模板内部点 ──
-const PARTICLES_PER_LEAF = 1000;
+const PARTICLES_PER_LEAF = 2000;
 
 // Poisson-disk 风格：在轮廓内用网格+随机采样
 function pointInPolygon(px, py, polygon) {
@@ -2204,7 +2635,7 @@ function sampleLeafTemplate(shape) {
   const points = [];
   // 填充点 + 高密度叶脉点 + 高密度轮廓点
   // 1. 内部填充（随机采样 + 拒绝法）
-  const targetFill = Math.floor(PARTICLES_PER_LEAF * 0.50);
+  const targetFill = Math.floor(PARTICLES_PER_LEAF * 0.74);
   let tries = 0;
   while (points.length < targetFill && tries < 5000) {
     tries++;
@@ -2218,7 +2649,7 @@ function sampleLeafTemplate(shape) {
   }
   // 2. 叶脉点（有 veins 数据）
   if (veins && veins.length > 0) {
-    const nVeins = Math.floor(PARTICLES_PER_LEAF * 0.27);
+    const nVeins = Math.floor(PARTICLES_PER_LEAF * 0.12);
     for (let i = 0; i < nVeins; i++) {
       const v = veins[Math.floor(Math.random() * veins.length)];
       const yNorm = (v[1] - minY) / leafHeight;
@@ -2633,11 +3064,10 @@ for (const src of leafSources) {
 const N_LEAVES = leafInstances.length;
 // 每片叶子粒子数：按"渲染世界面积 = 模板面积 × scale²"驱动，
 // 保证每片叶子的粒子密度（per 单位渲染面积）一致。
-// 校准：最大叶子（面积最大模板 × MAX_SCALE）保持 2600 粒子，
-// 与原公式的上限持平，质感保留。
+// 校准：最大叶子加密到 4800 粒子，小叶保底 1000 粒子，叶面填充比原版更实但不过糊。
 const MIN_SCALE = 0.08, MAX_SCALE = 0.24;
-const LEAF_MAX_PARTICLES = 2600;
-const LEAF_MIN_PARTICLES = 420;
+const LEAF_MAX_PARTICLES = 4800;
+const LEAF_MIN_PARTICLES = 1000;
 const LEAF_DENSITY = LEAF_MAX_PARTICLES / (LEAF_REF_AREA * MAX_SCALE * MAX_SCALE);
 for (const leaf of leafInstances) {
   const t = LEAF_TEMPLATES[leaf.templateIdx];
@@ -2671,7 +3101,7 @@ for (const leaf of leafInstances) {
     const pt = template.points[p % template.points.length];
 
     // 粒子级随机抖动：叶脉/描边更贴合模板，避免线条发虚
-    const jitter = pt.isVein ? 0.018 : (pt.isEdge ? 0.014 : 0.08);
+    const jitter = pt.isVein ? 0.012 : (pt.isEdge ? 0.007 : 0.052);
     const jx = (Math.random() - 0.5) * jitter;
     const jy = (Math.random() - 0.5) * jitter;
 
@@ -2705,17 +3135,17 @@ for (const leaf of leafInstances) {
 
     // 粒子大小：叶脉/描边用更多小粒子形成实线，内部保持柔和
     let baseSize;
-    if (pt.isVein) baseSize = 0.026 + Math.random() * 0.008;
-    else if (pt.isEdge) baseSize = 0.032 + Math.random() * 0.010;
-    else baseSize = 0.022 + Math.random() * 0.010;
+    if (pt.isVein) baseSize = 0.038 + Math.random() * 0.012;
+    else if (pt.isEdge) baseSize = 0.060 + Math.random() * 0.018;
+    else baseSize = 0.030 + Math.random() * 0.012;
     // 描边/叶脉用 sqrt(sizeMult) 缩放：保证小叶描边仍可见
     // 内部粒子按线性缩放
     const lineSizeMult = (pt.isVein || pt.isEdge) ? Math.sqrt(sizeMult) : sizeMult;
     lfSizes[lfIdx] = baseSize * lineSizeMult;
 
     // alpha：线条粒子更稳定，靠密度形成实感而不是靠大光斑
-    lfAlphas[lfIdx] = pt.isEdge ? 0.96 + Math.random() * 0.04
-      : (pt.isVein ? 0.84 + Math.random() * 0.10 : 0.40 + Math.random() * 0.10);
+    lfAlphas[lfIdx] = pt.isEdge ? 0.98 + Math.random() * 0.02
+      : (pt.isVein ? 0.90 + Math.random() * 0.08 : 0.56 + Math.random() * 0.14);
 
     // 色系驱动 colorVar：0=暖/金叶，1/2=冷蓝叶
     const tipGrad = pt.yNorm;
@@ -3469,16 +3899,16 @@ composer.addPass(bloomPass);
 
 
 // ============================================================
-// 10b. 光流粒子（GUIDE 段 2a/b "送气方向"可视化）
+// 10b. 胸廓气流粒子（GUIDE 段 2a/b "送气方向"可视化）
 // ============================================================
-// 一道淡暖光从胸腔位置流向凹陷一侧（左下），仅在段 2a/b 36-44s 激活
-const FLOW_COUNT = 300;
+// 面状气流从胸腔内侧向左侧凹陷肋骨区域放射，模拟气息填满胸廓。
+const FLOW_COUNT = 900;
 const flowGeo = new THREE.BufferGeometry();
 const flowPosArr = new Float32Array(FLOW_COUNT * 3); // 占位
 const flowSpawnArr = new Float32Array(FLOW_COUNT);   // 0~cycleTotal 的 stagger
 const flowSeedArr  = new Float32Array(FLOW_COUNT);   // 0~1 路径变量
 for (let i = 0; i < FLOW_COUNT; i++) {
-  flowSpawnArr[i] = (i / FLOW_COUNT) * 2.8;          // 在 2.8s 内均匀错开
+  flowSpawnArr[i] = (i / FLOW_COUNT) * 3.2;          // 在 3.2s 内均匀错开
   flowSeedArr[i]  = Math.random();
 }
 flowGeo.setAttribute('position',     new THREE.BufferAttribute(flowPosArr, 3));
@@ -3491,61 +3921,80 @@ const flowMat = new THREE.ShaderMaterial({
     attribute float aPathSeed;
     uniform float uTime;
     uniform float uActive;
+    uniform float uOpen;
     varying float vAlpha;
+    varying float vEdge;
+    float hash(float n) {
+      return fract(sin(n) * 43758.5453123);
+    }
     void main() {
-      float lifetime = 2.5;
-      float cycle = 2.8;
+      float lifetime = 3.0;
+      float cycle = 3.2;
       float localT = mod(uTime - aSpawnDelay, cycle);
-      float progress = clamp(localT / lifetime, 0.0, 1.0);
+      float progress = smoothstep(0.0, 1.0, clamp(localT / lifetime, 0.0, 1.0));
 
-      // 起点（胸腔附近，y ≈ 0.4，x 在脊柱中线附近）
+      float lane = hash(aPathSeed * 19.17 + 0.23);
+      float depth = hash(aPathSeed * 41.91 + 2.71);
+      float jitter = hash(aPathSeed * 73.43 + 6.19) - 0.5;
+      float ribBand = lane * 2.0 - 1.0;
+      float chestCurve = 1.0 - ribBand * ribBand;
+
       vec3 start = vec3(
-        0.05 + (aPathSeed - 0.5) * 0.15,
-        0.40 + (aPathSeed - 0.5) * 0.30,
-        (aPathSeed - 0.5) * 0.10
+        -0.16 - depth * 0.16,
+        0.08 + ribBand * 0.28 + jitter * 0.08,
+        jitter * 0.04
       );
-      // 终点（左下，飘出屏幕外）
       vec3 end = vec3(
-        -1.40 + (aPathSeed - 0.5) * 0.30,
-        -0.20 + (aPathSeed - 0.5) * 0.40,
-        (aPathSeed - 0.5) * 0.10
+        -0.82 - depth * 0.70 - chestCurve * 0.28,
+        0.06 + ribBand * (0.48 + uOpen * 0.30) + jitter * 0.16,
+        jitter * 0.08
       );
-      // 弧线插值（quadratic Bezier，控制点上抬形成弧）
-      vec3 ctrl = mix(start, end, 0.5);
-      ctrl.y += 0.45;
+      vec3 ctrl = mix(start, end, 0.56);
+      ctrl.y += ribBand * 0.18 + chestCurve * 0.08;
+      ctrl.x -= 0.16 * chestCurve;
+
       vec3 a = mix(start, ctrl, progress);
       vec3 b = mix(ctrl, end, progress);
       vec3 pos = mix(a, b, progress);
-      // 微飘动
-      pos.x += sin(uTime * 1.5 + aPathSeed * 10.0) * 0.025 * (1.0 - progress);
-      pos.y += cos(uTime * 1.3 + aPathSeed * 8.0)  * 0.020;
 
-      // alpha curve: 头部淡入(15%)，中段持平(15-70%)，尾部淡出(70-100%)
-      float a1 = (progress < 0.15) ? progress / 0.15 : 1.0;
-      float a2 = (progress > 0.70) ? (1.0 - progress) / 0.30 : 1.0;
-      vAlpha = clamp(a1 * a2, 0.0, 1.0) * uActive * 0.35;
+      float breathPulse = 0.65 + 0.35 * sin(uTime * 2.0 + aPathSeed * 18.0);
+      float outward = progress * (0.55 + 0.45 * uOpen);
+      pos.x -= outward * uOpen * 0.16 * chestCurve;
+      pos.y += ribBand * uOpen * 0.10 * outward;
+      pos.x += sin(uTime * 1.25 + aPathSeed * 12.0) * 0.030 * (1.0 - progress * 0.45);
+      pos.y += cos(uTime * 1.05 + aPathSeed * 9.0)  * 0.026;
+
+      float a1 = smoothstep(0.04, 0.22, progress);
+      float a2 = 1.0 - smoothstep(0.78, 1.0, progress);
+      float fillBias = mix(0.55, 1.0, chestCurve);
+      vAlpha = a1 * a2 * fillBias * breathPulse * uActive * 0.48;
+      vEdge = progress;
 
       vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
-      // size 跟其他粒子系统对齐（世界单位 0.03~0.06，屏幕缩放 300/-z）
-      gl_PointSize = (0.035 + aPathSeed * 0.025) * (300.0 / -mvPos.z);
+      gl_PointSize = (0.045 + depth * 0.035) * (300.0 / -mvPos.z);
       gl_Position = projectionMatrix * mvPos;
     }
   `,
   fragmentShader: /* glsl */`
     uniform vec3 uColor;
+    uniform vec3 uEdgeColor;
     varying float vAlpha;
+    varying float vEdge;
     void main() {
       float d = length(gl_PointCoord - vec2(0.5));
       if (d > 0.5) discard;
       float core = exp(-d * d * 24.0);
-      float halo = exp(-d * d * 10.0) * 0.15;
-      gl_FragColor = vec4(uColor, (core + halo) * vAlpha);
+      float halo = exp(-d * d * 8.0) * 0.24;
+      vec3 col = mix(uColor, uEdgeColor, smoothstep(0.35, 1.0, vEdge));
+      gl_FragColor = vec4(col, (core + halo) * vAlpha);
     }
   `,
   uniforms: {
     uTime:   { value: 0 },
     uActive: { value: 0 },
-    uColor:  { value: new THREE.Color(0xfae8c0) },  // 淡暖白
+    uOpen:   { value: 0 },
+    uColor:  { value: new THREE.Color(0x9fb8ff) },
+    uEdgeColor: { value: new THREE.Color(0xf4efff) },
   },
   transparent: true,
   blending: THREE.AdditiveBlending,
@@ -3602,37 +4051,55 @@ const pacerMat = new THREE.ShaderMaterial({
     uniform float uTime;
     uniform float uBreathe;  // 0=收缩底, 1=吸到顶
     uniform float uActive;
+    uniform float uTargetAngle;
     varying float vAlpha;
     varying float vBreathe;
     varying float vSeed;
     varying float vRadF;
     varying float vSpike;
+    varying float vTarget;
     void main() {
-      // 整体缩放：扩张程度大幅减少（0.92~1.00 之间）
-      float scale = 0.92 + uBreathe * 0.08;
+      float lobeA = pow(0.5 + 0.5 * sin(aAngle * 3.0 - uTime * 1.15), 3.0);
+      float lobeB = pow(0.5 + 0.5 * sin(aAngle * 3.0 - uTime * 1.15 + 2.094), 3.0);
+      float lobeC = pow(0.5 + 0.5 * sin(aAngle * 3.0 - uTime * 1.15 + 4.188), 3.0);
+      float softSector = max(max(lobeA, lobeB), lobeC);
+      float coherentWave = (softSector - 0.45) * 2.0;
+      float angleJitter = coherentWave * 0.028 * (0.4 + aRadF * 0.6)
+                        + sin(uTime * 0.72 + aSeed * 6.0) * 0.006;
+      float angularFlow = coherentWave * 0.070 * (0.35 + aRadF);
+      float angle = aAngle + angleJitter;
+      float angDiff = atan(sin(angle - uTargetAngle), cos(angle - uTargetAngle));
+      float targetLobe = exp(-angDiff * angDiff * 3.8);
+      float targetTip = exp(-angDiff * angDiff * 18.0);
+      float targetMask = max(targetLobe * 0.55, targetTip);
+
+      // 整体跟随呼吸扩张，凹陷侧尖端额外外冲；运动主要来自粒子流动而不是继续放大半径。
+      float scale = 0.93 + uBreathe * 0.050;
       // 基础半径分布（整体缩小）
       float baseR = 0.12 + aRadF * 0.30;  // 0.12~0.42
-      // 尖刺延伸：大幅减小
-      float spikeBoost = aSpike * uBreathe * 0.18;
+      // 尖刺延伸：凹陷侧明显外冲，其他方向只轻微扩散。
+      float directionalBreath = uBreathe * (0.035 + targetLobe * 0.100 + targetTip * 0.140);
+      float spikeBoost = aSpike * uBreathe * mix(0.070, 0.240, targetMask);
       float radius = (baseR + spikeBoost) * scale;
+      radius += directionalBreath * (0.45 + aRadF * 0.65);
       // 高频径向震荡（边缘更明显） — 震荡感
-      float vibe = sin(uTime * 4.5 + aAngle * 7.0 + aSeed * 9.0) * 0.022 * aRadF;
+      float vibe = (softSector * 0.030 + sin(uTime * 2.2 + aSeed * 8.0 + aRadF * 3.0) * 0.010) * aRadF;
       radius += vibe;
       // 拖尾：尖刺粒子额外随时间脉动，模拟外飞拖尾
-      float trail = sin(uTime * 1.8 + aSeed * 11.0) * 0.05 * aSpike * uBreathe;
+      float trail = (softSector - 0.35) * 0.055 * aSpike * uBreathe * (0.25 + targetMask * 1.35);
       radius += trail;
-      // 角度微抖
-      float angle = aAngle + sin(uTime * 0.7 + aSeed * 5.0) * 0.04 * (0.4 + aRadF * 0.6);
+      angle += angularFlow + targetMask * sin(aAngle * 2.0 - uTime * 1.2) * 0.032 * uBreathe;
       vec3 pos = vec3(
         cos(angle) * radius,
         sin(angle) * radius,
-        (aSeed - 0.5) * 0.06
+        (aSeed - 0.5) * 0.06 + sin(aAngle * 3.0 - uTime * 1.0 + aRadF * 2.0) * 0.020 * (0.25 + targetMask + softSector * 0.5)
       );
       vAlpha   = uActive;
       vBreathe = uBreathe;
       vSeed    = aSeed;
       vRadF    = aRadF;
       vSpike   = aSpike;
+      vTarget  = targetMask;
       vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
       // 粒子尺寸保持小（依赖密度+halo+intensity 出质感，而非增大粒子）
       float pSize = 0.022 + aSeed * 0.014 + (1.0 - aRadF) * 0.006 - aSpike * 0.004;
@@ -3649,6 +4116,7 @@ const pacerMat = new THREE.ShaderMaterial({
     varying float vSeed;
     varying float vRadF;
     varying float vSpike;
+    varying float vTarget;
     void main() {
       float d = length(gl_PointCoord - vec2(0.5));
       if (d > 0.5) discard;
@@ -3657,9 +4125,9 @@ const pacerMat = new THREE.ShaderMaterial({
       //  - 边缘(vRadF 高): 暖白
       //  - 尖刺粒子: 热粉/珊瑚色 rim 强调
       vec3 c = mix(uColorCool, uColorWarm, vRadF * (0.5 + vBreathe * 0.4));
-      c = mix(c, uColorRim, vSpike * 0.85);
+      c = mix(c, uColorRim, max(vSpike * 0.38, vTarget * 0.82));
       // 中心粒子额外增亮 + 尖刺粒子也增强（突出 rim）
-      float intensity = 1.2 + (1.0 - vRadF) * 0.40 + vSpike * 0.30;
+      float intensity = 1.15 + (1.0 - vRadF) * 0.35 + vSpike * 0.20 + vTarget * 0.45;
       // 粒子内部：硬核 + 适度 halo（不过大避免糊掉，靠 bloom 出整体辉光）
       float core = exp(-d * d * 24.0);
       float halo = exp(-d * d * 9.0) * 0.30;
@@ -3670,9 +4138,10 @@ const pacerMat = new THREE.ShaderMaterial({
     uTime:      { value: 0 },
     uBreathe:   { value: 0 },
     uActive:    { value: 0 },
+    uTargetAngle:{ value: Math.PI },
     uColorCool: { value: new THREE.Color(0x6c5fb8) },  // 中心饱和紫（更深）
     uColorWarm: { value: new THREE.Color(0xfff2d0) },  // 边缘纯暖白
-    uColorRim:  { value: new THREE.Color(0xff6080) },  // 尖刺热粉（参考图 #3 风格）
+    uColorRim:  { value: new THREE.Color(0x9ff4ff) },  // 尖端亮青白，高可见但避免红色警告感
   },
   transparent: true,
   blending: THREE.AdditiveBlending,
@@ -3684,6 +4153,18 @@ pacerPoints.frustumCulled = false;
 // 位置：屏幕中央，略微前置（在脊柱前面）
 pacerPoints.position.set(0, 0, 1.5);
 scene.add(pacerPoints);
+
+const expPacerMat = pacerMat.clone();
+expPacerMat.uniforms = THREE.UniformsUtils.clone(pacerMat.uniforms);
+expPacerMat.uniforms.uActive.value = 0;
+expPacerMat.uniforms.uColorCool.value = new THREE.Color(0x6f63c4);
+expPacerMat.uniforms.uColorWarm.value = new THREE.Color(0xeef8ff);
+expPacerMat.uniforms.uColorRim.value = new THREE.Color(0x9ff4ff);
+const expPacerPoints = new THREE.Points(pacerGeo, expPacerMat);
+expPacerPoints.frustumCulled = false;
+expPacerPoints.position.set(-2.2, 0.55, 1.5);
+expPacerPoints.scale.setScalar(0.34);
+scene.add(expPacerPoints);
 
 
 // ============================================================
@@ -3700,10 +4181,15 @@ const WAVE = 0.28;
 // ── 引导动画状态 ──
 let guideStartTime = 0;       // 引导开始的绝对时间(秒)
 let guideElapsed   = 0;       // 引导已经过的秒数
-let guideSpeed     = 3.0;     // 引导速度倍率（默认 3x 快进）
+let guideSpeed     = 1.0;     // 引导速度倍率
 let guideManualProgress = -1; // 手动进度（-1 = 自动）
 let guidePaused    = false;   // 暂停标志：true 时 guideElapsed 冻结
 let guidePausedAt  = 0;       // 暂停时冻结的 elapsed 值
+const GUIDE_END_SEC = 72;
+const SCHROTH_INTRO_START = 34;
+const SCHROTH_INTRO_END = 42;
+const PACER_GUIDE_START = 43.8;
+const PACER_GUIDE_END = 67.8;
 
 // 把胸椎/腰椎峰值 3D 点传给 overlays 用于屏幕投影
 const THORACIC_PEAK_WORLD = SPINE_CURVED[4].clone();   // 最右凸
@@ -3730,6 +4216,12 @@ const overlays = new IntroOverlays({
 
 function startGuide() {
   if (currentMode !== 'IDLE') return;
+  if (voiceTransitionTimer) {
+    clearTimeout(voiceTransitionTimer);
+    voiceTransitionTimer = null;
+  }
+  voiceTriggered = true;
+  stopIdleVoiceRecognition();
   currentMode = 'GUIDE';
   guideStartTime = performance.now() / 1000;
   overlays.hideIdleUI();
@@ -3749,6 +4241,7 @@ function enterExperience() {
   vineMat.uniforms.uFormation.value   = 0;       // 0 起，由 update loop 渐入到 1
   vineMat.uniforms.uBlend.value       = 0;
   spineHaloMat.uniforms.uBlend.value  = 0;
+  spineHaloMat.uniforms.uAlphaBoost.value = 0;
   // 显式同步呼吸/blend/旋转初值，避免与 GUIDE 末帧值跳变
   spineMat.uniforms.uBreathe.value       = 0;
   spineMat.uniforms.uBreatheExpand.value = 1.0;
@@ -3764,12 +4257,22 @@ function enterExperience() {
   ribMat.uniforms.uActive.value = 0;
   ribMat.uniforms.uGrowthRight.value = 0;
   ribMat.uniforms.uGrowthLeft.value = 0;
+  ribMat.uniforms.uBreathOpenLeft.value = 0;
+  ribMat.uniforms.uRibOpenRight.value = 0;
+  ribMat.uniforms.uRibCloseLeft.value = 0;
+  ribMat.uniforms.uRightVisible.value = 1;
+  ribMat.uniforms.uLeftVisible.value = 1;
   updateDebugUI();
   console.log('[raina] 呼吸体验阶段开始');
 }
 
 function resetToIdle() {
   currentMode = 'IDLE';
+  voiceTriggered = false;
+  if (voiceTransitionTimer) {
+    clearTimeout(voiceTransitionTimer);
+    voiceTransitionTimer = null;
+  }
   targetBlend   = 0.0;
   smoothBlend   = 0.0;
   blendVelocity = 0.0;
@@ -3781,6 +4284,11 @@ function resetToIdle() {
   flowMat.uniforms.uActive.value = 0;
   pacerMat.uniforms.uActive.value = 0;
   ribMat.uniforms.uActive.value = 0;
+  ribMat.uniforms.uBreathOpenLeft.value = 0;
+  ribMat.uniforms.uRibOpenRight.value = 0;
+  ribMat.uniforms.uRibCloseLeft.value = 0;
+  ribMat.uniforms.uRightVisible.value = 1;
+  ribMat.uniforms.uLeftVisible.value = 1;
 
   // 重置藤蔓
   for (let v = 0; v < N_VINES; v++) {
@@ -3807,7 +4315,417 @@ function resetToIdle() {
   flowerMat.uniforms.uFlowerGrowths.value.set(0, 0, 0, 0);
 
   overlays.showIdleUI();
+  startIdleVoiceRecognition();
   updateDebugUI();
+}
+
+// ============================================================
+// 11c. IDLE 语音唤醒："开始" → 沉浸式过渡 → GUIDE
+// ============================================================
+
+let voiceRecognition = null;
+let voiceListening = false;
+let voiceTriggered = false;
+let voiceRestartTimer = null;
+let voiceTransitionTimer = null;
+let voiceButton = null;
+let voicePermissionGranted = false;
+let voiceStream = null;
+let voiceAudioCtx = null;
+let voiceAnalyser = null;
+let voiceLevelData = null;
+let voiceFreqData = null;
+const voiceBands = new Float32Array(32);
+let voiceLevel = 0;
+let voiceLastHeardAt = 0;
+let voiceReplyPending = false;
+let voiceLastQuestion = '';
+let voiceLastQuestionAt = 0;
+let voiceSourceNode = null;
+let voiceProcessorNode = null;
+let voiceStreaming = false;
+let voiceSilenceStartedAt = 0;
+let voicePreRollFrames = [];
+let voiceAsrText = '';
+let voiceLastAsrText = '';
+let voiceLastAsrPieceAt = 0;
+let voiceFirstAsrTextAt = 0;
+let voiceCommittedThisStream = false;
+let voiceLastFinalText = '';
+let voiceLastFinalAt = 0;
+let voiceNoiseFloor = 0.012;
+let voiceCandidateStartedAt = 0;
+let voiceStreamStartedAt = 0;
+let voiceIgnoreFinalUntil = 0;
+let voiceCooldownUntil = 0;
+const VOICE_MIN_START_RMS = 0.038;
+const VOICE_NOISE_START_MULT = 3.0;
+const VOICE_START_HOLD_MS = 380;
+const VOICE_RMS_STOP = 0.018;
+const VOICE_NOISE_STOP_MULT = 1.65;
+const VOICE_SILENCE_MS = 1250;
+const VOICE_MIN_UTTERANCE_MS = 850;
+const VOICE_REPLY_COOLDOWN_MS = 2200;
+const VOICE_PREROLL_FRAMES = 18;
+const VOICE_FORCE_FINAL_MS = 1150;
+const VOICE_FORCE_FINAL_AFTER_TEXT_MS = 2200;
+const VOICE_MAX_STREAM_MS = 7000;
+const VOICE_START_TRANSITION_TEXT = '我听见了。把注意力交给呼吸，接下来，我们慢慢进入身体内部。';
+const VOICE_START_TRANSITION_SEC = 4.2;
+
+function pushVoiceBandsToShader() {
+  for (let i = 0; i < 8; i++) {
+    const v = spineMat.uniforms[`uVoiceBand${i}`].value;
+    const j = i * 4;
+    v.set(voiceBands[j], voiceBands[j + 1], voiceBands[j + 2], voiceBands[j + 3]);
+  }
+}
+
+function updateVoiceButton() {
+  if (!voiceButton) return;
+  if (voiceTriggered) voiceButton.textContent = '🎙 已触发语音';
+  else if (voiceListening) voiceButton.textContent = '🎙 正在聆听';
+  else voiceButton.textContent = '🎙 开启语音聆听';
+}
+
+function updateVoiceLevel() {
+  if (!voiceAnalyser || !voiceLevelData || currentMode !== 'IDLE') {
+    overlays.setVoiceLevel(0);
+    idleVoiceViz.setLevel(0);
+    voiceBands.fill(0);
+    pushVoiceBandsToShader();
+    return;
+  }
+  voiceAnalyser.getByteTimeDomainData(voiceLevelData);
+  let sum = 0;
+  for (let i = 0; i < voiceLevelData.length; i++) {
+    const v = (voiceLevelData[i] - 128) / 128;
+    sum += v * v;
+  }
+  const rms = Math.sqrt(sum / voiceLevelData.length);
+  voiceLevel = voiceLevel * 0.78 + Math.min(1, rms * 9.0) * 0.22;
+  if (voiceFreqData) {
+    voiceAnalyser.getByteFrequencyData(voiceFreqData);
+    const bandCount = voiceBands.length;
+    for (let b = 0; b < bandCount; b++) {
+      const start = Math.floor(Math.pow(b / bandCount, 1.65) * voiceFreqData.length);
+      const end = Math.max(start + 1, Math.floor(Math.pow((b + 1) / bandCount, 1.65) * voiceFreqData.length));
+      let total = 0;
+      for (let i = start; i < end; i++) total += voiceFreqData[i];
+      const avg = total / Math.max(1, end - start) / 255;
+      const shaped = Math.min(1, Math.pow(avg, 0.72) * 1.35);
+      voiceBands[b] = voiceBands[b] * 0.68 + shaped * 0.32;
+    }
+    pushVoiceBandsToShader();
+  }
+  idleVoiceViz.setLevel(voiceLevel);
+  if (voiceLevel > 0.08) voiceLastHeardAt = performance.now();
+  overlays.setVoiceLevel(voiceLevel);
+  if (voiceListening) {
+    overlays.setVoiceStatus({ status: '麦克风已开启，正在聆听', transcript: undefined });
+  }
+}
+
+function floatTo16kPCMBase64(float32, inputRate) {
+  const outputRate = 16000;
+  const ratio = inputRate / outputRate;
+  const outputLength = Math.max(1, Math.floor(float32.length / ratio));
+  const pcm = new Int16Array(outputLength);
+  for (let i = 0; i < outputLength; i++) {
+    const start = Math.floor(i * ratio);
+    const end = Math.min(float32.length, Math.floor((i + 1) * ratio));
+    let sum = 0;
+    let count = 0;
+    for (let j = start; j < end; j++) {
+      sum += float32[j];
+      count++;
+    }
+    const sample = Math.max(-1, Math.min(1, count ? sum / count : float32[start] || 0));
+    pcm[i] = sample < 0 ? sample * 0x8000 : sample * 0x7fff;
+  }
+  const bytes = new Uint8Array(pcm.buffer);
+  let binary = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(binary);
+}
+
+function startAsrStream() {
+  if (voiceStreaming || currentMode !== 'IDLE') return;
+  const now = performance.now();
+  if (now < voiceCooldownUntil || voiceReplyPending) return;
+  voiceStreaming = true;
+  voiceAsrText = '';
+  voiceLastAsrText = '';
+  voiceFirstAsrTextAt = 0;
+  voiceCommittedThisStream = false;
+  voiceSilenceStartedAt = 0;
+  voiceStreamStartedAt = now;
+  voiceLastAsrPieceAt = now;
+  voiceIgnoreFinalUntil = 0;
+  idleVoiceViz.clearReply();
+  overlays.setVoiceStatus({ status: '正在识别', transcript: '' });
+  socket.emit('asr_start');
+  for (const frame of voicePreRollFrames) socket.emit('asr_audio', { audio: frame });
+}
+
+function stopAsrStream({ discard = false } = {}) {
+  if (!voiceStreaming) return;
+  const now = performance.now();
+  if (discard) voiceIgnoreFinalUntil = now + 2600;
+  else voiceCooldownUntil = Math.max(voiceCooldownUntil, now + 450);
+  voiceStreaming = false;
+  voiceCandidateStartedAt = 0;
+  voiceSilenceStartedAt = 0;
+  socket.emit('asr_stop');
+  if (!voiceCommittedThisStream) overlays.setVoiceStatus({ status: '麦克风已开启，正在聆听', transcript: undefined });
+}
+
+function processVoiceFrame(input, sampleRate) {
+  let sum = 0;
+  for (let i = 0; i < input.length; i++) sum += input[i] * input[i];
+  const rms = Math.sqrt(sum / input.length);
+  const frame = floatTo16kPCMBase64(input, sampleRate);
+  voicePreRollFrames.push(frame);
+  if (voicePreRollFrames.length > VOICE_PREROLL_FRAMES) voicePreRollFrames.shift();
+
+  const now = performance.now();
+  const quietEnoughToLearn = !voiceStreaming && now > voiceCooldownUntil && rms < Math.max(VOICE_MIN_START_RMS, voiceNoiseFloor * 2.2);
+  if (quietEnoughToLearn) voiceNoiseFloor = voiceNoiseFloor * 0.985 + rms * 0.015;
+  const startThreshold = Math.max(VOICE_MIN_START_RMS, voiceNoiseFloor * VOICE_NOISE_START_MULT + 0.012);
+  const stopThreshold = Math.max(VOICE_RMS_STOP, voiceNoiseFloor * VOICE_NOISE_STOP_MULT + 0.006);
+
+  if (!voiceStreaming) {
+    if (now < voiceCooldownUntil || voiceReplyPending) {
+      voiceCandidateStartedAt = 0;
+      return;
+    }
+    if (rms > startThreshold) {
+      if (!voiceCandidateStartedAt) voiceCandidateStartedAt = now;
+      if (now - voiceCandidateStartedAt > VOICE_START_HOLD_MS) startAsrStream();
+    } else {
+      voiceCandidateStartedAt = 0;
+    }
+  }
+  if (voiceStreaming) {
+    socket.emit('asr_audio', { audio: frame });
+    const streamAge = now - voiceStreamStartedAt;
+    const normalizedAsr = normalizeSpeechText(voiceAsrText);
+    const hasUsableText = normalizedAsr.length >= 4;
+    const textHasSettled = hasUsableText && now - voiceLastAsrPieceAt > VOICE_FORCE_FINAL_MS;
+    const textHasRunLongEnough = hasUsableText && voiceFirstAsrTextAt && now - voiceFirstAsrTextAt > VOICE_FORCE_FINAL_AFTER_TEXT_MS;
+    if ((textHasSettled || textHasRunLongEnough) && submitRecognizedSpeech(voiceAsrText, { provisional: true })) return;
+    if (textHasSettled || textHasRunLongEnough || streamAge > VOICE_MAX_STREAM_MS) {
+      stopAsrStream({ discard: !voiceAsrText });
+      return;
+    }
+    if (rms < stopThreshold) {
+      if (!voiceSilenceStartedAt) voiceSilenceStartedAt = performance.now();
+      if (performance.now() - voiceSilenceStartedAt > VOICE_SILENCE_MS) {
+        const tooShort = performance.now() - voiceStreamStartedAt < VOICE_MIN_UTTERANCE_MS;
+        stopAsrStream({ discard: tooShort });
+      }
+    } else {
+      voiceSilenceStartedAt = 0;
+    }
+  }
+}
+
+function setupVoiceAudioPipeline() {
+  if (!voiceAudioCtx || !voiceStream || voiceProcessorNode) return;
+  voiceSourceNode = voiceAudioCtx.createMediaStreamSource(voiceStream);
+  voiceProcessorNode = voiceAudioCtx.createScriptProcessor(4096, 1, 1);
+  voiceProcessorNode.onaudioprocess = (event) => {
+    event.outputBuffer.getChannelData(0).fill(0);
+    if (currentMode !== 'IDLE' || voiceTriggered) return;
+    if (voiceReplyPending || idleVoiceViz?.mode === 'reply' || idleVoiceViz?.mode === 'returning') return;
+    const input = event.inputBuffer.getChannelData(0);
+    processVoiceFrame(input, voiceAudioCtx.sampleRate);
+  };
+  voiceSourceNode.connect(voiceProcessorNode);
+  voiceProcessorNode.connect(voiceAudioCtx.destination);
+}
+
+function normalizeSpeechText(text) {
+  return (text || '').replace(/\s+/g, '').replace(/[，。！？、,.!?]/g, '');
+}
+
+function isQuestionLike(text) {
+  const raw = String(text || '');
+  const t = normalizeSpeechText(text);
+  return /[？?]/.test(raw)
+    || /(怎么|如何|什么|为什么|哪里|哪|吗|呢|是否|能不能|可不可以|可以不可以|会不会)/.test(t)
+    || /开始.*(之后|以前|前|后|意思|是什么|怎么|如何)/.test(t);
+}
+
+function hasNegativeStartIntent(text) {
+  const t = normalizeSpeechText(text);
+  return /(不要|别|先不|还没|没有准备好|没准备好|不想|暂时不|等一下|等一等|先等等|不要开始|别开始)/.test(t);
+}
+
+function isStartCommand(text) {
+  const t = normalizeSpeechText(text);
+  if (!t || t.length > 12) return false;
+  if (hasNegativeStartIntent(t) || isQuestionLike(text)) return false;
+  if (/^(开始|开始吧|开始体验|开始呼吸|进入体验|进入引导|我准备好了|准备好了|准备好了开始|现在开始|可以开始|好开始)$/.test(t)) return true;
+  return /^(我)?(已经)?准备好了(可以)?开始(吧)?$/.test(t);
+}
+
+function collapseRepeatedSpeech(text) {
+  let t = normalizeSpeechText(text);
+  t = t.replace(/(.{1,4})\1{2,}/g, '$1');
+  t = t.replace(/(你好|是吗|这个|作品|干嘛|什么){2,}/g, '$1');
+  return t;
+}
+
+function isNoisySpeech(text) {
+  const t = normalizeSpeechText(text);
+  if (t.length < 3) return true;
+  if (t.length > 80) return true;
+  const collapsed = collapseRepeatedSpeech(t);
+  if (collapsed.length / t.length < 0.55) return true;
+  const uniqueChars = new Set([...t]).size;
+  return uniqueChars / t.length < 0.24;
+}
+
+function submitRecognizedSpeech(text, { provisional = false } = {}) {
+  if (currentMode !== 'IDLE' || voiceTriggered || voiceCommittedThisStream) return false;
+  const now = performance.now();
+  const cleanText = collapseRepeatedSpeech(text);
+  const finalNorm = normalizeSpeechText(cleanText);
+  if (!finalNorm) return false;
+  const lastFinalNorm = normalizeSpeechText(voiceLastFinalText);
+  if (finalNorm && lastFinalNorm && finalNorm === lastFinalNorm && now - voiceLastFinalAt < 5000) return false;
+
+  if (provisional && finalNorm.length < 4 && !isStartCommand(cleanText)) return false;
+
+  voiceCommittedThisStream = true;
+  voiceLastFinalText = cleanText;
+  voiceLastFinalAt = now;
+  if (voiceStreaming) stopAsrStream({ discard: true });
+  voiceIgnoreFinalUntil = Math.max(voiceIgnoreFinalUntil, now + 4000);
+
+  if (isStartCommand(cleanText)) {
+    triggerVoiceStart();
+  } else if (isNoisySpeech(cleanText)) {
+    voiceCooldownUntil = Math.max(voiceCooldownUntil, now + VOICE_REPLY_COOLDOWN_MS);
+    overlays.setVoiceStatus({ status: '环境声已忽略', transcript: '' });
+  } else {
+    requestVoiceReply(cleanText);
+  }
+  return true;
+}
+
+async function requestVoiceReply(text) {
+  const question = text.trim();
+  if (!question || currentMode !== 'IDLE' || voiceReplyPending) return;
+  const now = performance.now();
+  if (question === voiceLastQuestion && now - voiceLastQuestionAt < 8000) return;
+  voiceReplyPending = true;
+  voiceLastQuestion = question;
+  voiceLastQuestionAt = now;
+  voiceCooldownUntil = now + VOICE_REPLY_COOLDOWN_MS;
+  overlays.setAIReply({ question, loading: true });
+  try {
+    const resp = await fetch('http://localhost:5000/voice/reply', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: question, mode: currentMode }),
+    });
+    const payload = await resp.json();
+    if (!resp.ok || !payload.success) throw new Error(payload.message || 'voice reply failed');
+    idleVoiceViz.showReply(payload.reply, time);
+    overlays.setAIReply({ question, reply: payload.reply });
+  } catch (e) {
+    console.warn('[voice] AI reply failed:', e);
+    const fallbackReply = '这句话还没有完全落成形。你可以再靠近一点，慢慢说一次。';
+    idleVoiceViz.showReply(fallbackReply, time);
+    overlays.setAIReply({ question, reply: fallbackReply });
+  } finally {
+    voiceReplyPending = false;
+    voiceCooldownUntil = Math.max(voiceCooldownUntil, performance.now() + VOICE_REPLY_COOLDOWN_MS);
+  }
+}
+
+function triggerVoiceStart() {
+  if (voiceTriggered || currentMode !== 'IDLE') return;
+  voiceTriggered = true;
+  idleVoiceViz.clearReply();
+  stopIdleVoiceRecognition();
+  overlays.showVoiceTransition({ particleText: true });
+  const durationSec = idleVoiceViz.showReply(VOICE_START_TRANSITION_TEXT, time, {
+    durationSec: VOICE_START_TRANSITION_SEC,
+  }) || VOICE_START_TRANSITION_SEC;
+  voiceCooldownUntil = performance.now() + durationSec * 1000 + 2400;
+  if (voiceTransitionTimer) clearTimeout(voiceTransitionTimer);
+  voiceTransitionTimer = setTimeout(() => {
+    if (currentMode !== 'IDLE') return;
+    startGuide();
+    if (bgmAudio && bgmAudio.paused) bgmAudio.play().catch(() => {});
+  }, durationSec * 1000 + 900);
+}
+
+function stopIdleVoiceRecognition() {
+  if (voiceRestartTimer) {
+    clearTimeout(voiceRestartTimer);
+    voiceRestartTimer = null;
+  }
+  stopAsrStream();
+  if (voiceProcessorNode) {
+    try { voiceProcessorNode.disconnect(); } catch (e) {}
+    voiceProcessorNode.onaudioprocess = null;
+    voiceProcessorNode = null;
+  }
+  if (voiceSourceNode) {
+    try { voiceSourceNode.disconnect(); } catch (e) {}
+    voiceSourceNode = null;
+  }
+  if (!voiceRecognition) return;
+  try { voiceRecognition.stop(); } catch (e) {}
+  voiceListening = false;
+  updateVoiceButton();
+}
+
+async function ensureVoicePermission() {
+  if (voicePermissionGranted && voiceStream) return true;
+  if (!navigator.mediaDevices?.getUserMedia) {
+    overlays.setVoiceStatus({ status: '麦克风不可用', transcript: '' });
+    return false;
+  }
+  try {
+    voiceStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    voiceAudioCtx = voiceAudioCtx || new (window.AudioContext || window.webkitAudioContext)();
+    if (voiceAudioCtx.state === 'suspended') await voiceAudioCtx.resume();
+    voiceAnalyser = voiceAudioCtx.createAnalyser();
+    voiceAnalyser.fftSize = 1024;
+    voiceAnalyser.smoothingTimeConstant = 0.72;
+    const source = voiceAudioCtx.createMediaStreamSource(voiceStream);
+    source.connect(voiceAnalyser);
+    voiceLevelData = new Uint8Array(voiceAnalyser.fftSize);
+    voiceFreqData = new Uint8Array(voiceAnalyser.frequencyBinCount);
+    voicePermissionGranted = true;
+    overlays.setVoiceStatus({ status: '麦克风已授权', transcript: '' });
+    setupVoiceAudioPipeline();
+    return true;
+  } catch (e) {
+    overlays.setVoiceStatus({ status: '麦克风未授权', transcript: '' });
+    return false;
+  }
+}
+
+function startIdleVoiceRecognition() {
+  if (currentMode !== 'IDLE' || voiceTriggered) return;
+  if (!voicePermissionGranted || !voiceStream) {
+    overlays.setVoiceStatus({ status: '等待麦克风授权', transcript: '' });
+    updateVoiceButton();
+    return;
+  }
+  setupVoiceAudioPipeline();
+  voiceListening = true;
+  overlays.setVoiceStatus({ status: '麦克风已开启，正在聆听', transcript: '' });
+  updateVoiceButton();
 }
 
 
@@ -3820,7 +4738,7 @@ let fpsFrames = 0, fpsLast = performance.now();
 const debugFps = document.getElementById('debug-fps');
 const debugParticles = document.getElementById('debug-particles');
 // 统计总粒子数
-const totalParticleCount = N_SPINE + N_DFULL + N_SPINE_HALO + N_AMB + N_VINE_TOTAL + N_LEAF_TOTAL + N_FLOWER_TOTAL;
+const totalParticleCount = N_SPINE + N_DFULL + N_SPINE_HALO + N_AMB + N_VINE_TOTAL + N_LEAF_TOTAL + N_FLOWER_TOTAL + FLOW_COUNT;
 if (debugParticles) debugParticles.textContent = totalParticleCount.toLocaleString();
 
 // ============================================================
@@ -3839,12 +4757,10 @@ function getOrbitOffset(t) {
 function getGuideBaseZ(elapsed) {
   // 维度 2：GUIDE 段切换缓推/缓拉（终点 5.0 衔接 EXPERIENCE）
   if (elapsed < 5)  return THREE.MathUtils.lerp(6.0, 5.0, elapsed / 5);          // 段 0 凝聚：缓推近
-  if (elapsed < 33) return 5.0;                                                  // 段 1 知病：稳住
-  if (elapsed < 35) return THREE.MathUtils.lerp(5.0, 5.5, (elapsed - 33) / 2);   // 段 2a/b：稍拉远
-  if (elapsed < 47) return 5.5;
-  if (elapsed < 49) return THREE.MathUtils.lerp(5.5, 4.8, (elapsed - 47) / 2);   // 段 2c：推近脊柱
-  if (elapsed < 75) return 4.8;
-  if (elapsed < 78) return THREE.MathUtils.lerp(4.8, 5.0, (elapsed - 75) / 3);   // 段 3：缓拉远
+  if (elapsed < PACER_GUIDE_START) return 5.0;                                   // 知病→施罗斯介绍：稳住，避免切段卡顿/放大感
+  if (elapsed < PACER_GUIDE_START + 2) return THREE.MathUtils.lerp(5.0, 4.8, (elapsed - PACER_GUIDE_START) / 2);
+  if (elapsed < PACER_GUIDE_END + 1) return 4.8;
+  if (elapsed < PACER_GUIDE_END + 4) return THREE.MathUtils.lerp(4.8, 5.0, (elapsed - PACER_GUIDE_END - 1) / 3);
   return 5.0;
 }
 
@@ -3859,12 +4775,13 @@ function updateParticleVisibility() {
   spineHaloPoints.visible = isExp;
   leafPoints.visible   = true;
   flowerPoints.visible = true;
-  pollenPoints.visible = true;
+  pollenPoints.visible = isExp;
 
   // GUIDE 时间窗口才显示（边界扩 0.5s 留 alpha 淡入淡出 buffer）
-  ribPoints.visible   = isGuide && e >= 22.0 && e <= 32.0;
-  pacerPoints.visible = isGuide && e >= 46.5 && e <= 74.5;
-  flowPoints.visible  = isGuide && e >= 36.5 && e <= 45.5;
+  ribPoints.visible   = isGuide && ((e >= 22.0 && e <= 31.5) || (e >= SCHROTH_INTRO_START && e <= SCHROTH_INTRO_END));
+  pacerPoints.visible = isGuide && e >= PACER_GUIDE_START && e <= PACER_GUIDE_END + 1.5;
+  expPacerPoints.visible = isExp;
+  flowPoints.visible  = isGuide && e >= SCHROTH_INTRO_START && e <= SCHROTH_INTRO_END;
 }
 
 function updateCamera(t) {
@@ -3880,14 +4797,8 @@ function updateCamera(t) {
   const br = breatheCurve(t);
   const breathR = br * breathStrength * 0.15;  // 推拉幅度（吸气放大幅度减小）
 
-  // 3) 维度 1：线性平移（仅 IDLE 漂移，GUIDE/EXPERIENCE 镜头静止）
+  // 3) 维度 1：线性平移（GUIDE/EXPERIENCE 镜头静止；IDLE 也保持静止）
   let offX = 0, offY = 0, offZ = 0;
-  if (currentMode === 'IDLE') {
-    const offset = getOrbitOffset(t);
-    offX = offset.offsetX;
-    offY = offset.offsetY;
-    offZ = offset.offsetZ;
-  }
 
   // 4) 平移叠加：相机平移 + 视线方向跟随（不锁主体居中）
   camera.position.x = offX;
@@ -3913,8 +4824,30 @@ const breathOverlayEl = document.getElementById('breath-overlay');
 const breathPhaseEl   = document.getElementById('breath-phase');
 const breathC1El      = document.getElementById('breath-c1');
 const breathC2El      = document.getElementById('breath-c2');
+const breathMiniRingEl = document.getElementById('breath-mini-ring');
 let lastPhaseName = '';
 let phaseFading = false;
+const _expPacerNdc = new THREE.Vector3();
+const _expPacerWorld = new THREE.Vector3();
+
+function syncExpPacerToOverlay(t, active) {
+  expPacerMat.uniforms.uTime.value = t;
+  expPacerMat.uniforms.uBreathe.value = breatheCurve(t);
+  expPacerMat.uniforms.uActive.value = active ? 0.30 : 0.0;
+  expPacerMat.uniforms.uTargetAngle.value = Math.PI;
+
+  if (!active || !breathMiniRingEl) return;
+  const rect = breathMiniRingEl.getBoundingClientRect();
+  const sx = rect.left + rect.width * 0.5;
+  const sy = rect.top + rect.height * 0.5;
+  _expPacerNdc.set((sx / window.innerWidth) * 2 - 1, -(sy / window.innerHeight) * 2 + 1, 0.5);
+  _expPacerNdc.unproject(camera);
+  const dir = _expPacerNdc.sub(camera.position).normalize();
+  const targetZ = 1.5;
+  const dist = (targetZ - camera.position.z) / dir.z;
+  _expPacerWorld.copy(camera.position).addScaledVector(dir, dist);
+  expPacerPoints.position.copy(_expPacerWorld);
+}
 
 function updateBreathOverlay(t) {
   const isExp = currentMode === 'EXPERIENCE';
@@ -3922,6 +4855,7 @@ function updateBreathOverlay(t) {
   if (isExp) breathOverlayEl.classList.add('active');
   else       breathOverlayEl.classList.remove('active');
 
+  syncExpPacerToOverlay(t, isExp);
   if (!isExp) return;
 
   const phaseSec = t % 8;
@@ -4030,6 +4964,7 @@ function animate() {
   // FPS
   fpsFrames++;
   const now = performance.now();
+  updateVoiceLevel();
   if (now - fpsLast >= 1000) {
     if (debugFps) debugFps.textContent = fpsFrames;
     fpsFrames = 0;
@@ -4053,13 +4988,22 @@ function animate() {
 
   updateParticleVisibility();
   updateCamera(time);
+  idleVoiceViz.update(time, {
+    visible: currentMode === 'IDLE',
+    listening: voiceListening,
+    streaming: voiceStreaming,
+  });
   updateBreathOverlay(time);
 
-  // 呼吸音效（GUIDE 段 2c 节拍器期间 + EXPERIENCE 全程）
+  // 呼吸音效：GUIDE 呼吸环用本段局部时钟对齐 UI；EXPERIENCE 保持原有全局时钟。
   let breathAudioActive = false;
+  let breathAudioClock = time;
   if (currentMode === 'EXPERIENCE') breathAudioActive = true;
-  else if (currentMode === 'GUIDE' && guideElapsed >= 47.5 && guideElapsed <= 73) breathAudioActive = true;
-  breathAudio.update(time, breathAudioActive);
+  else if (currentMode === 'GUIDE' && guideElapsed >= PACER_GUIDE_START && guideElapsed <= PACER_GUIDE_END) {
+    breathAudioActive = true;
+    breathAudioClock = guideElapsed - PACER_GUIDE_START;
+  }
+  breathAudio.update(breathAudioClock, breathAudioActive);
 
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
   composer.render();
@@ -4095,8 +5039,8 @@ function updateIdle(t) {
   bloomPass.strength = 0.08;
 }
 
-// ── GUIDE 更新（83s 认知引导时间线 v3）─────────────────────────
-// 0-4s 凝聚 → 4-5s 留白停顿 → 段1 知病 (5-33s) → 段2a/b (33-47s) → 段2c (47-75s) → 段3 (75-83s)
+// ── GUIDE 更新（70s 认知引导时间线）─────────────────────────
+// 0-4s 凝聚 → 段1 知病 (~30s) → 施罗斯介绍 (31-40s) → 跟做 (41-65s) → 入静 (66-70s)
 function updateGuide(t) {
   // 暂停优先：冻结 elapsed
   if (guidePaused) {
@@ -4107,8 +5051,8 @@ function updateGuide(t) {
     guideElapsed = (performance.now() / 1000 - guideStartTime) * guideSpeed;
   }
 
-  // 检查结束（83s 完整引导）
-  if (guideElapsed >= 83) {
+  // 检查结束（70s 完整引导）
+  if (guideElapsed >= GUIDE_END_SEC) {
     enterExperience();
     return;
   }
@@ -4116,29 +5060,51 @@ function updateGuide(t) {
   // 更新叠加层
   overlays.updateGuide(guideElapsed);
 
-  // 光流粒子（段 2a/b "送往凹陷的那一侧" 期间激活，37-45s）
+  // 胸廓气流粒子：跟左侧肋骨展开同步，面状填满凹侧胸廓。
   flowMat.uniforms.uTime.value = t;
   let flowActive = 0;
-  if (guideElapsed >= 37 && guideElapsed < 39)      flowActive = (guideElapsed - 37) / 2;
-  else if (guideElapsed >= 39 && guideElapsed < 43) flowActive = 1.0;
-  else if (guideElapsed >= 43 && guideElapsed < 45) flowActive = 1 - (guideElapsed - 43) / 2;
+  let flowOpen = 0;
+  if (guideElapsed >= SCHROTH_INTRO_START && guideElapsed < SCHROTH_INTRO_END) {
+    const flowIn = smoothstep(SCHROTH_INTRO_START, SCHROTH_INTRO_START + 1.8, guideElapsed);
+    const flowOut = 1.0 - smoothstep(SCHROTH_INTRO_END - 1.0, SCHROTH_INTRO_END, guideElapsed);
+    const local = guideElapsed - SCHROTH_INTRO_START;
+    flowOpen = smoothstep(0.0, 1.0, local / (SCHROTH_INTRO_END - SCHROTH_INTRO_START - 1.0));
+    flowActive = flowIn * flowOut;
+  }
   flowMat.uniforms.uActive.value = flowActive;
+  flowMat.uniforms.uOpen.value = flowOpen;
 
-  // 节拍器粒子环（段 2c 期间激活，47-74s，跟节拍器圆环 48-72s 略放宽）
+  // 节拍器粒子环：提示句结束后进入，跟 UI/音频同拍。
   pacerMat.uniforms.uTime.value = t;
   pacerMat.uniforms.uBreathe.value = overlays.getPacerBreatheT();
   let pacerActive = 0;
-  if (guideElapsed >= 47 && guideElapsed < 48)      pacerActive = guideElapsed - 47;
-  else if (guideElapsed >= 48 && guideElapsed < 72) pacerActive = 1.0;
-  else if (guideElapsed >= 72 && guideElapsed < 74) pacerActive = 1 - (guideElapsed - 72) / 2;
+  if (guideElapsed >= PACER_GUIDE_START && guideElapsed < PACER_GUIDE_START + 1) pacerActive = guideElapsed - PACER_GUIDE_START;
+  else if (guideElapsed >= PACER_GUIDE_START && guideElapsed < PACER_GUIDE_END)  pacerActive = 1.0;
+  else if (guideElapsed >= PACER_GUIDE_END && guideElapsed < PACER_GUIDE_END + 1.5) pacerActive = 1 - (guideElapsed - PACER_GUIDE_END) / 1.5;
   pacerMat.uniforms.uActive.value = pacerActive;
 
-  // 肋骨粒子（22.5-31.5s 段 1 后段，跟"穹窿/峡谷"文字同步）
+  // 肋骨粒子（段 1 后段 + 施罗斯介绍段）
   let ribActive = 0;
   if (guideElapsed >= 22.5 && guideElapsed < 23.5) ribActive = (guideElapsed - 22.5);
   else if (guideElapsed >= 23.5 && guideElapsed < 30) ribActive = 1.0;
   else if (guideElapsed >= 30 && guideElapsed < 31.5) ribActive = 1 - (guideElapsed - 30) / 1.5;
+  const schrothRibWarmup = SCHROTH_INTRO_START - 1.0;
+  const schrothLeftFadeEnd = SCHROTH_INTRO_START + 1.8;
+  if (guideElapsed >= schrothRibWarmup && guideElapsed < SCHROTH_INTRO_END) {
+    const fadeIn = smoothstep(schrothRibWarmup, schrothLeftFadeEnd, guideElapsed);
+    const fadeOut = 1.0 - smoothstep(SCHROTH_INTRO_END - 1.0, SCHROTH_INTRO_END, guideElapsed);
+    ribActive = Math.max(ribActive, fadeIn * fadeOut);
+  }
   ribMat.uniforms.uActive.value = ribActive;
+  const showOnlyLeftRib = guideElapsed >= schrothRibWarmup && guideElapsed < SCHROTH_INTRO_END;
+  const rightFade = showOnlyLeftRib
+    ? 1.0 - smoothstep(schrothRibWarmup, SCHROTH_INTRO_START - 0.1, guideElapsed)
+    : 1.0;
+  const leftFade = showOnlyLeftRib
+    ? smoothstep(schrothRibWarmup, schrothLeftFadeEnd, guideElapsed)
+    : 1.0;
+  ribMat.uniforms.uRightVisible.value = rightFade;
+  ribMat.uniforms.uLeftVisible.value = leftFade;
 
   // 肋骨生长动画：右侧先长（22.5~24s），左侧后长（27.5~29s），与字幕错开
   let ribGrowthRight = 0;
@@ -4147,12 +5113,41 @@ function updateGuide(t) {
   ribMat.uniforms.uGrowthRight.value = ribGrowthRight;
 
   let ribGrowthLeft = 0;
-  if (guideElapsed >= 27.5 && guideElapsed < 29.0) ribGrowthLeft = (guideElapsed - 27.5) / 1.5;
-  else if (guideElapsed >= 29.0) ribGrowthLeft = 1.0;
+  if (guideElapsed >= 26.8 && guideElapsed < 28.3) ribGrowthLeft = (guideElapsed - 26.8) / 1.5;
+  else if (guideElapsed >= 28.3) ribGrowthLeft = 1.0;
   ribMat.uniforms.uGrowthLeft.value = ribGrowthLeft;
 
-  // 脊柱旋转：全程保持轻摆动（移除"病理段冻结"，新脚本无此概念）
-  if (!branchEditMode) {
+  let ribBreathOpenLeft = 0;
+  let ribOpenRight = 0;
+  if (guideElapsed >= 22.8 && guideElapsed < 26.4) {
+    ribOpenRight = smoothstep(0.0, 1.0, (guideElapsed - 22.8) / 3.6);
+  } else if (guideElapsed >= 26.4 && guideElapsed < 31.5) {
+    ribOpenRight = 1.0;
+  }
+
+  let ribCloseLeft = 0;
+  if (guideElapsed >= 27.8 && guideElapsed < 29.8) {
+    ribCloseLeft = smoothstep(0.0, 1.0, (guideElapsed - 27.8) / 2.0);
+  } else if (guideElapsed >= 29.8 && guideElapsed < 31.5) {
+    ribCloseLeft = 1.0;
+  }
+
+  if (guideElapsed >= SCHROTH_INTRO_START && guideElapsed < SCHROTH_INTRO_END) {
+    const introIn = smoothstep(SCHROTH_INTRO_START, SCHROTH_INTRO_START + 1.0, guideElapsed);
+    const introOut = 1.0 - smoothstep(SCHROTH_INTRO_END - 1.0, SCHROTH_INTRO_END, guideElapsed);
+    const local = guideElapsed - SCHROTH_INTRO_START;
+    const breathOpen = smoothstep(0.0, 1.0, local / (SCHROTH_INTRO_END - SCHROTH_INTRO_START - 1.0));
+    ribBreathOpenLeft = breathOpen * introIn * introOut;
+    ribCloseLeft = 1.0;
+    ribOpenRight = 0.0;
+  }
+  ribMat.uniforms.uBreathOpenLeft.value = ribBreathOpenLeft;
+  ribMat.uniforms.uRibOpenRight.value = ribOpenRight;
+  ribMat.uniforms.uRibCloseLeft.value = ribCloseLeft;
+
+  // 脊柱旋转：肋骨说明和施罗斯教学连成一段，避免段落交接时脊柱抢动。
+  const freezeSpineForRibSequence = guideElapsed >= 22.0 && guideElapsed < SCHROTH_INTRO_END;
+  if (!branchEditMode && !freezeSpineForRibSequence) {
     const rotTarget = Math.sin(t * 0.52) * 0.35;
     spineGroup.rotation.y += (rotTarget - spineGroup.rotation.y) * 0.08;
   }
@@ -4203,8 +5198,8 @@ function updateGuide(t) {
     comparisonMat.opacity = 0;
     bloomPass.strength = 0.08 + formation * 0.08;
 
-  } else if (e < 33) {
-    // ─── 4-33s：段 1 知病（4-5s 凝聚后停顿，5s 起开始上字）───
+  } else if (e < SCHROTH_INTRO_START) {
+    // ─── 4-31s：段 1 知病（4-5s 凝聚后停顿，5s 起开始上字）───
     spineMat.uniforms.uFormation.value  = 1.0;
     spineMat.uniforms.uGuideAlpha.value = 1.0;
 
@@ -4228,33 +5223,38 @@ function updateGuide(t) {
 
     bloomPass.strength = 0.16;
 
-  } else if (e < 47) {
-    // ─── 33-47s：段 2a/b 学法引入（脊柱 alpha 1.0 → 0.5，让位给节拍器 + 光流）───
-    const seg2T = (e - 33) / 14;
-    const guideAlpha = 1.0 - seg2T * 0.5;  // 1.0 → 0.5
+  } else if (e < PACER_GUIDE_START) {
+    // ─── 31-41s：施罗斯呼吸法介绍（脊柱让位给光流 + 左侧肋骨呼吸张开）───
+    const seg2T = Math.max(0, (e - SCHROTH_INTRO_START) / (PACER_GUIDE_START - SCHROTH_INTRO_START));
+    const pacerPreFade = smoothstep(PACER_GUIDE_START - 0.8, PACER_GUIDE_START, e);
+    const guideAlphaBase = 1.0 - seg2T * 0.5;  // 1.0 → 0.5
+    const guideAlpha = guideAlphaBase + (0.26 - guideAlphaBase) * pacerPreFade;
     spineMat.uniforms.uFormation.value        = 1.0;
     spineMat.uniforms.uGuideAlpha.value       = guideAlpha;
-    spineMat.uniforms.uBreathe.value          = 0.30 * (1 - seg2T * 0.5);
+    spineMat.uniforms.uBreathe.value          = 0.30 * (1 - seg2T * 0.5) * (1.0 - pacerPreFade * 0.45);
     spineMat.uniforms.uSegmentHighlight.value = 0.0;
     comparisonMat.opacity = 0;
-    bloomPass.strength = 0.16 - seg2T * 0.04;  // 0.16 → 0.12
+    const bloomBase = 0.16 - seg2T * 0.04;  // 0.16 → 0.12
+    bloomPass.strength = bloomBase + (0.10 - bloomBase) * pacerPreFade;
 
-  } else if (e < 75) {
-    // ─── 47-75s：段 2c 节拍器跟做（脊柱保留淡 alpha + 同步节拍器呼吸）───
+  } else if (e < PACER_GUIDE_END + 1) {
+    // ─── 41-66s：段 2c 节拍器跟做（脊柱保留淡 alpha + 同步节拍器呼吸）───
+    const pacerIntroT = smoothstep(PACER_GUIDE_START - 0.4, PACER_GUIDE_START + 0.8, e);
     spineMat.uniforms.uFormation.value        = 1.0;
-    spineMat.uniforms.uGuideAlpha.value       = 0.30;
+    spineMat.uniforms.uGuideAlpha.value       = 0.26 + (0.30 - 0.26) * pacerIntroT;
     spineMat.uniforms.uSegmentHighlight.value = 0.0;
     comparisonMat.opacity = 0;
-    bloomPass.strength = 0.20;
+    bloomPass.strength = 0.10 + (0.12 - 0.10) * pacerIntroT;
 
     // 节拍器呼吸进度 → 驱动脊柱呼吸幅度
     const pacerT = overlays.getPacerBreatheT();
-    spineMat.uniforms.uBreathe.value       = 0.10 + pacerT * 0.30;
-    spineMat.uniforms.uBreatheExpand.value = 1.0 + pacerT * 0.07;
+    const pacerBreathe = 0.10 + pacerT * 0.30;
+    spineMat.uniforms.uBreathe.value       = (0.15 * (1.0 - pacerIntroT)) + pacerBreathe * pacerIntroT;
+    spineMat.uniforms.uBreatheExpand.value = 1.0 + pacerT * 0.07 * pacerIntroT;
 
   } else {
-    // ─── 75-83s：段 3 入静（脊柱回归 + 微暖色温 + 轻微呼吸）───
-    const seg3T = (e - 75) / 8;
+    // ─── 66-70s：段 3 入静（脊柱回归 + 微暖色温 + 轻微呼吸）───
+    const seg3T = Math.max(0, Math.min(1, (e - (PACER_GUIDE_END + 1)) / (GUIDE_END_SEC - (PACER_GUIDE_END + 1))));
     const guideAlpha = 0.30 + seg3T * 0.70;  // 0.30 → 1.0
     spineMat.uniforms.uFormation.value        = 1.0;
     spineMat.uniforms.uGuideAlpha.value       = guideAlpha;
@@ -4284,6 +5284,7 @@ function updateExperience(t) {
   blendVelocity = blendVelocity * 0.82 + springF;
   smoothBlend   = Math.max(0, Math.min(1, smoothBlend + blendVelocity));
 
+  const expVisualFade = smoothstep(0, 2.2, t - experienceStartTime);
   const breathe       = breatheCurve(t);
   // 呼吸脉动随 blend 微增（不夸张）
   const expandAmt = 0.10 + smoothBlend * 0.06; // 0.10→0.16（呼吸环扩张减小）
@@ -4303,6 +5304,7 @@ function updateExperience(t) {
   spineMat.uniforms.uTime.value             = t;
   spineHaloMat.uniforms.uBlend.value        = smoothBlend;
   spineHaloMat.uniforms.uTime.value         = t;
+  spineHaloMat.uniforms.uAlphaBoost.value   = 1.35 * expVisualFade;
 
   // 颜色同步（基色 + 高光 + 两种对比色 都跟随 blend）
   // colorBlend: 两端不对称"停留"的重映射 blend，用于颜色。
@@ -4328,10 +5330,10 @@ function updateExperience(t) {
   diffuseMat.uniforms.uAccent2.value.copy(ac2Color);
 
   // 藤蔓
-  // EXP 前 1s 内 vine/leaf/flower 渐入，避免从 GUIDE 切过来时藤蔓花叶突现
-  const expFadeIn = Math.min(1, (t - experienceStartTime) / 1.0);
+  // EXP 前 2.2s 内 vine/leaf/flower 渐入，避免从 GUIDE 切过来时藤蔓花叶突现
+  const expFadeIn = expVisualFade;
   vineMat.uniforms.uFormation.value = expFadeIn;
-  leafMat.uniforms.uAlphaBoost.value   = expFadeIn;
+  leafMat.uniforms.uAlphaBoost.value   = 1.15 * expFadeIn;
   flowerMat.uniforms.uAlphaBoost.value = 1.5 * expFadeIn;
   for (let v = 0; v < N_VINES; v++) {
     if (!vineGrowTriggered[v] && smoothBlend >= VINE_GROW_THRESHOLDS[v]) {
@@ -4505,7 +5507,8 @@ function updateExperience(t) {
 
   // Bloom 随呼吸脉动（blend 高时光晕跟呼吸强挂钩）
   const breathBloomPulse = breathe * (0.04 + smoothBlend * 0.10); // blend高时脉动更强
-  bloomPass.strength = userBloomStrength + breathBloomPulse;
+  const bloomBase = 0.18 + (userBloomStrength - 0.18) * expVisualFade;
+  bloomPass.strength = bloomBase + breathBloomPulse * expVisualFade;
 }
 
 
@@ -4532,6 +5535,36 @@ socket.on('state_change', (data) => {
   console.log(`[状态] → ${currentMode}`);
 });
 
+socket.on('asr_status', () => {
+  if (currentMode === 'IDLE') overlays.setVoiceStatus({ status: '麦克风已开启，正在聆听', transcript: undefined });
+});
+
+socket.on('asr_result', (data) => {
+  if (currentMode !== 'IDLE' || voiceTriggered) return;
+  const now = performance.now();
+  if (now < voiceIgnoreFinalUntil) return;
+  const text = (data?.text || '').trim();
+  if (!text) return;
+  voiceAsrText = text;
+  const normalizedText = normalizeSpeechText(text);
+  if (normalizedText.length >= 4 && !voiceFirstAsrTextAt) voiceFirstAsrTextAt = now;
+  if (normalizedText !== normalizeSpeechText(voiceLastAsrText)) {
+    voiceLastAsrText = text;
+    voiceLastAsrPieceAt = now;
+  }
+  overlays.setVoiceStatus({ status: data.final ? '已收录' : '正在收录', transcript: `你说：${text}` });
+  if (!data.final) return;
+  console.log('[asr] final', text);
+  submitRecognizedSpeech(text);
+});
+
+socket.on('asr_error', (data) => {
+  console.warn('[asr] error', data?.message);
+  if (currentMode === 'IDLE') {
+    overlays.setVoiceStatus({ status: '语音识别暂时不可用', transcript: data?.message || '请稍后再试，或按空格键开始体验' });
+  }
+});
+
 
 // ============================================================
 // 14. 调试面板
@@ -4542,10 +5575,12 @@ const debugState  = document.getElementById('debug-state');
 const debugBlend  = document.getElementById('debug-blend');
 const blendSlider = document.getElementById('blend-slider');
 
-blendSlider.addEventListener('input', () => {
-  targetBlend = blendSlider.value / 100;   // 本地直接生效，无需 Flask
-  socket.emit('set_blend', { value: targetBlend });
-});
+if (blendSlider) {
+  blendSlider.addEventListener('input', () => {
+    targetBlend = blendSlider.value / 100;
+    socket.emit('set_blend', { value: targetBlend });
+  });
+}
 
 // 高清粒子精度（pixel ratio 1.0~4.0）
 const pixelRatioSlider = document.getElementById('pixel-ratio-slider');
@@ -4590,6 +5625,15 @@ document.getElementById('btn-skip').addEventListener('click', () => {
   enterExperience();
   console.log('[raina] 跳过引导，直接进入体验');
 });
+voiceButton = document.getElementById('btn-voice');
+if (voiceButton) {
+  voiceButton.addEventListener('click', async () => {
+    voiceTriggered = false;
+    const ok = await ensureVoicePermission();
+    if (ok) startIdleVoiceRecognition();
+  });
+  updateVoiceButton();
+}
 
 // ── 暂停 / 继续 ──
 function togglePause() {
@@ -4617,8 +5661,6 @@ document.getElementById('btn-reset').addEventListener('click', () => {
 // ── 引导进度/速度控制 ──
 const guideProgressSlider = document.getElementById('guide-progress-slider');
 const guideProgressVal    = document.getElementById('guide-progress-val');
-const guideSpeedSlider    = document.getElementById('guide-speed-slider');
-const guideSpeedVal       = document.getElementById('guide-speed-val');
 
 if (guideProgressSlider) {
   guideProgressSlider.addEventListener('input', () => {
@@ -4639,35 +5681,23 @@ if (guideProgressSlider) {
     guideManualProgress = -1;
   });
 }
-if (guideSpeedSlider) {
-  guideSpeedSlider.addEventListener('input', () => {
-    guideSpeed = parseFloat(guideSpeedSlider.value) / 10;
-    guideSpeedVal.textContent = guideSpeed.toFixed(1);
-    // 重算起始时间保持当前进度
-    if (currentMode === 'GUIDE' && guideManualProgress < 0) {
-      guideStartTime = performance.now() / 1000 - guideElapsed / guideSpeed;
-    }
-  });
-}
 
 function updateDebugUI() {
   if (debugState) debugState.textContent = currentMode;
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
   // 同步引导进度滑块
   if (guideProgressSlider && currentMode === 'GUIDE' && guideManualProgress < 0) {
-    guideProgressSlider.value = Math.min(83, guideElapsed);
+    guideProgressSlider.value = Math.min(GUIDE_END_SEC, guideElapsed);
     if (guideProgressVal) guideProgressVal.textContent = guideElapsed.toFixed(1);
   }
 }
 
 
 // ============================================================
-// BGM 控制：右下角按钮 toggle 播放/暂停 + 调试面板音量滑块
+// BGM 控制：右下角按钮 toggle 播放/暂停
 // ============================================================
 const bgmAudio = document.getElementById('bgm');
 const bgmToggle = document.getElementById('bgm-toggle');
-const bgmVolumeSlider = document.getElementById('bgm-volume-slider');
-const bgmVolumeVal = document.getElementById('bgm-volume-val');
 
 if (bgmAudio) {
   bgmAudio.volume = 0.5;
@@ -4682,14 +5712,6 @@ if (bgmAudio) {
     });
     bgmAudio.addEventListener('play',  () => bgmToggle.classList.add('playing'));
     bgmAudio.addEventListener('pause', () => bgmToggle.classList.remove('playing'));
-  }
-
-  if (bgmVolumeSlider) {
-    bgmVolumeSlider.addEventListener('input', () => {
-      const v = parseInt(bgmVolumeSlider.value, 10);
-      bgmAudio.volume = v / 100;
-      if (bgmVolumeVal) bgmVolumeVal.textContent = v;
-    });
   }
 }
 
@@ -4877,6 +5899,11 @@ window.addEventListener('resize', () => {
   renderer.setSize(w, h);
   composer.setSize(w, h);
   bloomPass.resolution.set(Math.floor(w * 0.35), Math.floor(h * 0.35));
+});
+
+startIdleVoiceRecognition();
+window.addEventListener('pointerdown', () => {
+  if (currentMode === 'IDLE' && !voiceTriggered) startIdleVoiceRecognition();
 });
 
 animate();

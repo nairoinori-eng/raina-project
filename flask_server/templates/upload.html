@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>RAINA 上传 X 光片</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b1020;
+      --card: rgba(20, 28, 54, 0.88);
+      --line: rgba(255, 255, 255, 0.12);
+      --text: #eef3ff;
+      --muted: #9fb0d6;
+      --danger: #ff8f8f;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 20px;
+      background:
+        radial-gradient(circle at top, rgba(78, 111, 196, 0.25), transparent 42%),
+        linear-gradient(180deg, #08101d, #0f1831 58%, #090d18);
+      color: var(--text);
+      font-family: "Microsoft YaHei", "PingFang SC", sans-serif;
+    }
+    .card {
+      width: min(100%, 430px);
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      padding: 24px 20px;
+      background: var(--card);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 18px 60px rgba(0, 0, 0, 0.35);
+    }
+    h1 { margin: 0 0 10px; font-size: 28px; }
+    p { margin: 0 0 16px; line-height: 1.6; color: var(--muted); }
+    .warn { color: var(--danger); }
+    .session {
+      margin-bottom: 18px;
+      font-size: 12px;
+      color: var(--muted);
+      word-break: break-all;
+    }
+    .picker {
+      width: 100%;
+      padding: 18px;
+      border-radius: 18px;
+      border: 1px dashed rgba(255,255,255,0.28);
+      background: rgba(255,255,255,0.03);
+    }
+    input[type="file"] {
+      width: 100%;
+      color: var(--muted);
+    }
+    button {
+      width: 100%;
+      margin-top: 18px;
+      border: 0;
+      border-radius: 16px;
+      padding: 16px 18px;
+      font-size: 16px;
+      font-weight: 700;
+      color: #111827;
+      background: linear-gradient(135deg, #f3df9a, #d7bf80);
+    }
+    button:disabled { opacity: 0.5; }
+    #result {
+      margin-top: 16px;
+      font-size: 14px;
+      color: var(--muted);
+      white-space: pre-wrap;
+    }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>上传你的 X 光片</h1>
+    <p>拍照或从相册选择一张正位 X 光片。上传完成后，回到大屏并按开始按钮。</p>
+    <div class="session">session：{{ session_id }}</div>
+
+    {% if not valid_session %}
+      <p class="warn">这个二维码已经失效，请回到大屏重新扫码。</p>
+    {% elif locked %}
+      <p class="warn">这一轮体验已经锁定，暂时不能继续上传。</p>
+    {% else %}
+      <form id="upload-form">
+        <div class="picker">
+          <input id="file-input" type="file" accept="image/*" capture="environment" required />
+        </div>
+        <button id="submit-btn" type="submit">上传</button>
+      </form>
+    {% endif %}
+
+    <div id="result"></div>
+  </main>
+
+  <script>
+    const form = document.getElementById('upload-form');
+    if (form) {
+      const submitBtn = document.getElementById('submit-btn');
+      const result = document.getElementById('result');
+      form.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        const input = document.getElementById('file-input');
+        const file = input.files && input.files[0];
+        if (!file) {
+          result.textContent = '请先选择图片。';
+          return;
+        }
+        submitBtn.disabled = true;
+        result.textContent = '上传中，请稍候…';
+
+        const formData = new FormData();
+        formData.append('session', '{{ session_id }}');
+        formData.append('file', file);
+
+        try {
+          const response = await fetch('{{ upload_url }}', {
+            method: 'POST',
+            body: formData,
+          });
+          const payload = await response.json();
+          result.textContent = payload.message || '上传完成';
+        } catch (error) {
+          result.textContent = '上传失败，请稍后重试。';
+        } finally {
+          submitBtn.disabled = false;
+        }
+      });
+    }
+  </script>
+</body>
+</html>

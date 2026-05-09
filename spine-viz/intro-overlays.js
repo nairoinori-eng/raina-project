@@ -1,5 +1,5 @@
 /**
- * IntroOverlays — 82s 认知引导的 HTML/CSS 叠加层管理
+ * IntroOverlays — 72s 认知引导的 HTML/CSS 叠加层管理
  *
  * 字幕：
  *   group 'A'/'B'/'D' → 同段内堆叠（新句出现在上一句下方），整段一起淡出
@@ -11,46 +11,63 @@
 
 // 各分组的统一淡出时间
 // A2 等"峡谷"完全消失后才出"共生"
-const GROUP_ENDS = { A: 22.5, A2: 35.5, B: 47, D: 83 };
+const GROUP_ENDS = { A: 20.5, A2: 33.0, B: 42, D: 72 };
 
 // ── 文字时间表 ──
 const TEXT_SCHEDULE = [
-  // ─── 段 1 · 知病 (5-22.5s) - 堆叠 group A ───
+  // ─── 段 1 · 知病 (5-20.5s) - 堆叠 group A ───
   { text: '十五岁那年，',                                  start: 5,    group: 'A' },
-  { text: '我的脊柱向我宣告了它的偏离。',                    start: 7,    group: 'A' },
-  { text: '统计说，每一百人中，我们这样的会有两个。',          start: 9.5,  group: 'A' },
-  // 数字"标签"锚定到脊柱凸起点 + 科技风指引线（先后出现，留到"陆地"句结束 22.5s 一起淡出）
-  { text: '胸椎右凸 <span class="hl-warm">28</span> 度', start: 13.5, end: 22.5, anchor: 'thoracic', side: 'right', leader: true },
-  { text: '腰椎左凸 <span class="hl-cool">18</span> 度', start: 15.5, end: 22.5, anchor: 'lumbar',   side: 'left',  leader: true },
-  { text: '数字标定了弯折的弧度。',                          start: 17.5, group: 'A' },
-  { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 19.5, group: 'A' },
-  // 22.5s group A 整体淡出
-  // 右侧肋骨先长出再出字幕（生长 22.5~24s，字幕 24~28s）
-  { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 24,   end: 28,   anchor: 'ribRight', side: 'right' },
-  // 左侧肋骨后长出再出字幕（生长 27.5~29s，字幕 29~33s）
-  { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 29,   end: 33,   anchor: 'ribLeft',  side: 'left'  },
-  { text: '我们便如此共生。',                                start: 33.5, group: 'A2' },
+  { text: '我的脊柱向我宣告了它的偏离。',                    start: 6.4,  group: 'A' },
+  { text: '统计说，每一百人中，我们这样的会有两个。',          start: 8.3,  group: 'A' },
+  // 数字"标签"锚定到脊柱凸起点 + 科技风指引线（先后出现，留到"陆地"句结束 20.5s 一起淡出）
+  { text: '胸椎右凸 <span class="hl-warm">28</span> 度', start: 11.2, end: 20.5, anchor: 'thoracic', side: 'right', leader: true },
+  { text: '腰椎左凸 <span class="hl-cool">18</span> 度', start: 12.8, end: 20.5, anchor: 'lumbar',   side: 'left',  leader: true },
+  { text: '数字标定了弯折的弧度。',                          start: 14.5, group: 'A' },
+  { text: '于是，身体里仿佛有了两片失衡的陆地：',              start: 16.5, group: 'A' },
+  // 20.5s group A 整体淡出
+  { text: '一侧的肋骨被温柔而固执地推开，成为撑开的穹窿。',     start: 22.6, end: 25.5, anchor: 'ribRight', side: 'right' },
+  { text: '另一侧的则彼此靠近，蜷缩进更深的阴影里，就像幽闭的峡谷。', start: 28.5, end: 30.6, anchor: 'ribLeft',  side: 'left'  },
+  { text: '我们便如此共生。',                                start: 30.9, group: 'A2' },
 
-  // ─── 段 2a/b · 学法引入 (36-47s) - 堆叠 group B（共生 0.5s gap 后开始）───
-  { text: '但呼吸，是身体里仍能调动的事。',                    start: 36,   group: 'B' },
-  { text: '有一种呼吸——它不让气息均匀地涨满胸腔，',           start: 36,   group: 'B' },
-  { text: '而是有方向地，专门送往凹陷的那一侧。',              start: 39.5, group: 'B' },
-  { text: '让被挤压的肋骨，从内部，一次次轻轻推开。',          start: 42.5, group: 'B' },
-  { text: '这就是施罗斯呼吸法（Schroth）。',                  start: 45,   group: 'B' },
+  // ─── 段 2a/b · 学法引入 (34-42s) - 堆叠 group B（共生后留 1s 空白再进入）───
+  { text: '但呼吸，是身体里仍能调动的事。',                    start: 34.0, group: 'B' },
+  { text: '有一种呼吸——它不让气息均匀地涨满胸腔，',           start: 34.0, group: 'B' },
+  { text: '而是有方向地，专门送往凹陷的那一侧。',              start: 35.8, group: 'B' },
+  { text: '让被挤压的肋骨，从内部，一次次轻轻推开。',          start: 37.9, group: 'B' },
+  { text: '这就是施罗斯呼吸法（Schroth）。',                  start: 40.0, group: 'B' },
 
-  // ─── 段 2c · 节拍器跟做 (47-75s) ───
-  { text: '现在，跟着试一次。', start: 47, end: 48, countdown: true },
-  // 48-72s: 节拍器 3 轮（pacer 自带 label）
-  { text: '感受这道气流，正抵达那片峡谷。', start: 72, end: 75, countdown: true },
+  // ─── 段 2c · 节拍器跟做 (42-68.8s) ───
+  { text: '现在，跟着试一次。', start: 42, end: 43.8, countdown: true },
+  // 43.8-67.8s: 节拍器 3 轮（pacer 自带 label）
+  { text: '感受这道气流，正抵达那片峡谷。', start: 67.8, end: 68.8, countdown: true },
 
-  // ─── 段 3 · 入静 (75-83s) - 堆叠 group D ───
-  { text: '接下来，跟着你的呼吸——',          start: 75, group: 'D' },
-  { text: '让它，慢慢回到自己的形状。',        start: 79, group: 'D' },
+  // ─── 段 3 · 入静 (68.8-72s) - 堆叠 group D ───
+  { text: '接下来，跟着你的呼吸——',          start: 68.8, group: 'D' },
+  { text: '让它，慢慢回到自己的形状。',        start: 69.8, group: 'D' },
 ];
 
-// 呼吸节拍器：48-72s = 24s = 3 轮 × 8s
-const PACER_START = 48, PACER_END = 72;
+// 呼吸节拍器：43.8-67.8s = 24s = 3 轮 × 8s
+const PACER_START = 43.8, PACER_END = 67.8;
 const BREATH_CYCLE = 8, INHALE = 3, HOLD = 1.5;
+const IDLE_QUESTIONS = [
+  '这是一件关于什么的作品？',
+  '这个作品适合谁？',
+  '你是谁？',
+  '我该如何开始体验？',
+  '我现在需要做什么？',
+  '什么是施罗斯呼吸法？',
+  '脊柱侧弯会怎样影响呼吸？',
+  '呼吸会让影像发生什么变化？',
+  '我没有脊柱侧弯，也可以体验吗？',
+  '我有点紧张，可以先看看吗？',
+  '这里需要我怎么呼吸？',
+  '我害怕自己做错，怎么办？',
+  '这个作品想让我感受到什么？',
+  '身体的不对称意味着什么？',
+  '为什么呼吸和脊柱有关？',
+  '我可以从这次体验中获得什么？',
+  '准备好了之后，我该说什么？',
+];
 
 export class IntroOverlays {
   constructor({ camera, spineGroup, anchors } = {}) {
@@ -67,11 +84,38 @@ export class IntroOverlays {
     this.$idle = document.createElement('div');
     this.$idle.id = 'intro-idle';
     this.$idle.innerHTML = `
-      <h1 class="intro-title">脊时呼吸</h1>
-      <p class="intro-title-en">Breathe With Your Spine</p>
-      <p class="intro-tagline">用呼吸，重塑一根脊柱</p>
-      <p class="intro-hint">按下空格键开始体验</p>
+      <div class="intro-title-field" aria-hidden="true">
+        <p class="intro-title-en">Breathe With Your Spine</p>
+        <h1 class="intro-title">脊时呼吸</h1>
+      </div>
+      <div class="intro-voice">
+        <p class="intro-voice-guide">戴上耳机，与作品对话；准备好后说「开始」</p>
+        <p class="intro-voice-transcript"></p>
+        <div class="intro-answer-field" aria-live="polite">
+          <canvas class="intro-answer-canvas"></canvas>
+        </div>
+        <div class="intro-voice-meter"><div class="intro-voice-meter-fill"></div></div>
+        <div class="intro-ai-reply" aria-live="polite"></div>
+      </div>
+      <div class="intro-question-prompt" aria-live="polite"></div>
+      <div class="intro-wake-text" aria-hidden="true">
+        <p>我听见了。</p>
+        <p>把注意力交给呼吸，接下来，我们慢慢进入身体内部。</p>
+      </div>
     `;
+    this.$voiceStatus = this.$idle.querySelector('.intro-voice-status');
+    this.$voiceMeterFill = this.$idle.querySelector('.intro-voice-meter-fill');
+    this.$voiceTranscript = this.$idle.querySelector('.intro-voice-transcript');
+    this.$aiReply = this.$idle.querySelector('.intro-ai-reply');
+    this.$answerField = this.$idle.querySelector('.intro-answer-field');
+    this.$questionPrompt = this.$idle.querySelector('.intro-question-prompt');
+    this.$wakeText = this.$idle.querySelector('.intro-wake-text');
+    this._questionIndex = 0;
+    this._setQuestionPrompt();
+    this._questionTimer = window.setInterval(() => {
+      this._questionIndex = (this._questionIndex + 1) % IDLE_QUESTIONS.length;
+      this._setQuestionPrompt();
+    }, 5200);
     document.body.appendChild(this.$idle);
 
     // ── 叙事字幕容器（左侧固定）──
@@ -168,12 +212,70 @@ export class IntroOverlays {
 
   showIdleUI() {
     this.$idle.classList.remove('out');
+    this.$idle.classList.remove('voice-triggered');
+    this.$idle.classList.remove('particle-transition');
     this._lines.forEach(({ p }) => { p.classList.remove('vis'); p.style.opacity = ''; });
     this.$countdown.classList.remove('vis', 'big');
     this.$countdown.innerHTML = '';
     this._lastCdText = null;
     this.$body.classList.remove('vis');
     this.$pacer.classList.remove('vis');
+  }
+
+  setVoiceStatus({ status = '正在聆听', transcript } = {}) {
+    if (this.$voiceStatus) this.$voiceStatus.textContent = status;
+    if (this.$voiceTranscript && transcript !== undefined) {
+      this.$voiceTranscript.textContent = transcript || '';
+    }
+  }
+
+  _setQuestionPrompt() {
+    if (!this.$questionPrompt) return;
+    this.$questionPrompt.textContent = IDLE_QUESTIONS[this._questionIndex] || '';
+  }
+
+  setVoiceLevel(level = 0) {
+    if (!this.$voiceMeterFill) return;
+    const clamped = Math.max(0, Math.min(1, level));
+    this.$voiceMeterFill.style.transform = `scaleX(${clamped})`;
+  }
+
+  _escapeHTML(text = '') {
+    return String(text).replace(/[&<>"']/g, ch => ({
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    }[ch]));
+  }
+
+  setAIReply({ question = '', reply = '', loading = false } = {}) {
+    if (!this.$aiReply) return;
+    if (!question && !reply && !loading) {
+      this.$aiReply.classList.remove('vis');
+      this.$aiReply.innerHTML = '';
+      if (this.$answerField) {
+        this.$answerField.classList.remove('vis', 'loading');
+        const canvas = this.$answerField.querySelector('.intro-answer-canvas');
+        const ctx = canvas?.getContext('2d');
+        if (canvas && ctx) ctx.clearRect(0, 0, canvas.width, canvas.height);
+      }
+      return;
+    }
+    if (this.$answerField) {
+      this.$answerField.classList.toggle('loading', !!loading);
+      this.$answerField.classList.toggle('vis', !!reply);
+    }
+    if ((loading || reply) && this.$voiceTranscript) this.$voiceTranscript.textContent = '';
+    this.$aiReply.classList.remove('vis');
+    this.$aiReply.innerHTML = '';
+  }
+
+  showVoiceTransition({ particleText = false } = {}) {
+    this.$idle.classList.toggle('particle-transition', !!particleText);
+    this.$idle.classList.add('voice-triggered');
+    this.setVoiceStatus({ status: '已识别「开始」', transcript: particleText ? '' : '开始' });
   }
 
   updateGuide(e) {
@@ -278,9 +380,9 @@ export class IntroOverlays {
   }
 
   // ── 呼吸节拍器：3 轮跟做 ──
-  // 轮 1（47-55s）：完整指令（吸气-把气送向凹陷的那一侧 / 撑开-让肋骨从内部张开 / 呼气-慢慢让气出来）
-  // 轮 2（55-63s）：简化（吸气 / 撑开 / 呼气）
-  // 轮 3（63-71s）：纯视觉，无字（71-74s 由 TEXT_SCHEDULE 显示"感受这道气流..."）
+  // 轮 1（43-51s）：完整指令（吸气-把气送向凹陷的那一侧 / 撑开-让肋骨从内部张开 / 呼气-慢慢让气出来）
+  // 轮 2（51-59s）：简化（吸气 / 撑开 / 呼气）
+  // 轮 3（59.8-67.8s）：纯视觉，无字（67.8-68.8s 由 TEXT_SCHEDULE 显示"感受这道气流..."）
   // 同时计算 _pacerBreatheT 供 app.js 同步脊柱呼吸
   _updatePacer(t) {
     if (t < PACER_START || t >= PACER_END) {

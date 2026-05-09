@@ -21,6 +21,7 @@
 
   <!-- ②a EXPERIENCE 呼吸提示（吸气 1 2 / 屏息 1 2 / 呼气 1 2 / 放松 1 2） -->
   <div id="breath-overlay">
+    <div id="breath-mini-ring"></div>
     <p id="breath-label">
       <span id="breath-phase"></span>
       <span id="breath-c1">1</span>
@@ -53,16 +54,13 @@
     </div>
 
     <div class="debug-section">
-      <label for="blend-slider">拖动模拟呼吸（硬件到货前用这个）：</label>
+      <label for="blend-slider">Blend 调节：</label>
       <input type="range" id="blend-slider" min="0" max="100" value="0" />
-      <p class="debug-hint">← 左边 = 脊柱弯曲（蓝紫）　右边 = 脊柱变直（暖金）</p>
     </div>
 
     <div class="debug-section">
-      <label for="guide-progress-slider">引导进度 (<span id="guide-progress-val">0</span>s / 83s)：</label>
-      <input type="range" id="guide-progress-slider" min="0" max="83" value="0" step="0.5" />
-      <label for="guide-speed-slider">引导速度 (<span id="guide-speed-val">3.0</span>x)：</label>
-      <input type="range" id="guide-speed-slider" min="10" max="100" value="30" />
+      <label for="guide-progress-slider">引导进度 (<span id="guide-progress-val">0</span>s / 72s)：</label>
+      <input type="range" id="guide-progress-slider" min="0" max="72" value="0" step="0.5" />
     </div>
 
     <div class="debug-section">
@@ -72,8 +70,6 @@
       <input type="range" id="bloom-slider" min="0" max="200" value="130" />
       <label for="exposure-slider">电影级曝光率 (<span id="exposure-val">1.30</span>)：</label>
       <input type="range" id="exposure-slider" min="20" max="300" value="130" />
-      <label for="bgm-volume-slider">BGM 音量 (<span id="bgm-volume-val">50</span>%)：</label>
-      <input type="range" id="bgm-volume-slider" min="0" max="100" value="50" />
     </div>
 
     <div class="debug-section">
@@ -81,6 +77,7 @@
       <button id="btn-skip">⏩ 跳过引导</button>
       <button id="btn-pause">⏸ 暂停动画</button>
       <button id="btn-reset">↺ 按钮：重置</button>
+      <button id="btn-voice">🎙 开启语音聆听</button>
     </div>
 
     <p class="debug-hint">键盘快捷键：D = 隐藏/显示此面板 | F = 全屏 | Space = 开始 / P = 暂停</p>
