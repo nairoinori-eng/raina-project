@@ -4171,12 +4171,18 @@ scene.add(expPacerPoints);
 // 11. 状态 / blend 控制 + 引导动画状态
 // ============================================================
 
-let currentMode   = 'IDLE';   // IDLE → GUIDE → EXPERIENCE
+let currentMode   = 'IDLE';   // IDLE → GUIDE → EXPERIENCE → SUMMARY
 let experienceStartTime = 0;  // EXPERIENCE 进入时刻（用于呼吸耦合渐入）
 let targetBlend   = 0.0;
 let smoothBlend   = 0.0;
 let blendVelocity = 0.0;
 const WAVE = 0.28;
+const SUMMARY_DURATION_SEC = 60;
+let summaryStartTime = 0;
+let summaryFinalBlend = 0;
+let summaryReturnTimer = null;
+let summaryCopyRequested = false;
+let summaryPreviewMode = false;
 
 // ── 引导动画状态 ──
 let guideStartTime = 0;       // 引导开始的绝对时间(秒)
@@ -4266,9 +4272,92 @@ function enterExperience() {
   console.log('[raina] 呼吸体验阶段开始');
 }
 
+function summaryPoint(p, blend = 0) {
+  const x = p.x * (1 - blend);
+  return {
+    x: 140 + x * 78,
+    y: 260 - p.y * 104,
+  };
+}
+
+function buildSummarySpineShape(blend = 0) {
+  const pts = SPINE_CURVED.map(p => summaryPoint(p, blend));
+  const path = pts.map((p, i) => `${i ? 'L' : 'M'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+  const dots = pts.map((p, i) => {
+    const r = Math.max(4.8, 8.8 - Math.abs(i - 6) * 0.35);
+    return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}"></circle>`;
+  }).join('');
+  return { path, dots };
+}
+
+async function loadSummaryCopy(finalBlend) {
+  if (summaryCopyRequested) return;
+  summaryCopyRequested = true;
+  try {
+    const resp = await fetch('http://localhost:5000/voice/summary', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ blend_final: finalBlend }),
+    });
+    const payload = await resp.json();
+    if (!resp.ok || !payload.success) throw new Error(payload.message || 'summary copy failed');
+    overlays.setSummaryCopy(payload.copy);
+  } catch (e) {
+    console.warn('[summary] copy failed:', e);
+    overlays.setSummaryCopy('这一段呼吸留下了痕迹，像身体重新找回一点空间。');
+  }
+}
+
+function returnToIdleFromSummary() {
+  if (currentMode !== 'SUMMARY') return;
+  if (summaryReturnTimer) {
+    clearTimeout(summaryReturnTimer);
+    summaryReturnTimer = null;
+  }
+  socket.emit('admin_reset');
+  resetToIdle();
+}
+
+function enterSummary(finalBlend = smoothBlend, { preview = false } = {}) {
+  summaryFinalBlend = Math.max(0, Math.min(1, Number.isFinite(finalBlend) ? finalBlend : smoothBlend));
+  currentMode = 'SUMMARY';
+  summaryPreviewMode = !!preview;
+  summaryStartTime = time;
+  summaryCopyRequested = false;
+  targetBlend = summaryFinalBlend;
+  smoothBlend = summaryFinalBlend;
+  blendVelocity = 0;
+  stopIdleVoiceRecognition();
+  overlays.clearAll();
+  overlays.hideIdleUI();
+
+  const before = buildSummarySpineShape(0);
+  const after = buildSummarySpineShape(summaryFinalBlend);
+  overlays.showSummary({
+    blend: summaryFinalBlend,
+    beforePath: before.path,
+    afterPath: after.path,
+    beforeDots: before.dots,
+    afterDots: after.dots,
+  });
+  overlays.setSummaryCountdown(SUMMARY_DURATION_SEC);
+  loadSummaryCopy(summaryFinalBlend);
+
+  if (voicePermissionGranted && voiceStream) startSummaryVoiceRecognition();
+  if (summaryReturnTimer) clearTimeout(summaryReturnTimer);
+  summaryReturnTimer = setTimeout(returnToIdleFromSummary, SUMMARY_DURATION_SEC * 1000);
+  updateDebugUI();
+  console.log('[raina] 体验结算页开始', summaryFinalBlend);
+}
+
 function resetToIdle() {
   currentMode = 'IDLE';
+  summaryPreviewMode = false;
   voiceTriggered = false;
+  if (summaryReturnTimer) {
+    clearTimeout(summaryReturnTimer);
+    summaryReturnTimer = null;
+  }
   if (voiceTransitionTimer) {
     clearTimeout(voiceTransitionTimer);
     voiceTransitionTimer = null;
@@ -4453,7 +4542,7 @@ function floatTo16kPCMBase64(float32, inputRate) {
 }
 
 function startAsrStream() {
-  if (voiceStreaming || currentMode !== 'IDLE') return;
+  if (voiceStreaming || !['IDLE', 'SUMMARY'].includes(currentMode)) return;
   const now = performance.now();
   if (now < voiceCooldownUntil || voiceReplyPending) return;
   voiceStreaming = true;
@@ -4539,7 +4628,7 @@ function setupVoiceAudioPipeline() {
   voiceProcessorNode = voiceAudioCtx.createScriptProcessor(4096, 1, 1);
   voiceProcessorNode.onaudioprocess = (event) => {
     event.outputBuffer.getChannelData(0).fill(0);
-    if (currentMode !== 'IDLE' || voiceTriggered) return;
+    if (!['IDLE', 'SUMMARY'].includes(currentMode) || (voiceTriggered && currentMode !== 'SUMMARY')) return;
     if (voiceReplyPending || idleVoiceViz?.mode === 'reply' || idleVoiceViz?.mode === 'returning') return;
     const input = event.inputBuffer.getChannelData(0);
     processVoiceFrame(input, voiceAudioCtx.sampleRate);
@@ -4571,6 +4660,12 @@ function isStartCommand(text) {
   if (hasNegativeStartIntent(t) || isQuestionLike(text)) return false;
   if (/^(开始|开始吧|开始体验|开始呼吸|进入体验|进入引导|我准备好了|准备好了|准备好了开始|现在开始|可以开始|好开始)$/.test(t)) return true;
   return /^(我)?(已经)?准备好了(可以)?开始(吧)?$/.test(t);
+}
+
+function isReturnHomeCommand(text) {
+  const t = normalizeSpeechText(text);
+  if (!t || t.length > 16) return false;
+  return /(回到主界面|返回主界面|回主界面|回到待机|返回待机|回到首页|返回首页|结束体验|退出体验|回去吧)/.test(t);
 }
 
 function collapseRepeatedSpeech(text) {
@@ -4725,6 +4820,15 @@ function startIdleVoiceRecognition() {
   setupVoiceAudioPipeline();
   voiceListening = true;
   overlays.setVoiceStatus({ status: '麦克风已开启，正在聆听', transcript: '' });
+  updateVoiceButton();
+}
+
+function startSummaryVoiceRecognition() {
+  if (currentMode !== 'SUMMARY') return;
+  if (!voicePermissionGranted || !voiceStream) return;
+  setupVoiceAudioPipeline();
+  voiceTriggered = false;
+  voiceListening = true;
   updateVoiceButton();
 }
 
@@ -4976,6 +5080,7 @@ function animate() {
     case 'IDLE':       updateIdle(time);       break;
     case 'GUIDE':      updateGuide(time);      break;
     case 'EXPERIENCE': updateExperience(time); break;
+    case 'SUMMARY':    updateSummary(time);    break;
   }
 
   // ── 公共：环境星尘始终更新 ──
@@ -5279,6 +5384,10 @@ function updateGuide(t) {
 
 // ── EXPERIENCE 更新（原有呼吸体验逻辑）──────────────────────
 function updateExperience(t) {
+  if (t - experienceStartTime >= 120) {
+    enterSummary(smoothBlend);
+    return;
+  }
   // 弹簧物理平滑 blend
   const springF = (targetBlend - smoothBlend) * 0.035;
   blendVelocity = blendVelocity * 0.82 + springF;
@@ -5511,6 +5620,22 @@ function updateExperience(t) {
   bloomPass.strength = bloomBase + breathBloomPulse * expVisualFade;
 }
 
+function updateSummary(t) {
+  const elapsed = Math.max(0, t - summaryStartTime);
+  overlays.setSummaryCountdown(SUMMARY_DURATION_SEC - elapsed);
+  spineMat.uniforms.uFormation.value = 0.0;
+  spineMat.uniforms.uGuideAlpha.value = 0.0;
+  vineMat.uniforms.uFormation.value = 0.0;
+  leafPoints.visible = false;
+  diffusePoints.visible = false;
+  flowerMat.uniforms.uAlphaBoost.value = 0;
+  spineHaloMat.uniforms.uAlphaBoost.value = 0;
+  flowMat.uniforms.uActive.value = 0;
+  pacerMat.uniforms.uActive.value = 0;
+  ribMat.uniforms.uActive.value = 0;
+  bloomPass.strength = 0.12;
+}
+
 
 // ============================================================
 // 13. SocketIO（与 Flask 通信）
@@ -5529,6 +5654,15 @@ socket.on('sensor_data', (data) => {
 socket.on('state_change', (data) => {
   if (data.mode === 'START_GUIDE') { startGuide(); return; }
   if (data.mode === 'EXPERIENCE') { enterExperience(); }
+  if (data.mode === 'SUMMARY') {
+    enterSummary(data.blend !== undefined ? data.blend : smoothBlend);
+    return;
+  }
+  if (data.mode === 'IDLE' && currentMode === 'SUMMARY') {
+    if (summaryPreviewMode) return;
+    resetToIdle();
+    return;
+  }
   currentMode = data.mode;
   if (data.blend !== undefined) targetBlend = data.blend;
   updateDebugUI();
@@ -5540,11 +5674,15 @@ socket.on('asr_status', () => {
 });
 
 socket.on('asr_result', (data) => {
-  if (currentMode !== 'IDLE' || voiceTriggered) return;
+  if (!['IDLE', 'SUMMARY'].includes(currentMode) || (voiceTriggered && currentMode !== 'SUMMARY')) return;
   const now = performance.now();
   if (now < voiceIgnoreFinalUntil) return;
   const text = (data?.text || '').trim();
   if (!text) return;
+  if (currentMode === 'SUMMARY') {
+    if (isReturnHomeCommand(text)) returnToIdleFromSummary();
+    return;
+  }
   voiceAsrText = text;
   const normalizedText = normalizeSpeechText(text);
   if (normalizedText.length >= 4 && !voiceFirstAsrTextAt) voiceFirstAsrTextAt = now;
@@ -5624,6 +5762,10 @@ document.getElementById('btn-skip').addEventListener('click', () => {
   // 跳过引导直接进入体验模式
   enterExperience();
   console.log('[raina] 跳过引导，直接进入体验');
+});
+document.getElementById('btn-summary').addEventListener('click', () => {
+  const previewBlend = Math.max(0.12, Math.min(1, targetBlend || smoothBlend || 0.56));
+  enterSummary(previewBlend, { preview: true });
 });
 voiceButton = document.getElementById('btn-voice');
 if (voiceButton) {

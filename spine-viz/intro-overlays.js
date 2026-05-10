@@ -206,6 +206,45 @@ export class IntroOverlays {
     document.body.appendChild(this.$pacer);
     this.$ring  = this.$pacer.querySelector('.pacer-ring');
     this.$label = this.$pacer.querySelector('.pacer-label');
+
+    // ── 体验结算页 ──
+    this.$summary = document.createElement('section');
+    this.$summary.id = 'summary-page';
+    this.$summary.innerHTML = `
+      <div class="summary-bg"></div>
+      <div class="summary-inner">
+        <div class="summary-kicker">两分钟呼吸体验完成</div>
+        <div class="summary-spines">
+          <article class="summary-spine-card before">
+            <p class="summary-label">体验前</p>
+            <svg class="summary-spine-svg" viewBox="0 0 280 520" aria-hidden="true">
+              <path class="summary-spine-glow" data-spine="before-glow"></path>
+              <path class="summary-spine-line" data-spine="before"></path>
+              <g class="summary-vertebrae" data-vertebrae="before"></g>
+            </svg>
+          </article>
+          <div class="summary-center">
+            <p class="summary-percent" data-summary-percent>0%</p>
+            <div class="summary-breath-line"></div>
+            <p class="summary-change">呼吸留下的形态路径</p>
+          </div>
+          <article class="summary-spine-card after">
+            <p class="summary-label">体验后</p>
+            <svg class="summary-spine-svg" viewBox="0 0 280 520" aria-hidden="true">
+              <path class="summary-spine-glow" data-spine="after-glow"></path>
+              <path class="summary-spine-line" data-spine="after"></path>
+              <g class="summary-vertebrae" data-vertebrae="after"></g>
+            </svg>
+          </article>
+        </div>
+        <p class="summary-copy" data-summary-copy>正在整理这次呼吸留下的痕迹。</p>
+        <p class="summary-hint">说“回到主界面”，或等待 <span data-summary-countdown>60</span> 秒后自动返回</p>
+      </div>
+    `;
+    document.body.appendChild(this.$summary);
+    this.$summaryCopy = this.$summary.querySelector('[data-summary-copy]');
+    this.$summaryPercent = this.$summary.querySelector('[data-summary-percent]');
+    this.$summaryCountdown = this.$summary.querySelector('[data-summary-countdown]');
   }
 
   hideIdleUI() { this.$idle.classList.add('out'); }
@@ -220,6 +259,7 @@ export class IntroOverlays {
     this._lastCdText = null;
     this.$body.classList.remove('vis');
     this.$pacer.classList.remove('vis');
+    this.hideSummary();
   }
 
   setVoiceStatus({ status = '正在聆听', transcript } = {}) {
@@ -291,7 +331,33 @@ export class IntroOverlays {
     this._lastCdText = null;
     this.$body.classList.remove('vis');
     this.$pacer.classList.remove('vis');
+    this.hideSummary();
     this.$idle.classList.add('out');
+  }
+
+  showSummary({ blend = 0, copy = '', beforePath = '', afterPath = '', beforeDots = '', afterDots = '' } = {}) {
+    if (!this.$summary) return;
+    this.$summary.classList.add('vis');
+    this.$summary.querySelector('[data-spine="before"]').setAttribute('d', beforePath);
+    this.$summary.querySelector('[data-spine="before-glow"]').setAttribute('d', beforePath);
+    this.$summary.querySelector('[data-spine="after"]').setAttribute('d', afterPath);
+    this.$summary.querySelector('[data-spine="after-glow"]').setAttribute('d', afterPath);
+    this.$summary.querySelector('[data-vertebrae="before"]').innerHTML = beforeDots;
+    this.$summary.querySelector('[data-vertebrae="after"]').innerHTML = afterDots;
+    if (this.$summaryPercent) this.$summaryPercent.textContent = `${Math.round(Math.max(0, Math.min(1, blend)) * 100)}%`;
+    if (this.$summaryCopy) this.$summaryCopy.textContent = copy || '正在整理这次呼吸留下的痕迹。';
+  }
+
+  setSummaryCopy(copy = '') {
+    if (this.$summaryCopy && copy) this.$summaryCopy.textContent = copy;
+  }
+
+  setSummaryCountdown(seconds = 60) {
+    if (this.$summaryCountdown) this.$summaryCountdown.textContent = String(Math.max(0, Math.ceil(seconds)));
+  }
+
+  hideSummary() {
+    if (this.$summary) this.$summary.classList.remove('vis');
   }
 
   // ── 叙事字幕（组内堆叠）+ 倒数（居中）──

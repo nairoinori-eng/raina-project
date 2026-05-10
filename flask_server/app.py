@@ -99,6 +99,7 @@ SERIAL_RETRY_SEC = 3
 GUIDE_DURATION_SEC = 86
 EXPERIENCE_DURATION_SEC = 120
 TRANSITION_DURATION_SEC = 18
+SUMMARY_DURATION_SEC = 60
 DEFAULT_WEIGHT_CHEST = 0.6
 DEFAULT_WEIGHT_WAIST = 0.4
 DEFAULT_THRESHOLD = 1010.0
@@ -123,6 +124,7 @@ DEFAULT_STATE_PAYLOAD_FIELDS = ("mode", "session_id", "blend", "serial_connected
 DEEPSEEK_API_URL = os.getenv("DEEPSEEK_API_URL", "https://api.deepseek.com/chat/completions")
 DEEPSEEK_MODEL = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
 VOICE_REPLY_MAX_CHARS = 90
+SUMMARY_COPY_MAX_CHARS = 64
 VOICE_SYSTEM_PROMPT = """
 你是沉浸式交互作品《脊时呼吸》的待机状态语音。
 
@@ -864,7 +866,7 @@ def sync_arduino_for_mode(mode: str) -> None:
         logger.info("进入 EXPERIENCE，启动 Arduino 呼吸节奏")
         serial_bridge.enqueue(START_COMMAND)
         return
-    if mode in {"TRANSITION", "WAITING", "IDLE"}:
+    if mode in {"TRANSITION", "WAITING", "SUMMARY", "IDLE"}:
         logger.info("离开体验阶段，停止 Arduino 呼吸节奏")
         serial_bridge.enqueue(RESET_COMMAND)
 
@@ -878,8 +880,8 @@ def clear_blend_accumulator() -> None:
 
 
 def schedule_experience_tail(flow_revision: int) -> None:
-    schedule_state_change(EXPERIENCE_DURATION_SEC, "EXPERIENCE", "TRANSITION", flow_revision)
-    schedule_state_change(EXPERIENCE_DURATION_SEC + TRANSITION_DURATION_SEC, "TRANSITION", "WAITING", flow_revision)
+    schedule_state_change(EXPERIENCE_DURATION_SEC, "EXPERIENCE", "SUMMARY", flow_revision)
+    schedule_state_change(EXPERIENCE_DURATION_SEC + SUMMARY_DURATION_SEC, "SUMMARY", "IDLE", flow_revision)
 
 
 def schedule_state_change(delay_sec: float, expected_mode: str, next_mode: str, flow_revision: int) -> None:
@@ -900,8 +902,12 @@ def schedule_state_change(delay_sec: float, expected_mode: str, next_mode: str, 
                 state.flow_revision += 1
                 clear_blend_accumulator()
                 next_revision = state.flow_revision
+            elif next_mode == "IDLE":
+                state.reset_for_new_session()
         sync_arduino_for_mode(next_mode)
         emit_state_change(mode=next_mode)
+        if next_mode == "IDLE":
+            emit_session_update()
         if next_mode == "EXPERIENCE":
             schedule_experience_tail(next_revision)
 
@@ -961,6 +967,80 @@ def trim_voice_reply(text: str) -> str:
     if len(cleaned) <= VOICE_REPLY_MAX_CHARS:
         return cleaned
     return cleaned[:VOICE_REPLY_MAX_CHARS].rstrip("，。；、 ") + "。"
+
+
+def trim_summary_copy(text: str) -> str:
+    cleaned = re.sub(r"\s+", " ", text).strip().strip("`")
+    cleaned = cleaned.replace("“", "").replace("”", "").replace('"', "")
+    if len(cleaned) <= SUMMARY_COPY_MAX_CHARS:
+        return cleaned
+    return cleaned[:SUMMARY_COPY_MAX_CHARS].rstrip("，。；、 ") + "。"
+
+
+def fallback_summary_copy(blend_final: float) -> str:
+    options = [
+        "你没有改变身体的全部，却已经让它被温柔地看见。",
+        "这一段呼吸留下了痕迹，像身体重新找回一点空间。",
+        "弯曲仍在，但呼吸让它有了松动、回应和新的方向。",
+        "你的身体没有被评判，它只是在呼吸里慢慢靠近自己。",
+    ]
+    if blend_final > 0.72:
+        options.append("呼吸把弯曲处轻轻展开，身体记住了这一刻的空间。")
+    elif blend_final < 0.28:
+        options.append("即使变化很轻，身体也已经开始听见自己的呼吸。")
+    return random.choice(options)
+
+
+def deepseek_summary_copy(blend_final: float) -> tuple[str, str]:
+    api_key = os.getenv("DEEPSEEK_API_KEY", "").strip()
+    if not api_key:
+        return fallback_summary_copy(blend_final), "fallback"
+
+    percent = int(round(clamp(blend_final, 0.0, 1.0) * 100))
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "你为沉浸式交互作品《脊时呼吸》的体验结算页写一句中文短文案。"
+                "作品关于脊柱侧弯、呼吸训练和身体觉察。"
+                "语气温柔、克制、有艺术感，但不要玄乎。"
+                "不要说治愈、治疗、矫正、修复、康复成功。"
+                "不要提 AI、系统、算法、数值。"
+                "只输出一句话，不超过64个中文字符。"
+            ),
+        },
+        {
+            "role": "user",
+            "content": f"本次体验结束时，脊柱影像变化进度约为 {percent}%。请写一句结算页文案。",
+        },
+    ]
+    payload = json.dumps(
+        {
+            "model": DEEPSEEK_MODEL,
+            "messages": messages,
+            "temperature": 0.95,
+            "max_tokens": 90,
+            "stream": False,
+        },
+        ensure_ascii=False,
+    ).encode("utf-8")
+    req = urllib.request.Request(
+        DEEPSEEK_API_URL,
+        data=payload,
+        headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+        },
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+        content = data["choices"][0]["message"]["content"]
+        return trim_summary_copy(content), "deepseek"
+    except (urllib.error.URLError, urllib.error.HTTPError, KeyError, IndexError, json.JSONDecodeError) as exc:
+        logger.warning("DeepSeek 结算文案失败，使用本地回退：%s", exc)
+        return fallback_summary_copy(blend_final), "fallback"
 
 
 def deepseek_voice_reply(text: str) -> tuple[str, str]:
@@ -1186,6 +1266,19 @@ def voice_reply() -> Any:
     return jsonify({"success": True, "reply": reply, "source": source})
 
 
+@app.route("/voice/summary", methods=["POST", "OPTIONS"])
+def voice_summary() -> Any:
+    if request.method == "OPTIONS":
+        return ("", 204)
+    payload = request.get_json(silent=True) or {}
+    try:
+        blend_final = clamp(float(payload.get("blend_final", state.sensor.blend)), 0.0, 1.0)
+    except (TypeError, ValueError):
+        blend_final = state.sensor.blend
+    copy, source = deepseek_summary_copy(blend_final)
+    return jsonify({"success": True, "copy": copy, "source": source})
+
+
 @app.get("/upload")
 def upload_page() -> Any:
     session_id = request.args.get("session", "").strip()
@@ -1319,7 +1412,7 @@ def on_button_press(data: dict[str, Any] | None = None) -> None:
     if current_mode == "IDLE":
         start_guide_flow()
         return
-    if current_mode in {"SHOWING", "WAITING", "TRANSITION"}:
+    if current_mode in {"SHOWING", "WAITING", "TRANSITION", "SUMMARY"}:
         reset_system()
 
 

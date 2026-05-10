@@ -404,6 +404,148 @@ body {
   opacity: 0;
 }
 
+/* ── 体验结算页 ── */
+#summary-page {
+  position: fixed;
+  inset: 0;
+  z-index: 42;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 1.2s ease;
+  color: rgba(244, 241, 255, 0.92);
+}
+#summary-page.vis {
+  opacity: 1;
+  pointer-events: auto;
+}
+.summary-bg {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 52%, rgba(130, 100, 210, 0.14), transparent 34%),
+    linear-gradient(90deg, rgba(0,0,0,0.70), rgba(0,0,0,0.26) 50%, rgba(0,0,0,0.70));
+  backdrop-filter: blur(1.5px);
+}
+.summary-inner {
+  position: relative;
+  height: 100%;
+  width: min(1240px, 88vw);
+  margin: 0 auto;
+  display: grid;
+  grid-template-rows: auto 1fr auto auto;
+  align-items: center;
+  padding: clamp(2rem, 5vh, 4.6rem) 0 clamp(1.4rem, 4vh, 3.2rem);
+}
+.summary-kicker {
+  justify-self: center;
+  font-size: clamp(0.95rem, 1.2vw, 1.25rem);
+  letter-spacing: 0.32em;
+  color: rgba(221, 214, 250, 0.66);
+}
+.summary-spines {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(230px, 1fr) minmax(180px, 0.64fr) minmax(230px, 1fr);
+  align-items: center;
+  gap: clamp(1rem, 3vw, 3.4rem);
+}
+.summary-spine-card {
+  height: min(58vh, 560px);
+  display: grid;
+  grid-template-rows: auto 1fr;
+  align-items: center;
+  justify-items: center;
+}
+.summary-label {
+  margin: 0 0 1rem;
+  font-size: clamp(1rem, 1.5vw, 1.5rem);
+  letter-spacing: 0.28em;
+  color: rgba(235, 230, 255, 0.68);
+}
+.summary-spine-svg {
+  width: min(26vw, 300px);
+  height: 100%;
+  overflow: visible;
+}
+.summary-spine-glow {
+  fill: none;
+  stroke: rgba(160, 125, 255, 0.34);
+  stroke-width: 18;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: blur(18px);
+}
+.summary-spine-line {
+  fill: none;
+  stroke: rgba(244, 238, 255, 0.9);
+  stroke-width: 5.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 14px rgba(194, 168, 255, 0.58));
+}
+.summary-spine-card.after .summary-spine-line {
+  stroke: rgba(255, 231, 180, 0.96);
+  filter: drop-shadow(0 0 16px rgba(234, 181, 82, 0.62));
+}
+.summary-vertebrae circle {
+  fill: rgba(247, 242, 255, 0.92);
+  filter: drop-shadow(0 0 10px rgba(196, 172, 255, 0.5));
+}
+.summary-spine-card.after .summary-vertebrae circle {
+  fill: rgba(255, 232, 184, 0.95);
+}
+.summary-center {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+}
+.summary-percent {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  font-size: clamp(3.5rem, 8vw, 7.4rem);
+  line-height: 0.9;
+  color: rgba(250, 243, 255, 0.88);
+  text-shadow: 0 0 28px rgba(168, 135, 255, 0.4);
+}
+.summary-breath-line {
+  width: min(18vw, 230px);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(224, 207, 255, 0.72), rgba(236, 184, 82, 0.72), transparent);
+  box-shadow: 0 0 22px rgba(196, 161, 255, 0.5);
+}
+.summary-change {
+  margin: 0;
+  font-size: clamp(0.85rem, 1.1vw, 1rem);
+  letter-spacing: 0.18em;
+  color: rgba(226, 220, 246, 0.58);
+}
+.summary-copy {
+  justify-self: center;
+  max-width: min(900px, 72vw);
+  margin: 0;
+  text-align: center;
+  font-size: clamp(1.35rem, 2.4vw, 2.4rem);
+  line-height: 1.65;
+  letter-spacing: 0.08em;
+  color: rgba(250, 247, 255, 0.88);
+  text-shadow: 0 0 26px rgba(160, 122, 255, 0.36);
+}
+.summary-hint {
+  justify-self: center;
+  margin: 1.2rem 0 0;
+  font-size: clamp(0.8rem, 1vw, 0.95rem);
+  letter-spacing: 0.16em;
+  color: rgba(222, 216, 246, 0.52);
+}
+@media (max-width: 760px) {
+  .summary-inner { width: 92vw; }
+  .summary-spines { grid-template-columns: 1fr; gap: 0.4rem; }
+  .summary-spine-card { height: 26vh; }
+  .summary-spine-svg { width: 46vw; }
+  .summary-center { order: 2; }
+  .summary-copy { max-width: 90vw; }
+}
+
 /* ── 叙事字幕容器（左侧固定，按组堆叠）── */
 #intro-text {
   position: fixed;
