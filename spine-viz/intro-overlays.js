@@ -213,32 +213,21 @@ export class IntroOverlays {
     this.$summary.innerHTML = `
       <div class="summary-bg"></div>
       <div class="summary-inner">
-        <div class="summary-kicker">两分钟呼吸体验完成</div>
         <div class="summary-spines">
           <article class="summary-spine-card before">
-            <p class="summary-label">体验前</p>
-            <svg class="summary-spine-svg" viewBox="0 0 280 520" aria-hidden="true">
-              <path class="summary-spine-glow" data-spine="before-glow"></path>
-              <path class="summary-spine-line" data-spine="before"></path>
-              <g class="summary-vertebrae" data-vertebrae="before"></g>
-            </svg>
+            <p class="summary-label">before</p>
           </article>
           <div class="summary-center">
             <p class="summary-percent" data-summary-percent>0%</p>
             <div class="summary-breath-line"></div>
-            <p class="summary-change">呼吸留下的形态路径</p>
+            <p class="summary-change">本次影像舒展进度</p>
           </div>
           <article class="summary-spine-card after">
-            <p class="summary-label">体验后</p>
-            <svg class="summary-spine-svg" viewBox="0 0 280 520" aria-hidden="true">
-              <path class="summary-spine-glow" data-spine="after-glow"></path>
-              <path class="summary-spine-line" data-spine="after"></path>
-              <g class="summary-vertebrae" data-vertebrae="after"></g>
-            </svg>
+            <p class="summary-label">after</p>
           </article>
         </div>
         <p class="summary-copy" data-summary-copy>正在整理这次呼吸留下的痕迹。</p>
-        <p class="summary-hint">说“回到主界面”，或等待 <span data-summary-countdown>60</span> 秒后自动返回</p>
+        <p class="summary-hint">说“回到主界面”，或等待 <span data-summary-countdown>30</span> 秒后自动返回</p>
       </div>
     `;
     document.body.appendChild(this.$summary);
@@ -253,6 +242,7 @@ export class IntroOverlays {
     this.$idle.classList.remove('out');
     this.$idle.classList.remove('voice-triggered');
     this.$idle.classList.remove('particle-transition');
+    this.$idle.classList.remove('start-transition');
     this._lines.forEach(({ p }) => { p.classList.remove('vis'); p.style.opacity = ''; });
     this.$countdown.classList.remove('vis', 'big');
     this.$countdown.innerHTML = '';
@@ -267,6 +257,10 @@ export class IntroOverlays {
     if (this.$voiceTranscript && transcript !== undefined) {
       this.$voiceTranscript.textContent = transcript || '';
     }
+  }
+
+  setVoiceTranscript(text = '') {
+    if (this.$voiceTranscript) this.$voiceTranscript.textContent = text || '';
   }
 
   _setQuestionPrompt() {
@@ -307,13 +301,13 @@ export class IntroOverlays {
       this.$answerField.classList.toggle('loading', !!loading);
       this.$answerField.classList.toggle('vis', !!reply);
     }
-    if ((loading || reply) && this.$voiceTranscript) this.$voiceTranscript.textContent = '';
     this.$aiReply.classList.remove('vis');
     this.$aiReply.innerHTML = '';
   }
 
   showVoiceTransition({ particleText = false } = {}) {
     this.$idle.classList.toggle('particle-transition', !!particleText);
+    this.$idle.classList.toggle('start-transition', !!particleText);
     this.$idle.classList.add('voice-triggered');
     this.setVoiceStatus({ status: '已识别「开始」', transcript: particleText ? '' : '开始' });
   }
@@ -335,15 +329,9 @@ export class IntroOverlays {
     this.$idle.classList.add('out');
   }
 
-  showSummary({ blend = 0, copy = '', beforePath = '', afterPath = '', beforeDots = '', afterDots = '' } = {}) {
+  showSummary({ blend = 0, copy = '' } = {}) {
     if (!this.$summary) return;
     this.$summary.classList.add('vis');
-    this.$summary.querySelector('[data-spine="before"]').setAttribute('d', beforePath);
-    this.$summary.querySelector('[data-spine="before-glow"]').setAttribute('d', beforePath);
-    this.$summary.querySelector('[data-spine="after"]').setAttribute('d', afterPath);
-    this.$summary.querySelector('[data-spine="after-glow"]').setAttribute('d', afterPath);
-    this.$summary.querySelector('[data-vertebrae="before"]').innerHTML = beforeDots;
-    this.$summary.querySelector('[data-vertebrae="after"]').innerHTML = afterDots;
     if (this.$summaryPercent) this.$summaryPercent.textContent = `${Math.round(Math.max(0, Math.min(1, blend)) * 100)}%`;
     if (this.$summaryCopy) this.$summaryCopy.textContent = copy || '正在整理这次呼吸留下的痕迹。';
   }
@@ -352,7 +340,7 @@ export class IntroOverlays {
     if (this.$summaryCopy && copy) this.$summaryCopy.textContent = copy;
   }
 
-  setSummaryCountdown(seconds = 60) {
+  setSummaryCountdown(seconds = 30) {
     if (this.$summaryCountdown) this.$summaryCountdown.textContent = String(Math.max(0, Math.ceil(seconds)));
   }
 

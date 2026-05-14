@@ -97,12 +97,14 @@ PORT = 5000
 SERIAL_BAUD = 115200
 SERIAL_RETRY_SEC = 3
 GUIDE_DURATION_SEC = 86
+GUIDE_MOTOR_START_SEC = float(os.getenv("GUIDE_MOTOR_START_SEC", "43.8"))
 EXPERIENCE_DURATION_SEC = 120
+ENDING_DURATION_SEC = 4.2
 TRANSITION_DURATION_SEC = 18
-SUMMARY_DURATION_SEC = 60
-DEFAULT_WEIGHT_CHEST = 0.6
-DEFAULT_WEIGHT_WAIST = 0.4
-DEFAULT_THRESHOLD = 1010.0
+SUMMARY_DURATION_SEC = 30
+DEFAULT_WEIGHT_CHEST = 1.0
+DEFAULT_WEIGHT_WAIST = 0.0
+DEFAULT_THRESHOLD = 520.0
 PREVIEW_BLEND_DEADBAND = 0.05
 PREVIEW_BLEND_THRESHOLD_RATIO = 0.25
 PREVIEW_BLEND_SMOOTHING = 0.08
@@ -116,6 +118,8 @@ MAX_SERIAL_DT_SEC = 0.5
 PUBLIC_URL = os.getenv("PUBLIC_URL", f"http://localhost:{PORT}").rstrip("/")
 START_COMMAND = os.getenv("ARDUINO_START_COMMAND", "START")
 RESET_COMMAND = os.getenv("ARDUINO_RESET_COMMAND", "RESET")
+MOTOR_OFF_COMMAND = os.getenv("ARDUINO_MOTOR_OFF_COMMAND", "MOTOR_OFF")
+DOUBLE_PULSE_COMMAND = os.getenv("ARDUINO_DOUBLE_PULSE_COMMAND", "MOTOR_DOUBLE_PULSE")
 DISABLE_SERIAL = os.getenv("DISABLE_SERIAL", "").strip().lower() in {"1", "true", "yes", "on"}
 
 ALLOWED_UPLOAD_EXTENSIONS = {".jpg", ".jpeg", ".png", ".webp"}
@@ -428,6 +432,7 @@ class RuntimeState:
         self.debug_override = False
         self.experience_started_at: float | None = None
         self.last_blend_update_at: float | None = None
+        self.final_blend: float | None = None
         self.session = self._new_session()
 
     def _new_session(self) -> SessionBundle:
@@ -440,6 +445,7 @@ class RuntimeState:
         self.debug_override = False
         self.experience_started_at = None
         self.last_blend_update_at = None
+        self.final_blend = None
         self.session = self._new_session()
         return self.session
 
@@ -454,6 +460,7 @@ class RuntimeState:
                 "threshold": self.threshold,
                 "serial_connected": self.serial_connected,
                 "serial_port": self.serial_port,
+                "final_blend": self.final_blend,
                 "sensor": asdict(self.sensor),
                 "upload_url": build_upload_url(self.session.session_id),
                 "upload_qr_data_url": make_qr_data_url(build_upload_url(self.session.session_id)),
@@ -512,11 +519,14 @@ def emit_state_change(mode: str | None = None, room: str | None = None, **extra:
     if mode is not None:
         payload["mode"] = mode
     payload.update(extra)
-    payload["blend"] = payload["sensor"]["blend"]
+    if payload.get("mode") in {"ENDING", "SUMMARY"} and payload.get("final_blend") is not None:
+        payload["blend"] = payload["final_blend"]
+    else:
+        payload["blend"] = payload["sensor"]["blend"]
     slim = {key: payload.get(key) for key in DEFAULT_STATE_PAYLOAD_FIELDS}
     slim.update(extra)
     if "blend" not in slim:
-        slim["blend"] = payload["sensor"]["blend"]
+        slim["blend"] = payload["blend"]
     socketio.emit("state_change", slim, to=room)
 
 
@@ -736,6 +746,10 @@ def compute_blend_from_payload(payload: dict[str, float]) -> tuple[float, float]
         chest = payload.get("S1", 0.0) - payload.get("S2", 0.0)
         waist = payload.get("S4", 0.0) - payload.get("S3", 0.0)
         raw_score = chest * state.weight_chest + waist * state.weight_waist
+        if state.mode in {"ENDING", "SUMMARY"} and state.final_blend is not None:
+            return raw_score, state.final_blend
+        if state.mode != "EXPERIENCE":
+            return raw_score, 0.0
         preview_threshold = max(state.threshold * PREVIEW_BLEND_THRESHOLD_RATIO, 1.0)
         normalized = clamp(raw_score / preview_threshold, 0.0, 1.0)
         if normalized <= PREVIEW_BLEND_DEADBAND:
@@ -866,6 +880,10 @@ def sync_arduino_for_mode(mode: str) -> None:
         logger.info("进入 EXPERIENCE，启动 Arduino 呼吸节奏")
         serial_bridge.enqueue(START_COMMAND)
         return
+    if mode == "ENDING":
+        logger.info("体验结束，触发 Arduino 双短震")
+        serial_bridge.enqueue(DOUBLE_PULSE_COMMAND)
+        return
     if mode in {"TRANSITION", "WAITING", "SUMMARY", "IDLE"}:
         logger.info("离开体验阶段，停止 Arduino 呼吸节奏")
         serial_bridge.enqueue(RESET_COMMAND)
@@ -880,8 +898,32 @@ def clear_blend_accumulator() -> None:
 
 
 def schedule_experience_tail(flow_revision: int) -> None:
-    schedule_state_change(EXPERIENCE_DURATION_SEC, "EXPERIENCE", "SUMMARY", flow_revision)
-    schedule_state_change(EXPERIENCE_DURATION_SEC + SUMMARY_DURATION_SEC, "SUMMARY", "IDLE", flow_revision)
+    schedule_state_change(EXPERIENCE_DURATION_SEC, "EXPERIENCE", "ENDING", flow_revision)
+    schedule_state_change(EXPERIENCE_DURATION_SEC + ENDING_DURATION_SEC, "ENDING", "SUMMARY", flow_revision)
+    schedule_state_change(
+        EXPERIENCE_DURATION_SEC + ENDING_DURATION_SEC + SUMMARY_DURATION_SEC,
+        "SUMMARY",
+        "IDLE",
+        flow_revision,
+    )
+
+
+def schedule_guide_motor_start(flow_revision: int) -> None:
+    session_id = state.session.session_id
+
+    def _task() -> None:
+        socketio.sleep(GUIDE_MOTOR_START_SEC)
+        with state.lock:
+            if (
+                state.session.session_id != session_id
+                or state.mode != "GUIDE"
+                or state.flow_revision != flow_revision
+            ):
+                return
+        logger.info("GUIDE 呼吸引导段开始，启动 Arduino 振动")
+        serial_bridge.enqueue(START_COMMAND)
+
+    socketio.start_background_task(_task)
 
 
 def schedule_state_change(delay_sec: float, expected_mode: str, next_mode: str, flow_revision: int) -> None:
@@ -900,8 +942,12 @@ def schedule_state_change(delay_sec: float, expected_mode: str, next_mode: str, 
             next_revision = flow_revision
             if next_mode == "EXPERIENCE":
                 state.flow_revision += 1
+                state.final_blend = None
                 clear_blend_accumulator()
                 next_revision = state.flow_revision
+            elif next_mode == "ENDING":
+                state.final_blend = clamp(state.sensor.blend, 0.0, 1.0)
+                state.sensor.blend = state.final_blend
             elif next_mode == "IDLE":
                 state.reset_for_new_session()
         sync_arduino_for_mode(next_mode)
@@ -926,6 +972,7 @@ def start_guide_flow() -> dict[str, Any]:
         snapshot = state.snapshot()
 
     emit_state_change(mode="START_GUIDE")
+    schedule_guide_motor_start(flow_revision)
     schedule_state_change(GUIDE_DURATION_SEC, "GUIDE", "EXPERIENCE", flow_revision)
     return snapshot
 
@@ -936,6 +983,7 @@ def skip_guide_flow() -> dict[str, Any]:
             return state.snapshot()
         state.mode = "EXPERIENCE"
         state.flow_revision += 1
+        state.final_blend = None
         clear_blend_accumulator()
         flow_revision = state.flow_revision
         snapshot = state.snapshot()
@@ -950,6 +998,8 @@ def reset_system() -> dict[str, Any]:
     with state.lock:
         state.reset_for_new_session()
         snapshot = state.snapshot()
+    serial_bridge.enqueue(MOTOR_OFF_COMMAND)
+    serial_bridge.enqueue(RESET_COMMAND)
     serial_bridge.enqueue(RESET_COMMAND)
     socketio.emit("reset", {"session_id": snapshot["session_id"]})
     emit_state_change(mode="IDLE")
@@ -1118,6 +1168,10 @@ def parse_xunfei_text(payload: dict[str, Any]) -> tuple[str, bool]:
     return "".join(words), int(data.get("status", 0)) == 2
 
 
+def asr_debug(label: str, **detail: Any) -> None:
+    logger.info("[asr-debug] %s %s", label, detail)
+
+
 class XunfeiIATSession:
     def __init__(self, sid: str) -> None:
         self.sid = sid
@@ -1125,6 +1179,9 @@ class XunfeiIATSession:
         self.closed = threading.Event()
         self.ws: Any = None
         self.text = ""
+        self.queued_frames = 0
+        self.sent_frames = 0
+        self.received_messages = 0
         self.worker = threading.Thread(target=self.run, daemon=True)
 
     def start(self) -> None:
@@ -1132,10 +1189,14 @@ class XunfeiIATSession:
 
     def enqueue_audio(self, audio_b64: str) -> None:
         if not self.closed.is_set() and audio_b64:
+            self.queued_frames += 1
+            if self.queued_frames <= 3 or self.queued_frames % 20 == 0:
+                asr_debug("frontend_audio_queued", sid=self.sid, queued_frames=self.queued_frames, bytes=len(audio_b64))
             self.frames.put(audio_b64)
 
     def stop(self) -> None:
         if not self.closed.is_set():
+            asr_debug("frontend_stop", sid=self.sid, queued_frames=self.queued_frames, sent_frames=self.sent_frames)
             self.frames.put(None)
 
     def emit_error(self, message: str) -> None:
@@ -1160,6 +1221,10 @@ class XunfeiIATSession:
                 "vad_eos": 2000,
             }
         self.ws.send(json.dumps(frame, ensure_ascii=False))
+        if status != 2:
+            self.sent_frames += 1
+        if status == 0 or status == 2 or self.sent_frames <= 3 or self.sent_frames % 20 == 0:
+            asr_debug("xunfei_frame_sent", sid=self.sid, status=status, sent_frames=self.sent_frames, audio_bytes=len(audio_b64))
 
     def receive_loop(self) -> None:
         while not self.closed.is_set():
@@ -1172,13 +1237,27 @@ class XunfeiIATSession:
             try:
                 payload = json.loads(message)
             except json.JSONDecodeError:
+                asr_debug("xunfei_bad_json", sid=self.sid, raw=message[:180])
                 continue
+            self.received_messages += 1
             code = int(payload.get("code", 0))
+            data = payload.get("data") or {}
+            result = data.get("result") or {}
+            asr_debug(
+                "xunfei_payload",
+                sid=self.sid,
+                message_count=self.received_messages,
+                code=code,
+                status=data.get("status"),
+                has_result=bool(result),
+                message=payload.get("message"),
+            )
             if code != 0:
                 self.emit_error(str(payload.get("message", "讯飞识别失败")))
                 self.closed.set()
                 return
             piece, is_final = parse_xunfei_text(payload)
+            asr_debug("xunfei_text", sid=self.sid, piece=piece, accumulated=self.text + piece, final=is_final)
             if piece:
                 self.text += piece
                 socketio.emit("asr_result", {"text": self.text, "piece": piece, "final": is_final}, to=self.sid)
@@ -1197,11 +1276,13 @@ class XunfeiIATSession:
             self.closed.set()
             return
         try:
+            asr_debug("session_connecting", sid=self.sid)
             self.ws = websocket.create_connection(
                 build_xunfei_iat_url(),
                 timeout=8,
                 sslopt={"cert_reqs": ssl.CERT_NONE},
             )
+            asr_debug("session_connected", sid=self.sid)
             receiver = threading.Thread(target=self.receive_loop, daemon=True)
             receiver.start()
             first = True
@@ -1214,6 +1295,7 @@ class XunfeiIATSession:
                 first = False
                 time.sleep(ASR_FRAME_INTERVAL_SEC)
             receiver.join(timeout=3)
+            asr_debug("session_finished", sid=self.sid, text=self.text, sent_frames=self.sent_frames, received_messages=self.received_messages)
         except Exception as exc:
             logger.warning("讯飞 IAT 会话失败：%s", exc)
             self.emit_error("讯飞语音识别连接失败")
@@ -1487,7 +1569,9 @@ def on_asr_start(data: dict[str, Any] | None = None) -> None:
     _ = data
     old = asr_sessions.pop(request.sid, None)
     if old:
+        asr_debug("socket_start_replacing_old", sid=request.sid)
         old.stop()
+    asr_debug("socket_start", sid=request.sid)
     session = XunfeiIATSession(request.sid)
     asr_sessions[request.sid] = session
     session.start()
@@ -1497,11 +1581,14 @@ def on_asr_start(data: dict[str, Any] | None = None) -> None:
 @socketio.on("asr_audio")
 def on_asr_audio(data: dict[str, Any] | None = None) -> None:
     if not data:
+        asr_debug("socket_audio_empty", sid=request.sid)
         return
     audio = str(data.get("audio", ""))
     session = asr_sessions.get(request.sid)
     if session:
         session.enqueue_audio(audio)
+    else:
+        asr_debug("socket_audio_without_session", sid=request.sid, bytes=len(audio))
 
 
 @socketio.on("asr_stop")
@@ -1509,6 +1596,8 @@ def on_asr_stop() -> None:
     session = asr_sessions.get(request.sid)
     if session:
         session.stop()
+    else:
+        asr_debug("socket_stop_without_session", sid=request.sid)
 
 
 @socketio.on("disconnect")
@@ -1516,6 +1605,11 @@ def on_disconnect() -> None:
     session = asr_sessions.pop(request.sid, None)
     if session:
         session.stop()
+    with state.lock:
+        should_reset = state.mode in {"GUIDE", "EXPERIENCE", "ENDING"}
+    if should_reset:
+        logger.info("前端断开，自动重置并停止 Arduino")
+        reset_system()
 
 
 def main() -> None:

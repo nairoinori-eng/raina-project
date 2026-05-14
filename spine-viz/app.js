@@ -67,6 +67,7 @@ const N_DFULL = N_DIFF + N_GLOW;       // diffuseGeo 总量
 const N_SPINE_HALO = 11000;            // 脊柱周围金紫弥散尘雾（阶段一示意图增强层）
 
 const N_AMB   = 300;                   // Layer E
+const N_GOOD_BREATH_RAIN = 2200;       // 正确呼吸反馈：细金色粒子雨
 
 
 // ============================================================
@@ -1061,6 +1062,60 @@ const spinePoints = new THREE.Points(spineGeo, spineMat);
 spinePoints.frustumCulled = false;
 spineGroup.add(spinePoints);
 
+function setSpineMaterialBlend(mat, blend) {
+  const b = Math.max(0, Math.min(1, blend));
+  const colorBlend = remapDwellAsym(b, 0.3, 0.1);
+  mat.uniforms.uBlend.value = b;
+  mat.uniforms.uPhase.value = colorBlend * 2;
+  mat.uniforms.uColor.value.copy(getBlendColor(colorBlend));
+  mat.uniforms.uHighlight.value.copy(getHighlightColor(colorBlend));
+  mat.uniforms.uAccent1.value.copy(getAccent1Color(colorBlend));
+  mat.uniforms.uAccent2.value.copy(getAccent2Color(colorBlend));
+}
+
+function createSummarySpineMaterial(initialBlend = 0) {
+  const mat = spineMat.clone();
+  mat.uniforms = THREE.UniformsUtils.clone(spineMat.uniforms);
+  mat.transparent = true;
+  mat.blending = THREE.AdditiveBlending;
+  mat.depthWrite = false;
+  mat.uniforms.uFormation.value = 1.0;
+  mat.uniforms.uGuideAlpha.value = 1.0;
+  mat.uniforms.uSegmentHighlight.value = 0.0;
+  mat.uniforms.uVoiceMode.value = 0.0;
+  mat.uniforms.uVoiceStrength.value = 0.0;
+  mat.uniforms.uVoiceLevel.value = 0.0;
+  mat.uniforms.uVoiceReplyMorph.value = 1.0;
+  mat.uniforms.uVoiceReturning.value = 0.0;
+  mat.uniforms.uBreatheExpand.value = 1.0;
+  mat.uniforms.uBreathe.value = 0.0;
+  mat.uniforms.uAlphaBoost.value = 2.3;
+  setSpineMaterialBlend(mat, initialBlend);
+  return mat;
+}
+
+const summarySpineGroup = new THREE.Group();
+summarySpineGroup.visible = false;
+scene.add(summarySpineGroup);
+
+const summaryBeforeGroup = new THREE.Group();
+const summaryAfterGroup = new THREE.Group();
+const summaryBeforeMat = createSummarySpineMaterial(0);
+const summaryAfterMat = createSummarySpineMaterial(0);
+const summaryBeforeSpine = new THREE.Points(spineGeo, summaryBeforeMat);
+const summaryAfterSpine = new THREE.Points(spineGeo, summaryAfterMat);
+summaryBeforeSpine.frustumCulled = false;
+summaryAfterSpine.frustumCulled = false;
+summaryBeforeGroup.add(summaryBeforeSpine);
+summaryAfterGroup.add(summaryAfterSpine);
+summaryBeforeGroup.position.set(-2.36, 0.34, 0.0);
+summaryAfterGroup.position.set(2.36, 0.34, 0.0);
+summaryBeforeGroup.scale.setScalar(0.76);
+summaryAfterGroup.scale.setScalar(0.76);
+summaryBeforeGroup.rotation.y = -0.18;
+summaryAfterGroup.rotation.y = 0.18;
+summarySpineGroup.add(summaryBeforeGroup, summaryAfterGroup);
+
 class SpineVoiceController {
   constructor() {
     this.level = 0;
@@ -1070,6 +1125,7 @@ class SpineVoiceController {
     this.replyUntil = 0;
     this.replyMorph = 1;
     this.returning = false;
+    this.allowReturnMorph = false;
     this.textCanvas = document.createElement('canvas');
     this.textCanvas.width = 1600;
     this.textCanvas.height = 620;
@@ -1092,7 +1148,8 @@ class SpineVoiceController {
     const cleanText = String(text || '').trim();
     this.mode = 'reply';
     this.returning = false;
-    const defaultDuration = Math.max(3.6, Math.min(5.8, 3.0 + cleanText.length * 0.045));
+    this.allowReturnMorph = !!options.allowReturnMorph;
+    const defaultDuration = Math.max(2.4, Math.min(4.1, 2.15 + cleanText.length * 0.032));
     this.replyUntil = nowSec + (Number.isFinite(options.durationSec) ? options.durationSec : defaultDuration);
     this.replyMorph = 0;
     this.targetStrength = 1;
@@ -1104,7 +1161,7 @@ class SpineVoiceController {
   }
 
   clearReply() {
-    if (this.mode === 'reply' && !this.returning) {
+    if (this.mode === 'reply' && !this.returning && this.allowReturnMorph) {
       this.mode = 'returning';
       this.returning = true;
       this.replyUntil = 0;
@@ -1118,16 +1175,42 @@ class SpineVoiceController {
     this._finishReplyReturn();
   }
 
+  resetVisual({ keepListening = false } = {}) {
+    this.mode = keepListening ? 'wave' : 'idle';
+    this.returning = false;
+    this.allowReturnMorph = false;
+    this.replyUntil = 0;
+    this.targetStrength = keepListening ? 1 : 0;
+    this.strength = keepListening ? Math.max(this.strength, 0.55) : 0;
+    this.replySamples = null;
+    this.replyMorph = 0;
+    this.lineCount = 0;
+    this._clearVisibleAnswerCanvas();
+    this._clearTextTargets();
+    overlays.setAIReply();
+    overlays.setVoiceTranscript('');
+    spineMat.uniforms.uVoiceMode.value = keepListening ? 1 : 0;
+    spineMat.uniforms.uVoiceStrength.value = this.strength;
+    spineMat.uniforms.uVoiceReplyMorph.value = 0;
+    spineMat.uniforms.uVoiceReturning.value = 0;
+    if (!keepListening) spineMat.uniforms.uVoiceLevel.value = 0;
+  }
+
   _finishReplyReturn() {
     this.mode = 'idle';
     this.returning = false;
+    this.allowReturnMorph = false;
     this.replyUntil = 0;
     this.targetStrength = 0;
     this.replySamples = null;
     this.replyMorph = 0;
+    this.strength = 0;
     this._clearVisibleAnswerCanvas();
+    this._clearTextTargets();
     overlays.setAIReply();
+    overlays.setVoiceTranscript('');
     spineMat.uniforms.uVoiceMode.value = 0;
+    spineMat.uniforms.uVoiceStrength.value = 0;
     spineMat.uniforms.uVoiceReplyMorph.value = 0;
     spineMat.uniforms.uVoiceReturning.value = 0;
   }
@@ -1137,11 +1220,18 @@ class SpineVoiceController {
   }
 
   _clearVisibleAnswerCanvas() {
+    const field = document.querySelector('.intro-answer-field');
+    if (field) field.classList.remove('vis', 'loading');
     const canvas = this._getVisibleAnswerCanvas();
     const ctx = canvas?.getContext('2d');
     if (!canvas || !ctx) return;
     canvas.style.opacity = '0';
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+  }
+
+  _clearTextTargets() {
+    this.targetAttr.array.fill(0);
+    this.targetAttr.needsUpdate = true;
   }
 
   _setVisibleAnswerOpacity(value) {
@@ -1288,6 +1378,11 @@ class SpineVoiceController {
   }
 
   update(t, { visible, listening, streaming } = {}) {
+    if (this.mode === 'reply' && t >= this.replyUntil && !this.allowReturnMorph) {
+      this.resetVisual({ keepListening: listening || streaming });
+      return;
+    }
+
     const active = visible && currentMode === 'IDLE' && (!voiceTriggered || this.mode === 'reply' || this.mode === 'returning');
     if (!active) {
       this.targetStrength = 0;
@@ -1307,10 +1402,10 @@ class SpineVoiceController {
       spineMat.uniforms.uVoiceMode.value = 0;
     }
 
-    if (this.mode === 'reply' && t >= this.replyUntil) this.clearReply();
+    if (this.mode === 'reply' && t >= this.replyUntil) this.resetVisual({ keepListening: voiceListening });
     this.strength += (this.targetStrength - this.strength) * 0.055;
     if (this.mode === 'reply') this.replyMorph = Math.min(1, this.replyMorph + 0.026);
-    else if (this.mode === 'returning') this.replyMorph += (0 - this.replyMorph) * 0.010;
+    else if (this.mode === 'returning') this.replyMorph += (0 - this.replyMorph) * 0.070;
     else this.replyMorph += (0 - this.replyMorph) * 0.16;
     spineMat.uniforms.uVoiceStrength.value = this.strength;
     spineMat.uniforms.uVoiceLevel.value = this.level;
@@ -3862,6 +3957,152 @@ scene.add(new THREE.Points(ambGeo, ambMat));
 
 
 // ============================================================
+// 9b. 正确呼吸反馈（金色粒子雨）
+// ============================================================
+
+const goodRainGeo = new THREE.BufferGeometry();
+const goodRainPositions = new Float32Array(N_GOOD_BREATH_RAIN * 3);
+const goodRainSizes = new Float32Array(N_GOOD_BREATH_RAIN);
+const goodRainAlphas = new Float32Array(N_GOOD_BREATH_RAIN);
+const goodRainColorVars = new Float32Array(N_GOOD_BREATH_RAIN);
+const goodRainSeedX = new Float32Array(N_GOOD_BREATH_RAIN);
+const goodRainSeedY = new Float32Array(N_GOOD_BREATH_RAIN);
+const goodRainSeedZ = new Float32Array(N_GOOD_BREATH_RAIN);
+const goodRainSpeed = new Float32Array(N_GOOD_BREATH_RAIN);
+const goodRainDrift = new Float32Array(N_GOOD_BREATH_RAIN);
+const goodRainPhase = new Float32Array(N_GOOD_BREATH_RAIN);
+
+for (let i = 0; i < N_GOOD_BREATH_RAIN; i++) {
+  goodRainSeedX[i] = (Math.random() - 0.5) * 8.8;
+  goodRainSeedY[i] = 2.45 + Math.random() * 1.15;
+  goodRainSeedZ[i] = -1.10 - Math.random() * 0.85;
+  goodRainSpeed[i] = 0.86 + Math.random() * 0.28;
+  goodRainDrift[i] = (Math.random() - 0.5) * 0.34;
+  goodRainPhase[i] = Math.random() * Math.PI * 2;
+  goodRainColorVars[i] = Math.random() * 2.0 - 1.0;
+  goodRainSizes[i] = 0.045 + Math.random() * 0.085;
+  goodRainPositions[i * 3] = goodRainSeedX[i];
+  goodRainPositions[i * 3 + 1] = 5.0;
+  goodRainPositions[i * 3 + 2] = goodRainSeedZ[i];
+}
+goodRainGeo.setAttribute('position', new THREE.BufferAttribute(goodRainPositions, 3));
+goodRainGeo.setAttribute('aSize', new THREE.BufferAttribute(goodRainSizes, 1));
+goodRainGeo.setAttribute('aAlpha', new THREE.BufferAttribute(goodRainAlphas, 1));
+goodRainGeo.setAttribute('aColorVar', new THREE.BufferAttribute(goodRainColorVars, 1));
+
+const goodRainMat = new THREE.ShaderMaterial({
+  vertexShader,
+  fragmentShader,
+  uniforms: {
+    uPalette: { value: [
+      new THREE.Color(0x4A3520),
+      new THREE.Color(0x7A5630),
+      new THREE.Color(0xB88945),
+      new THREE.Color(0xD8A85A),
+      new THREE.Color(0xFFE39A),
+    ] },
+    uAlphaBoost: { value: Math.pow(4.0 / 1.5, 2.0) * 1.22 },
+  },
+  transparent: true,
+  blending: THREE.AdditiveBlending,
+  depthWrite: false,
+  depthTest: true,
+});
+
+const goodRainPoints = new THREE.Points(goodRainGeo, goodRainMat);
+goodRainPoints.frustumCulled = false;
+goodRainPoints.visible = false;
+scene.add(goodRainPoints);
+
+let goodRainStartTime = -999;
+let goodRainActive = false;
+let goodBreathLastTriggerAt = -999;
+let goodBreathPrevRaw = 0;
+let goodBreathRecentLow = 1;
+const GOOD_BREATH_RAIN_SEC = 4.6;
+const GOOD_BREATH_RAIN_EMIT_SEC = 2.35;
+const GOOD_BREATH_COOLDOWN_SEC = 2.4;
+const GOOD_BREATH_MIN_RAW = 0.11;
+const GOOD_BREATH_RISE = 0.055;
+
+function triggerGoodBreathFeedback(t) {
+  goodRainStartTime = t;
+  goodRainActive = true;
+  goodBreathLastTriggerAt = t;
+  goodRainPoints.visible = true;
+  goodBreathText.classList.remove('vis');
+  void goodBreathText.offsetWidth;
+  goodBreathText.classList.add('vis');
+}
+
+function updateGoodBreathFeedback(t) {
+  if (currentMode !== 'EXPERIENCE') {
+    goodRainActive = false;
+    goodRainPoints.visible = false;
+    goodBreathText.classList.remove('vis');
+    return;
+  }
+  if (!goodRainActive) {
+    goodRainPoints.visible = false;
+    return;
+  }
+
+  const age = t - goodRainStartTime;
+  const life = Math.max(0, Math.min(1, age / GOOD_BREATH_RAIN_SEC));
+  const fadeIn = smoothstep(0.0, 0.16, life);
+  const fadeOut = 1.0 - smoothstep(0.82, 1.0, life);
+  const alphaBase = fadeIn * fadeOut * 0.78;
+  const referenceZ = -1.45;
+  const viewHalfH = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)) * Math.max(0.1, camera.position.z - referenceZ);
+  const viewHalfW = viewHalfH * camera.aspect;
+  const startY = viewHalfH + 0.55;
+  const endY = -viewHalfH - 0.75;
+  const fallDistance = startY - endY;
+
+  for (let i = 0; i < N_GOOD_BREATH_RAIN; i++) {
+    const delay = ((i % 257) / 257) * GOOD_BREATH_RAIN_EMIT_SEC;
+    const localAge = Math.max(0, age - delay);
+    const localLife = Math.max(0, Math.min(1, localAge / 2.35));
+    const xBase = (goodRainSeedX[i] / 4.4) * viewHalfW;
+    const sway = Math.sin(t * 0.72 + goodRainPhase[i]) * 0.075;
+    const slant = goodRainDrift[i] * (localAge * 0.82 + localLife * 0.55);
+    goodRainPositions[i * 3] = xBase + slant + sway;
+    goodRainPositions[i * 3 + 1] = startY - fallDistance * localLife * goodRainSpeed[i];
+    goodRainPositions[i * 3 + 2] = goodRainSeedZ[i] - Math.sin(t * 0.42 + goodRainPhase[i]) * 0.11 - localLife * 0.08;
+    const twinkle = 0.78 + 0.22 * Math.sin(t * 2.7 + goodRainPhase[i] * 2.3);
+    goodRainAlphas[i] = alphaBase * twinkle * (localAge > 0 ? 1 : 0);
+  }
+  goodRainGeo.attributes.position.needsUpdate = true;
+  goodRainGeo.attributes.aAlpha.needsUpdate = true;
+
+  if (age > GOOD_BREATH_RAIN_SEC) {
+    goodRainActive = false;
+    goodRainPoints.visible = false;
+    goodBreathText.classList.remove('vis');
+    goodRainAlphas.fill(0);
+    goodRainGeo.attributes.aAlpha.needsUpdate = true;
+  }
+}
+
+function considerGoodBreathFeedback(data) {
+  const raw = Math.max(0, Math.min(1, Number(data?.raw_blend) || 0));
+  const nowSec = time;
+  goodBreathRecentLow = Math.min(raw, goodBreathRecentLow + 0.006);
+  const riseFromLow = raw - goodBreathRecentLow;
+  const frameRise = raw - goodBreathPrevRaw;
+  if (
+    raw > GOOD_BREATH_MIN_RAW &&
+    (riseFromLow > GOOD_BREATH_RISE || frameRise > GOOD_BREATH_RISE * 0.72) &&
+    nowSec - goodBreathLastTriggerAt > GOOD_BREATH_COOLDOWN_SEC
+  ) {
+    triggerGoodBreathFeedback(nowSec);
+    goodBreathRecentLow = raw;
+  }
+  goodBreathPrevRaw = raw;
+}
+
+
+// ============================================================
 // 10. 后处理
 // ============================================================
 
@@ -4171,13 +4412,17 @@ scene.add(expPacerPoints);
 // 11. 状态 / blend 控制 + 引导动画状态
 // ============================================================
 
-let currentMode   = 'IDLE';   // IDLE → GUIDE → EXPERIENCE → SUMMARY
+let currentMode   = 'IDLE';   // IDLE → GUIDE → EXPERIENCE → ENDING → SUMMARY
 let experienceStartTime = 0;  // EXPERIENCE 进入时刻（用于呼吸耦合渐入）
 let targetBlend   = 0.0;
 let smoothBlend   = 0.0;
 let blendVelocity = 0.0;
 const WAVE = 0.28;
-const SUMMARY_DURATION_SEC = 60;
+const ENDING_DURATION_SEC = 4.2;
+const SUMMARY_DURATION_SEC = 30;
+let endingStartTime = 0;
+let endingFinalBlend = 0;
+let endingFrozenRotY = 0;
 let summaryStartTime = 0;
 let summaryFinalBlend = 0;
 let summaryReturnTimer = null;
@@ -4215,6 +4460,9 @@ const overlays = new IntroOverlays({
   },
 });
 
+const endingCurtain = document.createElement('div');
+endingCurtain.id = 'ending-curtain';
+document.body.appendChild(endingCurtain);
 
 // ============================================================
 // 11b. 引导动画控制函数
@@ -4227,6 +4475,7 @@ function startGuide() {
     voiceTransitionTimer = null;
   }
   voiceTriggered = true;
+  idleVoiceViz.resetVisual();
   stopIdleVoiceRecognition();
   currentMode = 'GUIDE';
   guideStartTime = performance.now() / 1000;
@@ -4235,9 +4484,29 @@ function startGuide() {
   console.log('[raina] 60s 认知引导开始');
 }
 
+function requestGuideStart() {
+  if (socket?.connected) {
+    socket.emit('button_press');
+    return;
+  }
+  startGuide();
+}
+
+function requestSkipGuide() {
+  if (socket?.connected) {
+    socket.emit('skip_guide');
+    return;
+  }
+  enterExperience();
+}
+
 function enterExperience() {
   currentMode = 'EXPERIENCE';
   experienceStartTime = time;
+  goodBreathPrevRaw = 0;
+  goodBreathRecentLow = 1;
+  goodBreathLastTriggerAt = time + 1.2;
+  idleVoiceViz.resetVisual();
   overlays.clearAll();
   // 确保 formation = 1, guideAlpha = 1
   spineMat.uniforms.uFormation.value  = 1.0;
@@ -4272,24 +4541,6 @@ function enterExperience() {
   console.log('[raina] 呼吸体验阶段开始');
 }
 
-function summaryPoint(p, blend = 0) {
-  const x = p.x * (1 - blend);
-  return {
-    x: 140 + x * 78,
-    y: 260 - p.y * 104,
-  };
-}
-
-function buildSummarySpineShape(blend = 0) {
-  const pts = SPINE_CURVED.map(p => summaryPoint(p, blend));
-  const path = pts.map((p, i) => `${i ? 'L' : 'M'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
-  const dots = pts.map((p, i) => {
-    const r = Math.max(4.8, 8.8 - Math.abs(i - 6) * 0.35);
-    return `<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(1)}"></circle>`;
-  }).join('');
-  return { path, dots };
-}
-
 async function loadSummaryCopy(finalBlend) {
   if (summaryCopyRequested) return;
   summaryCopyRequested = true;
@@ -4314,11 +4565,46 @@ function returnToIdleFromSummary() {
     clearTimeout(summaryReturnTimer);
     summaryReturnTimer = null;
   }
-  socket.emit('admin_reset');
+  requestHardReset();
+}
+
+function notifyBackendReset() {
+  try {
+    if (socket?.connected) socket.emit('admin_reset');
+  } catch (e) {}
+  try {
+    const url = 'http://localhost:5000/reset';
+    if (navigator.sendBeacon) {
+      navigator.sendBeacon(url, new Blob(['{}'], { type: 'text/plain' }));
+    } else {
+      fetch(url, { method: 'POST', keepalive: true, mode: 'no-cors' }).catch(() => {});
+    }
+  } catch (e) {}
+}
+
+function requestHardReset() {
+  notifyBackendReset();
   resetToIdle();
 }
 
-function enterSummary(finalBlend = smoothBlend, { preview = false } = {}) {
+function enterEnding(finalBlend = smoothBlend) {
+  endingFinalBlend = Math.max(0, Math.min(1, Number.isFinite(finalBlend) ? finalBlend : smoothBlend));
+  currentMode = 'ENDING';
+  endingStartTime = time;
+  endingFrozenRotY = spineGroup.rotation.y;
+  targetBlend = endingFinalBlend;
+  smoothBlend = endingFinalBlend;
+  blendVelocity = 0;
+  overlays.clearAll();
+  overlays.hideIdleUI();
+  if (breathOverlayEl) breathOverlayEl.classList.remove('vis');
+  endingCurtain.classList.add('vis');
+  endingCurtain.style.opacity = '0';
+  updateDebugUI();
+  console.log('[raina] 体验结束过场开始', endingFinalBlend);
+}
+
+function enterSummary(finalBlend = smoothBlend, { preview = false, fromEnding = false } = {}) {
   summaryFinalBlend = Math.max(0, Math.min(1, Number.isFinite(finalBlend) ? finalBlend : smoothBlend));
   currentMode = 'SUMMARY';
   summaryPreviewMode = !!preview;
@@ -4327,19 +4613,23 @@ function enterSummary(finalBlend = smoothBlend, { preview = false } = {}) {
   targetBlend = summaryFinalBlend;
   smoothBlend = summaryFinalBlend;
   blendVelocity = 0;
+  idleVoiceViz.resetVisual();
   stopIdleVoiceRecognition();
   overlays.clearAll();
   overlays.hideIdleUI();
-
-  const before = buildSummarySpineShape(0);
-  const after = buildSummarySpineShape(summaryFinalBlend);
-  overlays.showSummary({
-    blend: summaryFinalBlend,
-    beforePath: before.path,
-    afterPath: after.path,
-    beforeDots: before.dots,
-    afterDots: after.dots,
-  });
+  summarySpineGroup.visible = true;
+  setSpineMaterialBlend(summaryBeforeMat, 0);
+  setSpineMaterialBlend(summaryAfterMat, summaryFinalBlend);
+  overlays.showSummary({ blend: summaryFinalBlend });
+  if (fromEnding) {
+    endingCurtain.classList.add('vis');
+    endingCurtain.style.opacity = '0.86';
+    requestAnimationFrame(() => { endingCurtain.style.opacity = '0'; });
+    window.setTimeout(() => endingCurtain.classList.remove('vis'), 1700);
+  } else {
+    endingCurtain.classList.remove('vis');
+    endingCurtain.style.opacity = '0';
+  }
   overlays.setSummaryCountdown(SUMMARY_DURATION_SEC);
   loadSummaryCopy(summaryFinalBlend);
 
@@ -4354,6 +4644,10 @@ function resetToIdle() {
   currentMode = 'IDLE';
   summaryPreviewMode = false;
   voiceTriggered = false;
+  goodRainActive = false;
+  goodRainPoints.visible = false;
+  goodBreathText.classList.remove('vis');
+  idleVoiceViz.resetVisual();
   if (summaryReturnTimer) {
     clearTimeout(summaryReturnTimer);
     summaryReturnTimer = null;
@@ -4362,11 +4656,14 @@ function resetToIdle() {
     clearTimeout(voiceTransitionTimer);
     voiceTransitionTimer = null;
   }
+  endingCurtain.classList.remove('vis');
+  endingCurtain.style.opacity = '0';
   targetBlend   = 0.0;
   smoothBlend   = 0.0;
   blendVelocity = 0.0;
   spineMat.uniforms.uFormation.value  = 0.0;
   spineMat.uniforms.uGuideAlpha.value = 1.0;
+  summarySpineGroup.visible = false;
   vineMat.uniforms.uFormation.value   = 0.0;
   leafPoints.visible = false;
   diffusePoints.visible = false;       // IDLE 隐藏弥散流（避免脊柱中轴线闪烁）
@@ -4444,12 +4741,15 @@ let voiceLastFinalText = '';
 let voiceLastFinalAt = 0;
 let voiceNoiseFloor = 0.012;
 let voiceCandidateStartedAt = 0;
+let voiceCandidateActiveMs = 0;
+let voiceCandidateLastActiveAt = 0;
 let voiceStreamStartedAt = 0;
 let voiceIgnoreFinalUntil = 0;
 let voiceCooldownUntil = 0;
 const VOICE_MIN_START_RMS = 0.038;
 const VOICE_NOISE_START_MULT = 3.0;
-const VOICE_START_HOLD_MS = 380;
+const VOICE_START_HOLD_MS = 320;
+const VOICE_START_DIP_GRACE_MS = 520;
 const VOICE_RMS_STOP = 0.018;
 const VOICE_NOISE_STOP_MULT = 1.65;
 const VOICE_SILENCE_MS = 1250;
@@ -4461,6 +4761,13 @@ const VOICE_FORCE_FINAL_AFTER_TEXT_MS = 2200;
 const VOICE_MAX_STREAM_MS = 7000;
 const VOICE_START_TRANSITION_TEXT = '我听见了。把注意力交给呼吸，接下来，我们慢慢进入身体内部。';
 const VOICE_START_TRANSITION_SEC = 4.2;
+const VOICE_DEBUG = true;
+let voiceLastDebugFrameAt = 0;
+
+function voiceDebug(label, detail = {}) {
+  if (!VOICE_DEBUG) return;
+  console.log(`[voice-debug] ${label}`, detail);
+}
 
 function pushVoiceBandsToShader() {
   for (let i = 0; i < 8; i++) {
@@ -4542,9 +4849,19 @@ function floatTo16kPCMBase64(float32, inputRate) {
 }
 
 function startAsrStream() {
-  if (voiceStreaming || !['IDLE', 'SUMMARY'].includes(currentMode)) return;
+  if (voiceStreaming || !['IDLE', 'SUMMARY'].includes(currentMode)) {
+    voiceDebug('asr_start_blocked', { voiceStreaming, currentMode });
+    return;
+  }
   const now = performance.now();
-  if (now < voiceCooldownUntil || voiceReplyPending) return;
+  if (now < voiceCooldownUntil || voiceReplyPending) {
+    voiceDebug('asr_start_blocked_cooldown', {
+      cooldownLeftMs: Math.max(0, Math.round(voiceCooldownUntil - now)),
+      voiceReplyPending,
+    });
+    return;
+  }
+  if (currentMode === 'IDLE') idleVoiceViz.resetVisual({ keepListening: true });
   voiceStreaming = true;
   voiceAsrText = '';
   voiceLastAsrText = '';
@@ -4554,10 +4871,10 @@ function startAsrStream() {
   voiceStreamStartedAt = now;
   voiceLastAsrPieceAt = now;
   voiceIgnoreFinalUntil = 0;
-  idleVoiceViz.clearReply();
-  overlays.setVoiceStatus({ status: '正在识别', transcript: '' });
+  overlays.setVoiceStatus({ status: '正在识别', transcript: '正在听…' });
   socket.emit('asr_start');
   for (const frame of voicePreRollFrames) socket.emit('asr_audio', { audio: frame });
+  voiceDebug('asr_start', { currentMode, preRollFrames: voicePreRollFrames.length });
 }
 
 function stopAsrStream({ discard = false } = {}) {
@@ -4567,9 +4884,17 @@ function stopAsrStream({ discard = false } = {}) {
   else voiceCooldownUntil = Math.max(voiceCooldownUntil, now + 450);
   voiceStreaming = false;
   voiceCandidateStartedAt = 0;
+  voiceCandidateActiveMs = 0;
+  voiceCandidateLastActiveAt = 0;
   voiceSilenceStartedAt = 0;
   socket.emit('asr_stop');
   if (!voiceCommittedThisStream) overlays.setVoiceStatus({ status: '麦克风已开启，正在聆听', transcript: undefined });
+  voiceDebug('asr_stop', {
+    discard,
+    committed: voiceCommittedThisStream,
+    text: voiceAsrText,
+    streamAgeMs: Math.round(now - voiceStreamStartedAt),
+  });
 }
 
 function processVoiceFrame(input, sampleRate) {
@@ -4585,17 +4910,59 @@ function processVoiceFrame(input, sampleRate) {
   if (quietEnoughToLearn) voiceNoiseFloor = voiceNoiseFloor * 0.985 + rms * 0.015;
   const startThreshold = Math.max(VOICE_MIN_START_RMS, voiceNoiseFloor * VOICE_NOISE_START_MULT + 0.012);
   const stopThreshold = Math.max(VOICE_RMS_STOP, voiceNoiseFloor * VOICE_NOISE_STOP_MULT + 0.006);
+  if (now - voiceLastDebugFrameAt > 700 && (voiceStreaming || rms > startThreshold * 0.72 || voiceCandidateStartedAt)) {
+    voiceLastDebugFrameAt = now;
+    voiceDebug('audio_frame', {
+      rms: Number(rms.toFixed(4)),
+      startThreshold: Number(startThreshold.toFixed(4)),
+      stopThreshold: Number(stopThreshold.toFixed(4)),
+      noiseFloor: Number(voiceNoiseFloor.toFixed(4)),
+      streaming: voiceStreaming,
+      candidateMs: voiceCandidateStartedAt ? Math.round(now - voiceCandidateStartedAt) : 0,
+      candidateActiveMs: Math.round(voiceCandidateActiveMs),
+      cooldownLeftMs: Math.max(0, Math.round(voiceCooldownUntil - now)),
+      replyPending: voiceReplyPending,
+    });
+  }
 
   if (!voiceStreaming) {
     if (now < voiceCooldownUntil || voiceReplyPending) {
+      if (voiceCandidateStartedAt) voiceDebug('candidate_reset_blocked', {
+        cooldownLeftMs: Math.max(0, Math.round(voiceCooldownUntil - now)),
+        voiceReplyPending,
+      });
       voiceCandidateStartedAt = 0;
+      voiceCandidateActiveMs = 0;
+      voiceCandidateLastActiveAt = 0;
       return;
     }
     if (rms > startThreshold) {
-      if (!voiceCandidateStartedAt) voiceCandidateStartedAt = now;
-      if (now - voiceCandidateStartedAt > VOICE_START_HOLD_MS) startAsrStream();
+      if (!voiceCandidateStartedAt) {
+        voiceCandidateStartedAt = now;
+        voiceCandidateActiveMs = 0;
+        voiceDebug('candidate_start', {
+          rms: Number(rms.toFixed(4)),
+          startThreshold: Number(startThreshold.toFixed(4)),
+        });
+      }
+      if (voiceCandidateLastActiveAt) {
+        voiceCandidateActiveMs += Math.min(120, now - voiceCandidateLastActiveAt);
+      }
+      voiceCandidateLastActiveAt = now;
+      if (voiceCandidateActiveMs > VOICE_START_HOLD_MS) startAsrStream();
     } else {
-      voiceCandidateStartedAt = 0;
+      const quietMs = voiceCandidateLastActiveAt ? now - voiceCandidateLastActiveAt : Infinity;
+      if (voiceCandidateStartedAt && quietMs > VOICE_START_DIP_GRACE_MS) {
+        voiceDebug('candidate_reset_quiet', {
+          rms: Number(rms.toFixed(4)),
+          startThreshold: Number(startThreshold.toFixed(4)),
+          activeMs: Math.round(voiceCandidateActiveMs),
+          quietMs: Math.round(quietMs),
+        });
+        voiceCandidateStartedAt = 0;
+        voiceCandidateActiveMs = 0;
+        voiceCandidateLastActiveAt = 0;
+      }
     }
   }
   if (voiceStreaming) {
@@ -4607,6 +4974,12 @@ function processVoiceFrame(input, sampleRate) {
     const textHasRunLongEnough = hasUsableText && voiceFirstAsrTextAt && now - voiceFirstAsrTextAt > VOICE_FORCE_FINAL_AFTER_TEXT_MS;
     if ((textHasSettled || textHasRunLongEnough) && submitRecognizedSpeech(voiceAsrText, { provisional: true })) return;
     if (textHasSettled || textHasRunLongEnough || streamAge > VOICE_MAX_STREAM_MS) {
+      voiceDebug('stream_force_stop', {
+        text: voiceAsrText,
+        textHasSettled,
+        textHasRunLongEnough,
+        streamAgeMs: Math.round(streamAge),
+      });
       stopAsrStream({ discard: !voiceAsrText });
       return;
     }
@@ -4614,6 +4987,11 @@ function processVoiceFrame(input, sampleRate) {
       if (!voiceSilenceStartedAt) voiceSilenceStartedAt = performance.now();
       if (performance.now() - voiceSilenceStartedAt > VOICE_SILENCE_MS) {
         const tooShort = performance.now() - voiceStreamStartedAt < VOICE_MIN_UTTERANCE_MS;
+        voiceDebug('stream_silence_stop', {
+          tooShort,
+          text: voiceAsrText,
+          streamAgeMs: Math.round(performance.now() - voiceStreamStartedAt),
+        });
         stopAsrStream({ discard: tooShort });
       }
     } else {
@@ -4686,15 +5064,27 @@ function isNoisySpeech(text) {
 }
 
 function submitRecognizedSpeech(text, { provisional = false } = {}) {
-  if (currentMode !== 'IDLE' || voiceTriggered || voiceCommittedThisStream) return false;
+  if (currentMode !== 'IDLE' || voiceTriggered || voiceCommittedThisStream) {
+    voiceDebug('submit_blocked_state', { text, provisional, currentMode, voiceTriggered, voiceCommittedThisStream });
+    return false;
+  }
   const now = performance.now();
   const cleanText = collapseRepeatedSpeech(text);
   const finalNorm = normalizeSpeechText(cleanText);
-  if (!finalNorm) return false;
+  if (!finalNorm) {
+    voiceDebug('submit_blocked_empty', { text, provisional });
+    return false;
+  }
   const lastFinalNorm = normalizeSpeechText(voiceLastFinalText);
-  if (finalNorm && lastFinalNorm && finalNorm === lastFinalNorm && now - voiceLastFinalAt < 5000) return false;
+  if (finalNorm && lastFinalNorm && finalNorm === lastFinalNorm && now - voiceLastFinalAt < 5000) {
+    voiceDebug('submit_blocked_duplicate', { cleanText, msSinceLast: Math.round(now - voiceLastFinalAt) });
+    return false;
+  }
 
-  if (provisional && finalNorm.length < 4 && !isStartCommand(cleanText)) return false;
+  if (provisional && finalNorm.length < 4 && !isStartCommand(cleanText)) {
+    voiceDebug('submit_blocked_short_provisional', { cleanText, finalNorm });
+    return false;
+  }
 
   voiceCommittedThisStream = true;
   voiceLastFinalText = cleanText;
@@ -4703,11 +5093,14 @@ function submitRecognizedSpeech(text, { provisional = false } = {}) {
   voiceIgnoreFinalUntil = Math.max(voiceIgnoreFinalUntil, now + 4000);
 
   if (isStartCommand(cleanText)) {
+    voiceDebug('submit_start_command', { cleanText, provisional });
     triggerVoiceStart();
   } else if (isNoisySpeech(cleanText)) {
+    voiceDebug('submit_ignored_noise', { cleanText, provisional });
     voiceCooldownUntil = Math.max(voiceCooldownUntil, now + VOICE_REPLY_COOLDOWN_MS);
     overlays.setVoiceStatus({ status: '环境声已忽略', transcript: '' });
   } else {
+    voiceDebug('submit_reply', { cleanText, provisional });
     requestVoiceReply(cleanText);
   }
   return true;
@@ -4715,13 +5108,20 @@ function submitRecognizedSpeech(text, { provisional = false } = {}) {
 
 async function requestVoiceReply(text) {
   const question = text.trim();
-  if (!question || currentMode !== 'IDLE' || voiceReplyPending) return;
+  if (!question || currentMode !== 'IDLE' || voiceReplyPending) {
+    voiceDebug('reply_blocked_state', { question, currentMode, voiceReplyPending });
+    return;
+  }
   const now = performance.now();
-  if (question === voiceLastQuestion && now - voiceLastQuestionAt < 8000) return;
+  if (question === voiceLastQuestion && now - voiceLastQuestionAt < 8000) {
+    voiceDebug('reply_blocked_duplicate_question', { question, msSinceLast: Math.round(now - voiceLastQuestionAt) });
+    return;
+  }
   voiceReplyPending = true;
   voiceLastQuestion = question;
   voiceLastQuestionAt = now;
   voiceCooldownUntil = now + VOICE_REPLY_COOLDOWN_MS;
+  voiceDebug('reply_request_start', { question });
   overlays.setAIReply({ question, loading: true });
   try {
     const resp = await fetch('http://localhost:5000/voice/reply', {
@@ -4731,16 +5131,19 @@ async function requestVoiceReply(text) {
     });
     const payload = await resp.json();
     if (!resp.ok || !payload.success) throw new Error(payload.message || 'voice reply failed');
+    voiceDebug('reply_request_success', { question, reply: payload.reply });
     idleVoiceViz.showReply(payload.reply, time);
     overlays.setAIReply({ question, reply: payload.reply });
   } catch (e) {
     console.warn('[voice] AI reply failed:', e);
+    voiceDebug('reply_request_failed', { question, message: e?.message || String(e) });
     const fallbackReply = '这句话还没有完全落成形。你可以再靠近一点，慢慢说一次。';
     idleVoiceViz.showReply(fallbackReply, time);
     overlays.setAIReply({ question, reply: fallbackReply });
   } finally {
     voiceReplyPending = false;
     voiceCooldownUntil = Math.max(voiceCooldownUntil, performance.now() + VOICE_REPLY_COOLDOWN_MS);
+    voiceDebug('reply_request_done', { cooldownMs: VOICE_REPLY_COOLDOWN_MS });
   }
 }
 
@@ -4752,12 +5155,13 @@ function triggerVoiceStart() {
   overlays.showVoiceTransition({ particleText: true });
   const durationSec = idleVoiceViz.showReply(VOICE_START_TRANSITION_TEXT, time, {
     durationSec: VOICE_START_TRANSITION_SEC,
+    allowReturnMorph: true,
   }) || VOICE_START_TRANSITION_SEC;
   voiceCooldownUntil = performance.now() + durationSec * 1000 + 2400;
   if (voiceTransitionTimer) clearTimeout(voiceTransitionTimer);
   voiceTransitionTimer = setTimeout(() => {
     if (currentMode !== 'IDLE') return;
-    startGuide();
+    requestGuideStart();
     if (bgmAudio && bgmAudio.paused) bgmAudio.play().catch(() => {});
   }, durationSec * 1000 + 900);
 }
@@ -4811,16 +5215,22 @@ async function ensureVoicePermission() {
 }
 
 function startIdleVoiceRecognition() {
-  if (currentMode !== 'IDLE' || voiceTriggered) return;
+  if (currentMode !== 'IDLE' || voiceTriggered) {
+    voiceDebug('listen_start_blocked', { currentMode, voiceTriggered });
+    return;
+  }
   if (!voicePermissionGranted || !voiceStream) {
+    voiceDebug('listen_wait_permission', { voicePermissionGranted, hasStream: !!voiceStream });
     overlays.setVoiceStatus({ status: '等待麦克风授权', transcript: '' });
     updateVoiceButton();
     return;
   }
   setupVoiceAudioPipeline();
   voiceListening = true;
+  idleVoiceViz.resetVisual({ keepListening: true });
   overlays.setVoiceStatus({ status: '麦克风已开启，正在聆听', transcript: '' });
   updateVoiceButton();
+  voiceDebug('listen_start', { hasProcessor: !!voiceProcessorNode, hasAnalyser: !!voiceAnalyser });
 }
 
 function startSummaryVoiceRecognition() {
@@ -4872,14 +5282,17 @@ function updateParticleVisibility() {
   // 性能优化：按阶段切换粒子可见性，省 fragment shader 开销
   const isGuide = currentMode === 'GUIDE';
   const isExp   = currentMode === 'EXPERIENCE';
+  const isEnding = currentMode === 'ENDING';
+  const isSummary = currentMode === 'SUMMARY';
   const e = guideElapsed;
 
   // 调色阶段：放出藤蔓 + 叶片，花仍隐藏
-  vinePoints.visible   = true;
-  spineHaloPoints.visible = isExp;
-  leafPoints.visible   = true;
-  flowerPoints.visible = true;
-  pollenPoints.visible = isExp;
+  vinePoints.visible   = !isSummary;
+  spineHaloPoints.visible = isExp || isEnding;
+  leafPoints.visible   = !isSummary;
+  flowerPoints.visible = !isSummary;
+  pollenPoints.visible = isExp || isEnding;
+  summarySpineGroup.visible = isSummary;
 
   // GUIDE 时间窗口才显示（边界扩 0.5s 留 alpha 淡入淡出 buffer）
   ribPoints.visible   = isGuide && ((e >= 22.0 && e <= 31.5) || (e >= SCHROTH_INTRO_START && e <= SCHROTH_INTRO_END));
@@ -4929,6 +5342,7 @@ const breathPhaseEl   = document.getElementById('breath-phase');
 const breathC1El      = document.getElementById('breath-c1');
 const breathC2El      = document.getElementById('breath-c2');
 const breathMiniRingEl = document.getElementById('breath-mini-ring');
+const goodBreathText = document.getElementById('good-breath-text');
 let lastPhaseName = '';
 let phaseFading = false;
 const _expPacerNdc = new THREE.Vector3();
@@ -5080,6 +5494,7 @@ function animate() {
     case 'IDLE':       updateIdle(time);       break;
     case 'GUIDE':      updateGuide(time);      break;
     case 'EXPERIENCE': updateExperience(time); break;
+    case 'ENDING':     updateEnding(time);     break;
     case 'SUMMARY':    updateSummary(time);    break;
   }
 
@@ -5098,6 +5513,7 @@ function animate() {
     listening: voiceListening,
     streaming: voiceStreaming,
   });
+  updateGoodBreathFeedback(time);
   updateBreathOverlay(time);
 
   // 呼吸音效：GUIDE 呼吸环用本段局部时钟对齐 UI；EXPERIENCE 保持原有全局时钟。
@@ -5126,7 +5542,9 @@ function updateIdle(t) {
   spineMat.uniforms.uBreatheExpand.value = 1.0;
   spineMat.uniforms.uBreathe.value    = 0.0;
   spineMat.uniforms.uTime.value       = t;
+  spineMat.uniforms.uAlphaBoost.value = Math.pow(4.0 / 1.5, 2.0);
   spineMat.uniforms.uSegmentHighlight.value = 0.0;
+  ambMat.uniforms.uAlphaBoost.value = Math.pow(4.0 / 1.5, 2.0);
   comparisonMat.opacity = 0;
   vineMat.uniforms.uFormation.value   = 0.0;
   vineMat.uniforms.uTime.value        = t;
@@ -5385,7 +5803,7 @@ function updateGuide(t) {
 // ── EXPERIENCE 更新（原有呼吸体验逻辑）──────────────────────
 function updateExperience(t) {
   if (t - experienceStartTime >= 120) {
-    enterSummary(smoothBlend);
+    enterEnding(smoothBlend);
     return;
   }
   // 弹簧物理平滑 blend
@@ -5620,11 +6038,76 @@ function updateExperience(t) {
   bloomPass.strength = bloomBase + breathBloomPulse * expVisualFade;
 }
 
+function updateEnding(t) {
+  const elapsed = Math.max(0, t - endingStartTime);
+  const fade = smoothstep(0.35, 2.65, elapsed);
+  const breathe = breatheCurve(t) * (1 - fade);
+
+  spineGroup.rotation.y = endingFrozenRotY;
+  smoothBlend = endingFinalBlend;
+  targetBlend = endingFinalBlend;
+  blendVelocity = 0;
+
+  spineMat.uniforms.uFormation.value = 1.0;
+  spineMat.uniforms.uGuideAlpha.value = 1.0 - fade * 0.72;
+  spineMat.uniforms.uSegmentHighlight.value = 0.0;
+  spineMat.uniforms.uBlend.value = endingFinalBlend;
+  spineMat.uniforms.uBreatheExpand.value = 1.0 + breathe * (0.10 + endingFinalBlend * 0.06);
+  spineMat.uniforms.uBreathe.value = breathe;
+  spineMat.uniforms.uTime.value = t;
+  vineMat.uniforms.uFormation.value = 1.0;
+  vineMat.uniforms.uBlend.value = endingFinalBlend;
+  leafMat.uniforms.uBlend.value = endingFinalBlend;
+  flowerMat.uniforms.uBlend.value = endingFinalBlend;
+  spineHaloMat.uniforms.uBlend.value = endingFinalBlend;
+  spineHaloMat.uniforms.uAlphaBoost.value = Math.max(0, 1.0 - fade);
+  ambMat.uniforms.uAlphaBoost.value = Math.max(0, 2.0 - fade * 1.8);
+  bloomPass.strength = Math.max(0.05, 0.38 * (1 - fade));
+  if (breathOverlayEl) breathOverlayEl.classList.remove('vis');
+  endingCurtain.classList.add('vis');
+  endingCurtain.style.opacity = String(0.86 * fade);
+
+  if (elapsed >= ENDING_DURATION_SEC) {
+    enterSummary(endingFinalBlend, { fromEnding: true });
+  }
+}
+
 function updateSummary(t) {
   const elapsed = Math.max(0, t - summaryStartTime);
+  const breathe = breatheCurve(t);
   overlays.setSummaryCountdown(SUMMARY_DURATION_SEC - elapsed);
   spineMat.uniforms.uFormation.value = 0.0;
-  spineMat.uniforms.uGuideAlpha.value = 0.0;
+  spineMat.uniforms.uGuideAlpha.value = 0.42;
+  spineMat.uniforms.uAlphaBoost.value = 8.8 + breathe * 0.7;
+  spineMat.uniforms.uTime.value = t;
+  spineMat.uniforms.uBreathe.value = breathe * 0.18;
+  spineMat.uniforms.uBreatheExpand.value = 1.0 + breathe * 0.03;
+  spineMat.uniforms.uColor.value.copy(COLOR_DARK);
+  spineMat.uniforms.uHighlight.value.copy(HL_DARK);
+  spineMat.uniforms.uAccent1.value.copy(AC1_DARK);
+  spineMat.uniforms.uAccent2.value.copy(AC2_DARK);
+  spineMat.uniforms.uVoiceMode.value = 0.0;
+  spineMat.uniforms.uVoiceStrength.value = 0.0;
+  spineMat.uniforms.uVoiceLevel.value = 0.0;
+  summarySpineGroup.visible = true;
+  summaryBeforeMat.uniforms.uTime.value = t;
+  summaryAfterMat.uniforms.uTime.value = t;
+  summaryBeforeMat.uniforms.uBreathe.value = breathe * 0.42;
+  summaryAfterMat.uniforms.uBreathe.value = breathe * 0.42;
+  summaryBeforeMat.uniforms.uBreatheExpand.value = 1.0 + breathe * 0.07;
+  summaryAfterMat.uniforms.uBreatheExpand.value = 1.0 + breathe * 0.07;
+  summaryBeforeMat.uniforms.uFormation.value = 1.0;
+  summaryAfterMat.uniforms.uFormation.value = 1.0;
+  summaryBeforeMat.uniforms.uGuideAlpha.value = 0.95;
+  summaryAfterMat.uniforms.uGuideAlpha.value = 1.0;
+  summaryBeforeMat.uniforms.uAlphaBoost.value = 8.2 + breathe * 1.0;
+  summaryAfterMat.uniforms.uAlphaBoost.value = 8.8 + breathe * 1.15;
+  summaryBeforeMat.uniforms.uVoiceStrength.value = 0.0;
+  summaryAfterMat.uniforms.uVoiceStrength.value = 0.0;
+  setSpineMaterialBlend(summaryBeforeMat, 0);
+  setSpineMaterialBlend(summaryAfterMat, summaryFinalBlend);
+  summaryBeforeGroup.rotation.y = -0.22 + Math.sin(t * 0.26) * 0.025;
+  summaryAfterGroup.rotation.y = 0.22 + Math.sin(t * 0.26 + 0.8) * 0.025;
   vineMat.uniforms.uFormation.value = 0.0;
   leafPoints.visible = false;
   diffusePoints.visible = false;
@@ -5633,7 +6116,8 @@ function updateSummary(t) {
   flowMat.uniforms.uActive.value = 0;
   pacerMat.uniforms.uActive.value = 0;
   ribMat.uniforms.uActive.value = 0;
-  bloomPass.strength = 0.12;
+  ambMat.uniforms.uAlphaBoost.value = 15.0;
+  bloomPass.strength = 0.92 + breathe * 0.24;
 }
 
 
@@ -5647,18 +6131,29 @@ socket.on('connect',    () => { console.log('✅ Flask 已连接'); updateDebugU
 socket.on('disconnect', () => { console.log('❌ Flask 断开');   });
 
 socket.on('sensor_data', (data) => {
+  if (currentMode !== 'EXPERIENCE') {
+    updateDebugUI();
+    return;
+  }
   targetBlend = data.blend;
+  considerGoodBreathFeedback(data);
   updateDebugUI();
 });
 
 socket.on('state_change', (data) => {
   if (data.mode === 'START_GUIDE') { startGuide(); return; }
   if (data.mode === 'EXPERIENCE') { enterExperience(); }
-  if (data.mode === 'SUMMARY') {
-    enterSummary(data.blend !== undefined ? data.blend : smoothBlend);
+  if (data.mode === 'ENDING') {
+    const finalBlend = data.final_blend ?? data.blend ?? smoothBlend;
+    enterEnding(finalBlend);
     return;
   }
-  if (data.mode === 'IDLE' && currentMode === 'SUMMARY') {
+  if (data.mode === 'SUMMARY') {
+    const finalBlend = data.final_blend ?? data.blend ?? (currentMode === 'ENDING' ? endingFinalBlend : smoothBlend);
+    enterSummary(finalBlend, { fromEnding: currentMode === 'ENDING' });
+    return;
+  }
+  if (data.mode === 'IDLE' && (currentMode === 'SUMMARY' || currentMode === 'ENDING')) {
     if (summaryPreviewMode) return;
     resetToIdle();
     return;
@@ -5670,16 +6165,28 @@ socket.on('state_change', (data) => {
 });
 
 socket.on('asr_status', () => {
+  voiceDebug('asr_status');
   if (currentMode === 'IDLE') overlays.setVoiceStatus({ status: '麦克风已开启，正在聆听', transcript: undefined });
 });
 
 socket.on('asr_result', (data) => {
-  if (!['IDLE', 'SUMMARY'].includes(currentMode) || (voiceTriggered && currentMode !== 'SUMMARY')) return;
+  voiceDebug('asr_result_raw', data);
+  if (!['IDLE', 'SUMMARY'].includes(currentMode) || (voiceTriggered && currentMode !== 'SUMMARY')) {
+    voiceDebug('asr_result_ignored_mode', { currentMode, voiceTriggered });
+    return;
+  }
   const now = performance.now();
-  if (now < voiceIgnoreFinalUntil) return;
+  if (now < voiceIgnoreFinalUntil) {
+    voiceDebug('asr_result_ignored_window', { ignoreLeftMs: Math.round(voiceIgnoreFinalUntil - now), data });
+    return;
+  }
   const text = (data?.text || '').trim();
-  if (!text) return;
+  if (!text) {
+    voiceDebug('asr_result_empty', data);
+    return;
+  }
   if (currentMode === 'SUMMARY') {
+    voiceDebug('asr_result_summary', { text });
     if (isReturnHomeCommand(text)) returnToIdleFromSummary();
     return;
   }
@@ -5693,11 +6200,13 @@ socket.on('asr_result', (data) => {
   overlays.setVoiceStatus({ status: data.final ? '已收录' : '正在收录', transcript: `你说：${text}` });
   if (!data.final) return;
   console.log('[asr] final', text);
+  voiceDebug('asr_final_submit', { text });
   submitRecognizedSpeech(text);
 });
 
 socket.on('asr_error', (data) => {
   console.warn('[asr] error', data?.message);
+  voiceDebug('asr_error', data);
   if (currentMode === 'IDLE') {
     overlays.setVoiceStatus({ status: '语音识别暂时不可用', transcript: data?.message || '请稍后再试，或按空格键开始体验' });
   }
@@ -5718,6 +6227,20 @@ if (blendSlider) {
     targetBlend = blendSlider.value / 100;
     socket.emit('set_blend', { value: targetBlend });
   });
+}
+
+function setPreviewBlend(value) {
+  targetBlend = Math.max(0, Math.min(1, value));
+  if (blendSlider) blendSlider.value = String(Math.round(targetBlend * 100));
+  if (debugBlend) debugBlend.textContent = targetBlend.toFixed(3);
+  socket.emit('set_blend', { value: targetBlend });
+}
+
+function shouldIgnoreGlobalShortcut(event) {
+  const el = event.target;
+  if (!el) return false;
+  const tag = (el.tagName || '').toLowerCase();
+  return tag === 'input' || tag === 'textarea' || tag === 'select' || el.isContentEditable;
 }
 
 // 高清粒子精度（pixel ratio 1.0~4.0）
@@ -5757,15 +6280,20 @@ exposureSlider.addEventListener('input', () => {
   renderer.toneMappingExposure = exp;
 });
 
-document.getElementById('btn-start').addEventListener('click', () => startGuide());
+document.getElementById('btn-start').addEventListener('click', () => requestGuideStart());
 document.getElementById('btn-skip').addEventListener('click', () => {
-  // 跳过引导直接进入体验模式
-  enterExperience();
-  console.log('[raina] 跳过引导，直接进入体验');
+  requestSkipGuide();
 });
 document.getElementById('btn-summary').addEventListener('click', () => {
   const previewBlend = Math.max(0.12, Math.min(1, targetBlend || smoothBlend || 0.56));
   enterSummary(previewBlend, { preview: true });
+});
+document.getElementById('btn-good-rain').addEventListener('click', () => {
+  if (currentMode !== 'EXPERIENCE') {
+    console.log('[raina] 金色雨预览只在 EXPERIENCE 阶段触发');
+    return;
+  }
+  triggerGoodBreathFeedback(time);
 });
 voiceButton = document.getElementById('btn-voice');
 if (voiceButton) {
@@ -5797,7 +6325,7 @@ document.getElementById('btn-reset').addEventListener('click', () => {
   guidePaused = false;
   const btn = document.getElementById('btn-pause');
   if (btn) btn.textContent = '⏸ 暂停动画';
-  resetToIdle();
+  requestHardReset();
 });
 
 // ── 引导进度/速度控制 ──
@@ -5986,9 +6514,15 @@ canvas.addEventListener('click', (e) => {
 });
 
 document.addEventListener('keydown', (e) => {
+  if (!shouldIgnoreGlobalShortcut(e) && (e.key === 'ArrowRight' || e.key === 'ArrowLeft')) {
+    e.preventDefault();
+    const step = e.shiftKey ? 0.10 : 0.03;
+    setPreviewBlend(targetBlend + (e.key === 'ArrowRight' ? step : -step));
+    return;
+  }
   if (e.code === 'Space') {
     e.preventDefault();
-    startGuide();
+    requestGuideStart();
     // 空格启动时自动播 BGM（IDLE → GUIDE 切换）
     if (bgmAudio && bgmAudio.paused) {
       bgmAudio.play().catch(() => {});
@@ -6041,6 +6575,14 @@ window.addEventListener('resize', () => {
   renderer.setSize(w, h);
   composer.setSize(w, h);
   bloomPass.resolution.set(Math.floor(w * 0.35), Math.floor(h * 0.35));
+});
+
+window.addEventListener('pagehide', () => {
+  notifyBackendReset();
+});
+
+window.addEventListener('beforeunload', () => {
+  notifyBackendReset();
 });
 
 startIdleVoiceRecognition();

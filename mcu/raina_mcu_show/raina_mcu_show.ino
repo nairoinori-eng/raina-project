@@ -19,23 +19,26 @@ const bool MOTOR_ACTIVE_LOW = true;
 // S9012 is a PNP transistor, so the motor driver is active-low.
 
 
-const float DEFAULT_WEIGHT_CHEST = 0.60f;
-const float DEFAULT_WEIGHT_WAIST = 0.40f;
-const float DEFAULT_THRESHOLD = 1010.0f;
+const float DEFAULT_WEIGHT_CHEST = 1.00f;
+const float DEFAULT_WEIGHT_WAIST = 0.00f;
+const float DEFAULT_THRESHOLD = 520.0f;
 
 const unsigned int BASELINE_WINDOW_SAMPLES = 90;
 
-const unsigned long INHALE_MS = 4000UL;
-const unsigned long HOLD_MS = 2000UL;
-const unsigned long EXHALE_MS = 4000UL;
-const unsigned long CYCLE_GAP_MS = 2000UL;
+const unsigned long INHALE_MS = 3000UL;
+const unsigned long HOLD_MS = 1500UL;
+const unsigned long EXHALE_MS = 3500UL;
+const unsigned long CYCLE_GAP_MS = 0UL;
 const unsigned long BREATH_CYCLE_MS =
   INHALE_MS + HOLD_MS + EXHALE_MS + CYCLE_GAP_MS;
 
-const byte MOTOR_CUE_PWM_MIN = 60;
-const byte MOTOR_CUE_PWM_MAX = 220;
-const unsigned long MOTOR_RAMP_MS = 2000UL;
-const byte MOTOR_REMINDER_PWM = 125;
+const byte MOTOR_CUE_PWM_MIN = 45;
+const byte MOTOR_CUE_PWM_MAX = 155;
+const unsigned long MOTOR_RAMP_MS = 1800UL;
+const byte MOTOR_REMINDER_PWM = 100;
+const byte MOTOR_DOUBLE_PULSE_PWM = 145;
+const unsigned long MOTOR_DOUBLE_PULSE_ON_MS = 160UL;
+const unsigned long MOTOR_DOUBLE_PULSE_GAP_MS = 160UL;
 
 const bool LOW_BLEND_REMINDER_ENABLED = false;
 const byte LOW_BLEND_THRESHOLD = 30;
@@ -80,6 +83,7 @@ unsigned long runningSinceMs = 0UL;
 unsigned long lowBlendSinceMs = 0UL;
 unsigned long reminderUntilMs = 0UL;
 unsigned long nextReminderEligibleMs = 0UL;
+unsigned long doublePulseStartedAt = 0UL;
 
 char commandBuffer[80];
 byte commandLength = 0;
@@ -185,6 +189,32 @@ void stopAllMotors() {
   setMotorPwm(MOTOR_RIGHT_PIN, 0);
 }
 
+bool updateDoublePulse(unsigned long nowMs) {
+  if (doublePulseStartedAt == 0UL) {
+    return false;
+  }
+
+  unsigned long elapsed = nowMs - doublePulseStartedAt;
+  unsigned long firstOff = MOTOR_DOUBLE_PULSE_ON_MS;
+  unsigned long secondOn = firstOff + MOTOR_DOUBLE_PULSE_GAP_MS;
+  unsigned long secondOff = secondOn + MOTOR_DOUBLE_PULSE_ON_MS;
+
+  if (elapsed < firstOff || (elapsed >= secondOn && elapsed < secondOff)) {
+    setMotorPwm(MOTOR_LEFT_PIN, MOTOR_DOUBLE_PULSE_PWM);
+    setMotorPwm(MOTOR_RIGHT_PIN, MOTOR_DOUBLE_PULSE_PWM);
+    return true;
+  }
+
+  if (elapsed < secondOn) {
+    stopAllMotors();
+    return true;
+  }
+
+  doublePulseStartedAt = 0UL;
+  stopAllMotors();
+  return false;
+}
+
 byte interpolatePwm(byte startPwm, byte endPwm, unsigned long elapsedMs, unsigned long durationMs) {
   if (durationMs == 0UL || elapsedMs >= durationMs) {
     return endPwm;
@@ -270,6 +300,7 @@ void startExperience() {
   unsigned long nowMs = millis();
   freezeBaselineFromRollingWindow();
   runMode = MODE_RUNNING;
+  doublePulseStartedAt = 0UL;
   runningSinceMs = nowMs;
   lowBlendSinceMs = 0UL;
   reminderUntilMs = 0UL;
@@ -280,6 +311,7 @@ void startExperience() {
 void resetSessionState() {
   runMode = MODE_IDLE;
   motorsEnabled = true;
+  doublePulseStartedAt = 0UL;
   weightChest = DEFAULT_WEIGHT_CHEST;
   weightWaist = DEFAULT_WEIGHT_WAIST;
   currentAdjustedScore = 0.0f;
@@ -300,6 +332,14 @@ void handleCommand(const char *command) {
 
   if (strcmp(command, "GUIDE_START") == 0) {
     enterGuideMode();
+    return;
+  }
+
+  if (strcmp(command, "MOTOR_DOUBLE_PULSE") == 0) {
+    runMode = MODE_IDLE;
+    motorsEnabled = true;
+    doublePulseStartedAt = millis();
+    emitCommentLine("MOTOR_DOUBLE_PULSE");
     return;
   }
 
@@ -402,16 +442,7 @@ byte breathingCuePwm(unsigned long nowMs) {
   }
 
   if (cycleMs < exhaleEndMs) {
-    unsigned long exhalePhaseMs = cycleMs - holdEndMs;
-    if (exhalePhaseMs < MOTOR_RAMP_MS) {
-      return MOTOR_CUE_PWM_MAX;
-    }
-    return interpolatePwm(
-      MOTOR_CUE_PWM_MAX,
-      MOTOR_CUE_PWM_MIN,
-      exhalePhaseMs - MOTOR_RAMP_MS,
-      EXHALE_MS - MOTOR_RAMP_MS
-    );
+    return 0;
   }
 
   return 0;
@@ -445,6 +476,10 @@ void updateLowBlendReminder(unsigned long nowMs) {
 }
 
 void updateMotors(unsigned long nowMs) {
+  if (updateDoublePulse(nowMs)) {
+    return;
+  }
+
   if (runMode != MODE_RUNNING || !motorsEnabled) {
     stopAllMotors();
     return;
