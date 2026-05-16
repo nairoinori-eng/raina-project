@@ -22,13 +22,14 @@ const bool MOTOR_ACTIVE_LOW = true;
 const float DEFAULT_WEIGHT_CHEST = 1.00f;
 const float DEFAULT_WEIGHT_WAIST = 0.00f;
 const float DEFAULT_THRESHOLD = 520.0f;
+const float CHEST_COUNTERPRESSURE_WEIGHT = 0.35f;
 
 const unsigned int BASELINE_WINDOW_SAMPLES = 90;
 
-const unsigned long INHALE_MS = 3000UL;
-const unsigned long HOLD_MS = 1500UL;
-const unsigned long EXHALE_MS = 3500UL;
-const unsigned long CYCLE_GAP_MS = 0UL;
+const unsigned long INHALE_MS = 2000UL;
+const unsigned long HOLD_MS = 2000UL;
+const unsigned long EXHALE_MS = 2000UL;
+const unsigned long CYCLE_GAP_MS = 2000UL;
 const unsigned long BREATH_CYCLE_MS =
   INHALE_MS + HOLD_MS + EXHALE_MS + CYCLE_GAP_MS;
 
@@ -506,7 +507,8 @@ void readSensorsAndComputeBlend() {
     filteredSensors[i] = updateFilter(filters[i], rawValue);
   }
 
-  int chestCorrection = filteredSensors[0] - filteredSensors[1];
+  float chestCorrection =
+    filteredSensors[0] - filteredSensors[1] * CHEST_COUNTERPRESSURE_WEIGHT;
   int waistCorrection = filteredSensors[3] - filteredSensors[2];
 
   currentRawScore =

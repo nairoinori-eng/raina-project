@@ -105,6 +105,7 @@ SUMMARY_DURATION_SEC = 30
 DEFAULT_WEIGHT_CHEST = 1.0
 DEFAULT_WEIGHT_WAIST = 0.0
 DEFAULT_THRESHOLD = 520.0
+CHEST_COUNTERPRESSURE_WEIGHT = 0.35
 PREVIEW_BLEND_DEADBAND = 0.05
 PREVIEW_BLEND_THRESHOLD_RATIO = 0.25
 PREVIEW_BLEND_SMOOTHING = 0.08
@@ -743,7 +744,7 @@ def compute_blend_from_payload(payload: dict[str, float]) -> tuple[float, float]
             next_blend = previous_blend + (sensor_rate + floor_rate) * dt
             return raw, clamp(next_blend, 0.0, 1.0)
 
-        chest = payload.get("S1", 0.0) - payload.get("S2", 0.0)
+        chest = payload.get("S1", 0.0) - payload.get("S2", 0.0) * CHEST_COUNTERPRESSURE_WEIGHT
         waist = payload.get("S4", 0.0) - payload.get("S3", 0.0)
         raw_score = chest * state.weight_chest + waist * state.weight_waist
         if state.mode in {"ENDING", "SUMMARY"} and state.final_blend is not None:

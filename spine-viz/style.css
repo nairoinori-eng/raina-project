@@ -720,11 +720,11 @@ body {
   transform: translateY(0.16rem);
 }
 #breath-phase {
-  transition: opacity 350ms ease;
+  transition: none;
 }
 #breath-c1, #breath-c2 {
   opacity: 0;
-  transition: opacity 400ms ease;
+  transition: none;
   font-weight: 200;
   font-size: 0.9em;
   color: rgba(200, 195, 230, 0.75);

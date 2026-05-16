@@ -3976,7 +3976,7 @@ for (let i = 0; i < N_GOOD_BREATH_RAIN; i++) {
   goodRainSeedX[i] = (Math.random() - 0.5) * 8.8;
   goodRainSeedY[i] = 2.45 + Math.random() * 1.15;
   goodRainSeedZ[i] = -1.10 - Math.random() * 0.85;
-  goodRainSpeed[i] = 0.86 + Math.random() * 0.28;
+  goodRainSpeed[i] = 0.78 + Math.random() * 0.20;
   goodRainDrift[i] = (Math.random() - 0.5) * 0.34;
   goodRainPhase[i] = Math.random() * Math.PI * 2;
   goodRainColorVars[i] = Math.random() * 2.0 - 1.0;
@@ -4015,20 +4015,29 @@ goodRainPoints.visible = false;
 scene.add(goodRainPoints);
 
 let goodRainStartTime = -999;
+let goodRainEndTime = -999;
 let goodRainActive = false;
 let goodBreathLastTriggerAt = -999;
 let goodBreathPrevRaw = 0;
 let goodBreathRecentLow = 1;
-const GOOD_BREATH_RAIN_SEC = 4.6;
-const GOOD_BREATH_RAIN_EMIT_SEC = 2.35;
+const GOOD_BREATH_RAIN_SEC = 5.8;
+const GOOD_BREATH_RAIN_EMIT_SEC = 4.0;
+const GOOD_BREATH_RAIN_DROP_SEC = 3.8;
+const GOOD_BREATH_RAIN_TAIL_SEC = 1.25;
 const GOOD_BREATH_COOLDOWN_SEC = 2.4;
 const GOOD_BREATH_MIN_RAW = 0.11;
 const GOOD_BREATH_RISE = 0.055;
 
 function triggerGoodBreathFeedback(t) {
-  goodRainStartTime = t;
+  const nowSec = performance.now() / 1000;
+  if (!goodRainActive) {
+    goodRainStartTime = nowSec;
+    goodRainAlphas.fill(0);
+    goodRainGeo.attributes.aAlpha.needsUpdate = true;
+  }
   goodRainActive = true;
-  goodBreathLastTriggerAt = t;
+  goodRainEndTime = Math.max(goodRainEndTime, nowSec + GOOD_BREATH_RAIN_SEC);
+  goodBreathLastTriggerAt = nowSec;
   goodRainPoints.visible = true;
   goodBreathText.classList.remove('vis');
   void goodBreathText.offsetWidth;
@@ -4038,6 +4047,7 @@ function triggerGoodBreathFeedback(t) {
 function updateGoodBreathFeedback(t) {
   if (currentMode !== 'EXPERIENCE') {
     goodRainActive = false;
+    goodRainEndTime = -999;
     goodRainPoints.visible = false;
     goodBreathText.classList.remove('vis');
     return;
@@ -4047,10 +4057,11 @@ function updateGoodBreathFeedback(t) {
     return;
   }
 
-  const age = t - goodRainStartTime;
-  const life = Math.max(0, Math.min(1, age / GOOD_BREATH_RAIN_SEC));
-  const fadeIn = smoothstep(0.0, 0.16, life);
-  const fadeOut = 1.0 - smoothstep(0.82, 1.0, life);
+  const nowSec = performance.now() / 1000;
+  const age = nowSec - goodRainStartTime;
+  const tailAge = nowSec - goodRainEndTime;
+  const fadeIn = smoothstep(0.0, 0.45, age);
+  const fadeOut = tailAge <= 0 ? 1.0 : 1.0 - smoothstep(0.0, GOOD_BREATH_RAIN_TAIL_SEC, tailAge);
   const alphaBase = fadeIn * fadeOut * 0.78;
   const referenceZ = -1.45;
   const viewHalfH = Math.tan(THREE.MathUtils.degToRad(camera.fov * 0.5)) * Math.max(0.1, camera.position.z - referenceZ);
@@ -4062,7 +4073,7 @@ function updateGoodBreathFeedback(t) {
   for (let i = 0; i < N_GOOD_BREATH_RAIN; i++) {
     const delay = ((i % 257) / 257) * GOOD_BREATH_RAIN_EMIT_SEC;
     const localAge = Math.max(0, age - delay);
-    const localLife = Math.max(0, Math.min(1, localAge / 2.35));
+    const localLife = ((localAge * goodRainSpeed[i]) % GOOD_BREATH_RAIN_DROP_SEC) / GOOD_BREATH_RAIN_DROP_SEC;
     const xBase = (goodRainSeedX[i] / 4.4) * viewHalfW;
     const sway = Math.sin(t * 0.72 + goodRainPhase[i]) * 0.075;
     const slant = goodRainDrift[i] * (localAge * 0.82 + localLife * 0.55);
@@ -4075,8 +4086,9 @@ function updateGoodBreathFeedback(t) {
   goodRainGeo.attributes.position.needsUpdate = true;
   goodRainGeo.attributes.aAlpha.needsUpdate = true;
 
-  if (age > GOOD_BREATH_RAIN_SEC) {
+  if (tailAge > GOOD_BREATH_RAIN_TAIL_SEC) {
     goodRainActive = false;
+    goodRainEndTime = -999;
     goodRainPoints.visible = false;
     goodBreathText.classList.remove('vis');
     goodRainAlphas.fill(0);
@@ -4086,7 +4098,7 @@ function updateGoodBreathFeedback(t) {
 
 function considerGoodBreathFeedback(data) {
   const raw = Math.max(0, Math.min(1, Number(data?.raw_blend) || 0));
-  const nowSec = time;
+  const nowSec = performance.now() / 1000;
   goodBreathRecentLow = Math.min(raw, goodBreathRecentLow + 0.006);
   const riseFromLow = raw - goodBreathRecentLow;
   const frameRise = raw - goodBreathPrevRaw;
@@ -4414,6 +4426,9 @@ scene.add(expPacerPoints);
 
 let currentMode   = 'IDLE';   // IDLE → GUIDE → EXPERIENCE → ENDING → SUMMARY
 let experienceStartTime = 0;  // EXPERIENCE 进入时刻（用于呼吸耦合渐入）
+let experienceStartRealMs = 0; // EXPERIENCE 真实时间起点（呼吸字幕必须严格按秒）
+const EXPERIENCE_DURATION_SEC = 120;
+const EXPERIENCE_FINAL_PROMPT_SEC = 10;
 let targetBlend   = 0.0;
 let smoothBlend   = 0.0;
 let blendVelocity = 0.0;
@@ -4428,6 +4443,11 @@ let summaryFinalBlend = 0;
 let summaryReturnTimer = null;
 let summaryCopyRequested = false;
 let summaryPreviewMode = false;
+
+function getExperienceRealElapsedSec() {
+  if (!experienceStartRealMs) return 0;
+  return Math.max(0, (performance.now() - experienceStartRealMs) / 1000);
+}
 
 // ── 引导动画状态 ──
 let guideStartTime = 0;       // 引导开始的绝对时间(秒)
@@ -4503,9 +4523,10 @@ function requestSkipGuide() {
 function enterExperience() {
   currentMode = 'EXPERIENCE';
   experienceStartTime = time;
+  experienceStartRealMs = performance.now();
   goodBreathPrevRaw = 0;
   goodBreathRecentLow = 1;
-  goodBreathLastTriggerAt = time + 1.2;
+  goodBreathLastTriggerAt = performance.now() / 1000 + 1.2;
   idleVoiceViz.resetVisual();
   overlays.clearAll();
   // 确保 formation = 1, guideAlpha = 1
@@ -4645,8 +4666,10 @@ function resetToIdle() {
   summaryPreviewMode = false;
   voiceTriggered = false;
   goodRainActive = false;
+  goodRainEndTime = -999;
   goodRainPoints.visible = false;
   goodBreathText.classList.remove('vis');
+  lastPhaseName = '';
   idleVoiceViz.resetVisual();
   if (summaryReturnTimer) {
     clearTimeout(summaryReturnTimer);
@@ -5311,7 +5334,7 @@ function updateCamera(t) {
   if (currentMode === 'EXPERIENCE') {
     breathStrength = Math.min(1, (t - experienceStartTime) / 2);
   }
-  const br = breatheCurve(t);
+  const br = breatheCurve(currentMode === 'EXPERIENCE' ? getExperienceRealElapsedSec() : t);
   const breathR = br * breathStrength * 0.15;  // 推拉幅度（吸气放大幅度减小）
 
   // 3) 维度 1：线性平移（GUIDE/EXPERIENCE 镜头静止；IDLE 也保持静止）
@@ -5344,13 +5367,12 @@ const breathC2El      = document.getElementById('breath-c2');
 const breathMiniRingEl = document.getElementById('breath-mini-ring');
 const goodBreathText = document.getElementById('good-breath-text');
 let lastPhaseName = '';
-let phaseFading = false;
 const _expPacerNdc = new THREE.Vector3();
 const _expPacerWorld = new THREE.Vector3();
 
 function syncExpPacerToOverlay(t, active) {
   expPacerMat.uniforms.uTime.value = t;
-  expPacerMat.uniforms.uBreathe.value = breatheCurve(t);
+  expPacerMat.uniforms.uBreathe.value = breatheCurve(currentMode === 'EXPERIENCE' ? getExperienceRealElapsedSec() : t);
   expPacerMat.uniforms.uActive.value = active ? 0.30 : 0.0;
   expPacerMat.uniforms.uTargetAngle.value = Math.PI;
 
@@ -5374,41 +5396,60 @@ function updateBreathOverlay(t) {
   else       breathOverlayEl.classList.remove('active');
 
   syncExpPacerToOverlay(t, isExp);
-  if (!isExp) return;
+  if (!isExp) {
+    lastPhaseName = '';
+    return;
+  }
 
-  const phaseSec = t % 8;
+  const elapsedSec = getExperienceRealElapsedSec();
+  const remainingSec = Math.ceil(Math.max(0, EXPERIENCE_DURATION_SEC - elapsedSec));
+  if (remainingSec > 0 && remainingSec <= EXPERIENCE_FINAL_PROMPT_SEC) {
+    const finalPrompt = `最后 ${remainingSec} 秒，坚持`;
+    if (finalPrompt !== lastPhaseName) {
+      breathPhaseEl.textContent = finalPrompt;
+      breathPhaseEl.style.opacity = '1';
+      breathC1El.classList.remove('show');
+      breathC2El.classList.remove('show');
+      lastPhaseName = finalPrompt;
+    }
+    breathC1El.classList.remove('show');
+    breathC2El.classList.remove('show');
+    return;
+  }
+
+  const phaseSec = elapsedSec % 8;
   let phaseName;
   if (phaseSec < 2)      phaseName = '吸气';
   else if (phaseSec < 4) phaseName = '屏息';
   else if (phaseSec < 6) phaseName = '呼气';
   else                   phaseName = '放松';
 
-  // 阶段名：每 2 秒切一次，fade out 350ms → 换 → fade in
-  if (phaseName !== lastPhaseName && !phaseFading) {
-    phaseFading = true;
-    breathPhaseEl.style.opacity = '0';
+  // 呼吸字幕用真实时间硬切，避免 fade / setTimeout 拉长 2s 小节。
+  if (phaseName !== lastPhaseName) {
+    breathPhaseEl.textContent = phaseName;
+    breathPhaseEl.style.opacity = '1';
     breathC1El.classList.remove('show');
     breathC2El.classList.remove('show');
-    setTimeout(() => {
-      breathPhaseEl.textContent = phaseName;
-      breathPhaseEl.style.opacity = '1';
-      phaseFading = false;
-    }, 350);
     lastPhaseName = phaseName;
   }
 
   // 数字 1 / 2：每秒相继 fade in（subSec = 阶段内秒数 0~2）
   const subSec = phaseSec % 2;
-  if (!phaseFading) {
-    if (subSec >= 0.4) breathC1El.classList.add('show');
-    if (subSec >= 1.4) breathC2El.classList.add('show');
-  }
+  breathC1El.classList.toggle('show', subSec >= 0.4);
+  breathC2El.classList.toggle('show', subSec >= 1.4);
+
 }
 
 // ============================================================
-// 呼吸音效（吸气 / 呼气两个独立文件，跟 breatheCurve 8s 周期严格对齐）
-// 时间表：t=0 吸气(3s) → t=3 静音(1s) → t=4 呼气(3s) → t=7 静音(1s) → t=8 下一轮
+// 呼吸音效（吸气 / 呼气两个独立文件）
+// EXPERIENCE 跟字幕：t=0 播吸气，t=4 播呼气；音频自然延续，不按阶段硬截断。
+// GUIDE 跟引导环：t=0 播吸气，t=4.5 播呼气。
 // ============================================================
+
+const BREATH_AUDIO_SCHEDULES = {
+  experience: { exhaleStart: 4.0 },
+  guide: { exhaleStart: 4.5 },
+};
 
 class BreathAudio {
   constructor() {
@@ -5420,6 +5461,8 @@ class BreathAudio {
     this.exhale.preload = 'auto';
     this.lastInhaleCycle = -1;
     this.lastExhaleCycle = -1;
+    this.inhalePlaying = false;
+    this.exhalePlaying = false;
   }
 
   playInhale() {
@@ -5427,6 +5470,7 @@ class BreathAudio {
       this.inhale.currentTime = 0;
       const p = this.inhale.play();
       if (p) p.catch(e => console.warn('[breath] inhale failed:', e.message));
+      this.inhalePlaying = true;
     } catch (e) {
       console.warn('[breath] inhale error:', e.message);
     }
@@ -5437,38 +5481,55 @@ class BreathAudio {
       this.exhale.currentTime = 0;
       const p = this.exhale.play();
       if (p) p.catch(e => console.warn('[breath] exhale failed:', e.message));
+      this.exhalePlaying = true;
     } catch (e) {
       console.warn('[breath] exhale error:', e.message);
     }
   }
 
-  update(t, active) {
+  stopInhale() {
+    if (!this.inhalePlaying) return;
+    this.inhale.pause();
+    this.inhale.currentTime = 0;
+    this.inhalePlaying = false;
+  }
+
+  stopExhale() {
+    if (!this.exhalePlaying) return;
+    this.exhale.pause();
+    this.exhale.currentTime = 0;
+    this.exhalePlaying = false;
+  }
+
+  stopAll() {
+    this.stopInhale();
+    this.stopExhale();
+  }
+
+  update(t, active, scheduleName = 'experience') {
     if (!active) {
       this.lastInhaleCycle = -1;
       this.lastExhaleCycle = -1;
+      this.stopAll();
       return;
     }
 
-    const inhaleCycle = Math.floor(t / 8);          // 吸气触发：t=0/8/16/...
-    const exhaleCycle = Math.floor((t - 4) / 8);    // 呼气触发：t=4/12/20/...
+    const schedule = BREATH_AUDIO_SCHEDULES[scheduleName] || BREATH_AUDIO_SCHEDULES.experience;
+    const cycle = Math.floor(t / 8);
+    const phase = ((t % 8) + 8) % 8;
 
-    if (this.lastInhaleCycle === -1) {
-      // 第一次激活：根据当前 phase 立即播一个，避免要等到下个边界
-      const phase = t % 8;
-      if (phase < 4) this.playInhale();
-      else           this.playExhale();
-      this.lastInhaleCycle = inhaleCycle;
-      this.lastExhaleCycle = exhaleCycle;
-      return;
+    if (phase < schedule.exhaleStart) {
+      if (cycle !== this.lastInhaleCycle || !this.inhalePlaying) {
+        this.playInhale();
+      }
+      this.lastInhaleCycle = cycle;
     }
 
-    if (inhaleCycle !== this.lastInhaleCycle) {
-      this.playInhale();
-      this.lastInhaleCycle = inhaleCycle;
-    }
-    if (exhaleCycle !== this.lastExhaleCycle) {
-      this.playExhale();
-      this.lastExhaleCycle = exhaleCycle;
+    if (phase >= schedule.exhaleStart) {
+      if (cycle !== this.lastExhaleCycle || !this.exhalePlaying) {
+        this.playExhale();
+      }
+      this.lastExhaleCycle = cycle;
     }
   }
 }
@@ -5516,15 +5577,20 @@ function animate() {
   updateGoodBreathFeedback(time);
   updateBreathOverlay(time);
 
-  // 呼吸音效：GUIDE 呼吸环用本段局部时钟对齐 UI；EXPERIENCE 保持原有全局时钟。
+  // 呼吸音效：GUIDE/EXPERIENCE 都使用各自阶段真实节奏，避免 FPS 影响。
   let breathAudioActive = false;
   let breathAudioClock = time;
-  if (currentMode === 'EXPERIENCE') breathAudioActive = true;
+  let breathAudioSchedule = 'experience';
+  if (currentMode === 'EXPERIENCE') {
+    breathAudioActive = true;
+    breathAudioClock = getExperienceRealElapsedSec();
+  }
   else if (currentMode === 'GUIDE' && guideElapsed >= PACER_GUIDE_START && guideElapsed <= PACER_GUIDE_END) {
     breathAudioActive = true;
     breathAudioClock = guideElapsed - PACER_GUIDE_START;
+    breathAudioSchedule = 'guide';
   }
-  breathAudio.update(breathAudioClock, breathAudioActive);
+  breathAudio.update(breathAudioClock, breathAudioActive, breathAudioSchedule);
 
   if (debugBlend) debugBlend.textContent = smoothBlend.toFixed(3);
   composer.render();
@@ -5802,7 +5868,8 @@ function updateGuide(t) {
 
 // ── EXPERIENCE 更新（原有呼吸体验逻辑）──────────────────────
 function updateExperience(t) {
-  if (t - experienceStartTime >= 120) {
+  const experienceElapsed = getExperienceRealElapsedSec();
+  if (experienceElapsed >= 120) {
     enterEnding(smoothBlend);
     return;
   }
@@ -5811,8 +5878,8 @@ function updateExperience(t) {
   blendVelocity = blendVelocity * 0.82 + springF;
   smoothBlend   = Math.max(0, Math.min(1, smoothBlend + blendVelocity));
 
-  const expVisualFade = smoothstep(0, 2.2, t - experienceStartTime);
-  const breathe       = breatheCurve(t);
+  const expVisualFade = smoothstep(0, 2.2, experienceElapsed);
+  const breathe       = breatheCurve(experienceElapsed);
   // 呼吸脉动随 blend 微增（不夸张）
   const expandAmt = 0.10 + smoothBlend * 0.06; // 0.10→0.16（呼吸环扩张减小）
   const breatheExpand = 1 + breathe * expandAmt;
